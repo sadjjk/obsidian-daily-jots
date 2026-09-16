@@ -13,6 +13,7 @@ const { extractBilibili, isBilibiliUrl, isBilibiliVideoUrl } = require("./bilicl
 const { extractXiaohongshu, isXiaohongshuUrl, isXhsNoteUrl } = require("./xhsclip");
 const { extractZhihu, isZhihuNoteUrl, isZhihuUrl } = require("./zhihuclip");
 const { extractWeibo, isWeiboArticleUrl, isWeiboSearchUrl, isWeiboStatusUrl } = require("./weiboclip");
+const { extractWeixinArticle, isWeixinArticleUrl } = require("./weixinclip");
 const { classifyClipFamily, isClipFamilyEnabled, resolveClipFolder } = require("./clip-rules");
 
 const WECHAT_NOISE_SELECTORS = [
@@ -516,10 +517,11 @@ class WebClipper {
   collectSessionCookies(service, warmupUrl) {
     if (!this.sessionManager || typeof this.sessionManager.collectCookies !== "function") return Promise.resolve("");
     // 每个服务的硬门槛 cookie 不同:知乎是短时效 __zse_ck(403 唯一关键),
-    // 微博是访客票据 SUB(432 唯一关键)。requiredCookie 只指向短时效票,
+    // 微博是访客票据 SUB(432 唯一关键),微信无硬门槛(cookie 全带上即可,
+    // cooldown 风控靠游客会话缓解)。requiredCookie 只指向短时效票,
     // 常驻长时效 cookie(d_c0/SUBP)作判据会让刷新永不发生。
-    const required = service === "weibo" ? "SUB" : "__zse_ck";
-    const fallback = service === "weibo" ? undefined : "https://www.zhihu.com/explore";
+    const required = service === "weibo" ? "SUB" : service === "zhihu" ? "__zse_ck" : undefined;
+    const fallback = service === "weibo" || service === "weixin" ? undefined : "https://www.zhihu.com/explore";
     return this.sessionManager.collectCookies(service, warmupUrl, {
       browserExecutable: this.settings.capture.browserExecutable,
       requiredCookie: required,
@@ -584,7 +586,33 @@ class WebClipper {
       } catch (error) { zhihuError = error; }
       // 知乎失败时保留浏览器会话回退(登录用户的隔离会话仍有价值)。
     }
-    let weiboError;
+    let weixinError;
+    if (isWeixinArticleUrl(url)) {
+      try {
+        const data = await extractWeixinArticle(url, this.fetch, (target) => this.collectSessionCookies("weixin", target));
+        if (data) {
+          const article = articleFromHtml(data.contentHtml, data.url || url, {
+            title: data.title,
+            byline: data.byline,
+            excerpt: data.title,
+            siteName: data.siteName,
+            content: data.contentHtml,
+            extractionMethod: data.extractionMethod,
+          });
+          return {
+            ...article,
+            canonicalUrl: data.canonicalUrl,
+            identityUrl: data.identityUrl,
+            images: data.images,
+            extractionStatus: data.extractionStatus,
+          };
+        }
+      } catch (error) {
+        // 微信失败没有 HTML 回退价值(冷却页/结构变化),直接抛真实原因。
+        weixinError = error;
+        throw weixinError;
+      }
+    }
     if (isWeiboSearchUrl(url) || isWeiboStatusUrl(url) || isWeiboArticleUrl(url)) {
       try {
         const data = await extractWeibo(url, this.fetch, (target) => this.collectSessionCookies("weibo", target));
