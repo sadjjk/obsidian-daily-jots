@@ -2,6 +2,8 @@
 
 **English** | [简体中文](README.zh-CN.md)
 
+> 🍴 **Fork of [AI-Scarlett/obsidian-omnichannel-diary](https://github.com/AI-Scarlett/obsidian-omnichannel-diary)**, maintained by [JinYu](https://github.com/sadjjk). License AGPL-3.0-only, inherited from upstream. See [Fork enhancements](#fork-enhancements-050) for what this fork adds.
+
 Omnichannel Diary saves messages, web pages, and attachments from chat platforms into a local Obsidian Vault. It supports WeChat, Feishu/Lark, DingTalk, WeCom, QQ, Slack, Telegram, Discord, and WhatsApp.
 
 Version 0.4.x is an independent implementation. It does not contain source code from another Obsidian diary plugin and it has no AI provider, prompt, model, semantic routing, telemetry, account service, or hosted relay.
@@ -26,6 +28,16 @@ Version 0.4.x is an independent implementation. It does not contain source code 
 - WeChat replies include the complete iLink Bot envelope (`client_id`, bot message type, finished state, and the inbound `context_token`) required for mobile delivery.
 
 All folders and capture rules are configurable.
+
+## Fork enhancements (0.5.0)
+
+- **Zhihu clipping with automatic risk-control passage** — new dedicated extractor for answer pages, column articles, and pure question pages (`/question/{id}`: title + detail + first-screen answers). On `403`, the plugin launches a headless Chrome to let Zhihu plant its short-lived `__zse_ck` risk-control cookie and retries — no manual "open the isolated session once" step and no login required for public questions (verified against live pages).
+- **Anti-fingerprint headless browsing** — headless Chrome now overrides its UA with the real browser product string and injects MIT-licensed stealth evasions before page scripts run, so `HeadlessChrome` fingerprints no longer trigger hard 403s.
+- **Bilibili video clipping** — new extractor reads `window.__INITIAL_STATE__` for structured metadata (title, uploader, date, stats, tags), supports `b23.tv` short links, and surfaces real errors on challenge shells instead of saving an empty note.
+- **Receipt improvements** — clipping receipts embed a configurable markdown preview of the saved text (default 200 characters, toggle + length in Capture rules), and the fixed agent banner now only leads diary/failure receipts instead of trailing every one.
+- **Legacy encoding support** — non-UTF-8 pages (GBK/Big5/Shift_JIS/EUC-KR) are decoded per HTTP header/meta/sniffing, fixing mojibake titles.
+- **Safe note file names** — replacement chars and lone surrogates are stripped and an APFS-friendly script allowlist prevents `EILSEQ` open errors from mojibake names.
+- **Xiaohongshu resilience** — 403/429/461 responses back off and retry with a referer, and risk-control challenge shells produce diagnostic errors instead of misleading login hints.
 
 Optional remote search is off by default. When enabled, any connected channel can send `search keyword` or `查 关键词` — a space after the command is required, otherwise the message is saved as diary text. The plugin returns title, time, source, and path only. After `confirm 1,3` or `确认 1,3`, it packs those notes on this computer as Markdown, plain text, Word, or PDF and tries to send an openable file back through that channel. See [Remote search and export](docs/remote-search.md).
 

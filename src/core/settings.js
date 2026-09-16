@@ -63,6 +63,8 @@ const DEFAULT_SETTINGS = {
     maxWebImages: 30,
     maxWebImageTotalMb: 50,
     webClipBudgetSeconds: 75,
+    receiptPreview: true,
+    receiptPreviewChars: 200,
     clipRules: defaultClipRules(),
   },
   channels: {
@@ -112,6 +114,8 @@ function normalizeSettings(saved) {
   value.capture.maxWebImages = Math.min(100, Math.max(1, Number(value.capture.maxWebImages) || 30));
   value.capture.maxWebImageTotalMb = Math.min(500, Math.max(1, Number(value.capture.maxWebImageTotalMb) || 50));
   value.capture.webClipBudgetSeconds = Math.min(180, Math.max(15, Number(value.capture.webClipBudgetSeconds) || 75));
+  value.capture.receiptPreview = value.capture.receiptPreview !== false;
+  value.capture.receiptPreviewChars = Math.min(1000, Math.max(20, Number(value.capture.receiptPreviewChars) || 200));
   value.capture.browserExecutable = String(value.capture.browserExecutable || "").trim();
   value.capture.clipRules = normalizeClipRules(value.capture.clipRules);
   value.ui.language = normalizeLanguagePreference(value.ui.language);

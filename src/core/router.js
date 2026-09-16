@@ -30,8 +30,8 @@ function displayTitle(value, locale = "zh-CN") {
 
 function formatAgentGuide(result = {}, locale = "zh-CN") {
   return locale === "en"
-    ? "Hi~ I'm your quick-capture Agent ✍️ Send me anything you want to save. If something is wrong, edit it in Obsidian. Send “help” anytime for all commands."
-    : "嗨~ 我是你的随手记 Agent ✍️ 想记什么直接发给我，说错了可以直接在 Obsidian 里修改，随时发「帮助」看全部用法。";
+    ? "Hi~ I'm your quick-capture ✍️ Send me anything to remember — it syncs straight into Obsidian."
+    : "嗨~ 我是你的随手记✍️ 想记什么直接发给我，会同步保存在 Obsidian 里";
 }
 
 function formatHelpText(locale = "zh-CN", result = {}) {
@@ -65,7 +65,7 @@ function formatHelpText(locale = "zh-CN", result = {}) {
 
 const HELP_TEXT = formatHelpText("zh-CN");
 
-function formatCaptureReceipt(result, locale = "zh-CN") {
+function formatCaptureReceipt(result, locale = "zh-CN", preview = null) {
   const clips = result.clips || [];
   const codeLinks = result.codeLinks || [];
   const clipFailures = result.clipFailures?.length || 0;
@@ -80,6 +80,20 @@ function formatCaptureReceipt(result, locale = "zh-CN") {
   const clippingFolder = displayFolder(result.clippingFolder || folderFromPath(clips[0]?.notePath, clippingFallback), clippingFallback);
   const codePlatformFolder = displayFolder(result.codePlatformFolder || folderFromPath(codeLinks[0]?.notePath, codePlatformFallback), codePlatformFallback);
   const lines = [];
+
+  // 保存结果预览:与笔记同源的 markdown 正文,空白折叠为单行后截断。
+  const buildPreviewLine = (clip) => {
+    if (!preview?.enabled || !(Number(preview.chars) > 0)) return "";
+    const markdown = String(clip.article?.markdown || "").replace(/\s+/g, " ").trim();
+    if (!markdown) return "";
+    const chars = Number(preview.chars);
+    return `  › ${markdown.length > chars ? `${markdown.slice(0, chars)}…` : markdown}`;
+  };
+  const pushWithPreview = (line, clip) => {
+    lines.push(line);
+    const previewLine = buildPreviewLine(clip);
+    if (previewLine) lines.push(previewLine);
+  };
 
   for (const clip of clips) {
     const title = displayTitle(clip.article?.title, locale);
@@ -99,12 +113,12 @@ function formatCaptureReceipt(result, locale = "zh-CN") {
     if (isPdf) {
       if (locale === "en") {
         const pages = pageCount ? `${pageCount}-page ` : "";
-        if (clip.article?.extractionStatus === "partial") lines.push(`⚠️ “${title}” was saved to “${clippingFolder}”, but only part of the ${pages}PDF text could be extracted.`);
-        else lines.push(`🔖 “${title}” was saved to “${clippingFolder}” with the extracted ${pages}PDF text.${savedFiles ? " The original PDF was also saved." : ""}`);
+        if (clip.article?.extractionStatus === "partial") pushWithPreview(`⚠️ “${title}” was saved to “${clippingFolder}”, but only part of the ${pages}PDF text could be extracted.`, clip);
+        else pushWithPreview(`🔖 “${title}” was saved to “${clippingFolder}” with the extracted ${pages}PDF text.${savedFiles ? " The original PDF was also saved." : ""}`, clip);
       } else if (clip.article?.extractionStatus === "partial") {
-        lines.push(`⚠️ 《${title}》已保存到「${clippingFolder}」，但${pageCount ? ` ${pageCount} 页` : ""} PDF 正文提取不完整`);
+        pushWithPreview(`⚠️ 《${title}》已保存到「${clippingFolder}」，但${pageCount ? ` ${pageCount} 页` : ""} PDF 正文提取不完整`, clip);
       } else {
-        lines.push(`🔖 《${title}》已提取${pageCount ? ` ${pageCount} 页` : ""} PDF 正文并保存到「${clippingFolder}」${savedFiles ? "，并保留原 PDF" : ""}`);
+        pushWithPreview(`🔖 《${title}》已提取${pageCount ? ` ${pageCount} 页` : ""} PDF 正文并保存到「${clippingFolder}」${savedFiles ? "，并保留原 PDF" : ""}`, clip);
       }
       continue;
     }
@@ -123,24 +137,24 @@ function formatCaptureReceipt(result, locale = "zh-CN") {
         if (failedImages) failed.push(`${failedImages} additional image${failedImages === 1 ? "" : "s"}`);
         if (failedFiles) failed.push(`${failedFiles} original file${failedFiles === 1 ? "" : "s"}`);
         const failedDetail = failed.length ? `; ${failed.join(" and ")} failed to save` : "";
-        lines.push(`⚠️ “${title}” was only partially extracted. ${partialEn[0].toUpperCase()}${partialEn.slice(1)} were saved to “${clippingFolder}”${failedDetail}.`);
+        pushWithPreview(`⚠️ “${title}” was only partially extracted. ${partialEn[0].toUpperCase()}${partialEn.slice(1)} were saved to “${clippingFolder}”${failedDetail}.`, clip);
       } else if (failedImages || failedFiles) {
         const failed = [];
         if (failedImages) failed.push(`${failedImages} additional image${failedImages === 1 ? "" : "s"}`);
         if (failedFiles) failed.push(`${failedFiles} original file${failedFiles === 1 ? "" : "s"}`);
-        lines.push(`⚠️ “${title}” was saved to “${clippingFolder}” with ${extractedEn}; ${failed.join(" and ")} failed to save.`);
+        pushWithPreview(`⚠️ “${title}” was saved to “${clippingFolder}” with ${extractedEn}; ${failed.join(" and ")} failed to save.`, clip);
       } else {
-        lines.push(`🔖 “${title}” was saved to “${clippingFolder}” with ${extractedEn}.${savedFileDetail}`);
+        pushWithPreview(`🔖 “${title}” was saved to “${clippingFolder}” with ${extractedEn}.${savedFileDetail}`, clip);
       }
     } else {
       if (clip.article?.extractionStatus === "partial") {
         const failedDetail = `${failedImages ? `，另有 ${failedImages} 张图片保存失败` : ""}${failedFiles ? `，${failedFiles} 个原文件保存失败` : ""}`;
-        lines.push(`⚠️ 《${title}》正文提取不完整，已保存${partialZh}到「${clippingFolder}」${failedDetail}`);
+        pushWithPreview(`⚠️ 《${title}》正文提取不完整，已保存${partialZh}到「${clippingFolder}」${failedDetail}`, clip);
       } else if (failedImages || failedFiles) {
         const failedDetail = `${failedImages ? `，另有 ${failedImages} 张图片保存失败` : ""}${failedFiles ? `，${failedFiles} 个原文件保存失败` : ""}`;
-        lines.push(`⚠️ 《${title}》已提取${extractedZh}并保存到「${clippingFolder}」${failedDetail}`);
+        pushWithPreview(`⚠️ 《${title}》已提取${extractedZh}并保存到「${clippingFolder}」${failedDetail}`, clip);
       } else {
-        lines.push(`🔖 《${title}》已提取${extractedZh}并保存到「${clippingFolder}」${savedFileDetail}`);
+        pushWithPreview(`🔖 《${title}》已提取${extractedZh}并保存到「${clippingFolder}」${savedFileDetail}`, clip);
       }
     }
   }
@@ -168,7 +182,9 @@ function formatCaptureReceipt(result, locale = "zh-CN") {
     if (attachmentFailures) lines.push(`⚠️ ${attachmentFailures} 个附件保存失败，原消息已保存在今天的「${diaryFolder}」`);
     if (attachmentExtractionFailures) lines.push(`⚠️ ${attachmentExtractionFailures} 个 PDF 附件未能提取正文，原 PDF 已保存`);
   }
-  return `${lines.join("\n")}\n\n${formatAgentGuide({ ...result, diaryFolder }, locale)}`;
+  const hasResults = clips.length > 0 || codeLinks.length > 0;
+  if (hasResults) return lines.join("\n");
+  return [formatAgentGuide({ ...result, diaryFolder }, locale), "", ...lines].join("\n");
 }
 
 async function sendReplyWithRetry(reply, text, delays = [0, 700, 2_000]) {
@@ -194,6 +210,7 @@ class CaptureRouter {
     this.getStorage = options.getStorage || (() => ({}));
     this.getRemoteSearch = options.getRemoteSearch || (() => ({ enabled: false, exportFormat: "md" }));
     this.remoteSearch = options.remoteSearch || null;
+    this.getCaptureSettings = options.getCaptureSettings || (() => ({}));
   }
 
   async reply(envelope, text) {
@@ -210,6 +227,11 @@ class CaptureRouter {
     } catch (error) {
       return { status: "failed", error: error?.message || String(error) };
     }
+  }
+
+  previewConfig() {
+    const capture = this.getCaptureSettings() || {};
+    return { enabled: capture.receiptPreview !== false, chars: Number(capture.receiptPreviewChars) || 200 };
   }
 
   helpContext() {
@@ -307,7 +329,7 @@ class CaptureRouter {
       return result;
     }
     if (envelope.reply && !result.ignored) {
-      const receipt = formatCaptureReceipt(result, locale);
+      const receipt = formatCaptureReceipt(result, locale, this.previewConfig());
       await this.diary.queueReceipt?.(result.messageKey, receipt);
       await this.reply(envelope, receipt);
       await this.diary.completeReceipt?.(result.messageKey);

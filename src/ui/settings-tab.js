@@ -9,7 +9,7 @@ const { codePlatformCoverage } = require("../core/code-platforms");
 const { COMMUNITY_SERVICES, DOCUMENT_SERVICES, communityCoverage } = require("../core/web-platforms");
 const { shortHash } = require("../core/util");
 
-const PROJECT_URL = "https://github.com/AI-Scarlett/obsidian-omnichannel-diary";
+const PROJECT_URL = "https://github.com/sadjjk/obsidian-omnichannel-diary";
 
 const SECTIONS = [
   { id: "overview", zh: "概览", en: "Overview", icon: "layout-dashboard" },
@@ -574,6 +574,23 @@ class DiarySettingTab extends PluginSettingTab {
       input.inputEl.setAttr("type", "number"); input.inputEl.setAttr("min", "15"); input.inputEl.setAttr("max", "180");
       input.setValue(String(this.plugin.settings.capture.webClipBudgetSeconds)).onChange(async (value) => {
         this.plugin.settings.capture.webClipBudgetSeconds = Math.min(180, Math.max(15, Number(value) || 75)); await this.plugin.saveSettings();
+      });
+    });
+    new Setting(rules).setName(this.tr("保存结果预览", "Receipt preview")).setDesc(this.tr(
+      "剪藏回执附带保存正文的 markdown 预览(纯文本日记与代码收藏不预览)。",
+      "Clipping receipts include a markdown preview of the saved text (plain diary text and code bookmarks are not previewed).",
+    )).addToggle((toggle) => toggle
+      .setValue(this.plugin.settings.capture.receiptPreview !== false)
+      .onChange(async (value) => {
+        this.plugin.settings.capture.receiptPreview = value; await this.plugin.saveSettings();
+      }));
+    new Setting(rules).setName(this.tr("保存结果预览字数", "Receipt preview length")).setDesc(this.tr(
+      "20–1000 字，默认 200 字。",
+      "20–1000 characters, default 200.",
+    )).addText((input) => {
+      input.inputEl.setAttr("type", "number"); input.inputEl.setAttr("min", "20"); input.inputEl.setAttr("max", "1000");
+      input.setValue(String(this.plugin.settings.capture.receiptPreviewChars)).onChange(async (value) => {
+        this.plugin.settings.capture.receiptPreviewChars = Math.min(1000, Math.max(20, Number(value) || 200)); await this.plugin.saveSettings();
       });
     });
     const codePlatforms = parent.createDiv({ cls: "od-panel" });

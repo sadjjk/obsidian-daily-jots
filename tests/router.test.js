@@ -26,8 +26,8 @@ test("help and status follow the user's English language choice", async () => {
   await router.handle({ text: "help", reply: async (text) => replies.push(text) });
   await router.handle({ text: "/status", reply: async (text) => replies.push(text) });
   assert.equal(replies[0], formatHelpText("en", { diaryFolder: "Notes/Daily" }));
-  assert.match(replies[0], /quick-capture Agent/);
-  assert.match(replies[0], /Send “help” anytime/);
+  assert.match(replies[0], /quick-capture ✍️/);
+  assert.match(replies[0], /syncs straight into Obsidian/);
   assert.match(replies[1], /1 channel online/);
   assert.doesNotMatch(replies.join("\n"), /[\u4e00-\u9fff]/);
 });
@@ -67,8 +67,6 @@ test("capture receipts use the same friendly format across all nine channels", a
   assert.equal(replies.length, 9);
   assert.equal(replies[0], [
     "🔖 《月入30万美元，这位英国老兵把最“土”的网站做到了月访问791万》已提取正文和 7 张图片并保存到「全渠道剪藏」",
-    "",
-    "嗨~ 我是你的随手记 Agent ✍️ 想记什么直接发给我，说错了可以直接在 Obsidian 里修改，随时发「帮助」看全部用法。",
   ].join("\n"));
 });
 
@@ -98,8 +96,8 @@ test("English capture receipts are friendly and identical across all nine channe
   }
   assert.equal(new Set(replies).size, 1);
   assert.equal(replies.length, 9);
-  assert.match(replies[0], /^🔖 “A practical guide to local-first capture” was saved to “Clippings” with the full text and 1 image\./);
-  assert.match(replies[0], /Hi~ I'm your quick-capture Agent/);
+  assert.match(replies[0], /^🔖 “A practical guide to local-first capture” was saved to “Clippings” with the full text and 1 image\.$/);
+  assert.doesNotMatch(replies[0], /quick-capture/);
   assert.doesNotMatch(replies[0], /[\u4e00-\u9fff]/);
 });
 
@@ -141,7 +139,31 @@ test("partial extraction produces a warning instead of a false success", () => {
   assert.match(text, /^⚠️ 《测试网页》正文提取不完整/);
   assert.match(text, /2 张图片/);
   assert.match(text, /另有 1 张图片保存失败/);
-  assert.match(text, /随手记 Agent/);
+  assert.doesNotMatch(text, /随手记/);
+});
+
+test("diary-only receipts lead with the agent guide", () => {
+  const text = formatCaptureReceipt({
+    diaryPath: "日记/today.md",
+    clips: [], clipFailures: [], attachmentFailures: [],
+  });
+  assert.match(text, /^嗨~ 我是你的随手记✍️ /);
+  assert.match(text, /已保存到今天的「日记」/);
+});
+
+test("clipping receipts embed a configurable markdown preview line", () => {
+  const clip = { article: { title: "预览页", extractionStatus: "complete", markdown: "A".repeat(300) }, savedImages: 1, imageFailures: [] };
+  const result = { diaryPath: "日记/today.md", clips: [clip], clipFailures: [], attachmentFailures: [] };
+  const on = formatCaptureReceipt(result, "zh-CN", { enabled: true, chars: 200 });
+  assert.match(on, /› A{200}…/);
+  assert.doesNotMatch(on, /随手记/);
+  const off = formatCaptureReceipt(result, "zh-CN", { enabled: false, chars: 200 });
+  assert.doesNotMatch(off, /› /);
+  const reused = formatCaptureReceipt({
+    diaryPath: "日记/today.md",
+    clips: [{ reused: true, notePath: "全渠道剪藏/x.md", savedImages: 0, imageFailures: [], fileFailures: [], article: { title: "x", extractionStatus: "complete", markdown: "B".repeat(300) } }],
+  }, "zh-CN", { enabled: true, chars: 200 });
+  assert.doesNotMatch(reused, /› /);
 });
 
 test("community receipts report captured comment threads in both languages", () => {
@@ -211,7 +233,9 @@ test("code-platform bookmarks use the same bilingual receipt format", () => {
 
 test("code-platform filing failures keep the original URL in the daily note receipt", () => {
   const zh = formatCaptureReceipt({ diaryPath: "日记/today.md", clips: [], codeLinks: [], clipFailures: [], codeLinkFailures: ["failed"], attachmentFailures: [] });
-  assert.match(zh, /^⚠️ 1 个代码平台地址未能分类保存/);
+  assert.match(zh, /^嗨~ 我是你的随手记✍️ /);
+  assert.match(zh, /⚠️ 1 个代码平台地址未能分类保存/);
   const en = formatCaptureReceipt({ diaryPath: "Daily/today.md", clips: [], codeLinks: [], clipFailures: [], codeLinkFailures: ["failed"], attachmentFailures: [] }, "en");
-  assert.match(en, /^⚠️ 1 code-platform link could not be filed/);
+  assert.match(en, /^Hi~ I'm your quick-capture ✍️ /);
+  assert.match(en, /⚠️ 1 code-platform link could not be filed/);
 });

@@ -2,6 +2,8 @@
 
 [English](README.md) | **简体中文**
 
+> 🍴 本项目是 [AI-Scarlett/obsidian-omnichannel-diary](https://github.com/AI-Scarlett/obsidian-omnichannel-diary) 的 fork，由 [JinYu](https://github.com/sadjjk) 维护。许可证 AGPL-3.0-only，沿用上游。新增功能见 [Fork 增强功能](#fork-增强功能-050)。
+
 Omnichannel Diary 将聊天平台中的消息、网页和附件保存到本地 Obsidian Vault。目前支持微信、飞书/Lark、钉钉、企业微信、QQ、Slack、Telegram、Discord 和 WhatsApp。
 
 0.4.x 版本是独立实现，不包含其他 Obsidian 日记插件的源代码，也不包含 AI 服务商、提示词、模型、语义路由、遥测、账户服务或托管中继。
@@ -26,6 +28,16 @@ Omnichannel Diary 将聊天平台中的消息、网页和附件保存到本地 O
 - 微信回复包含移动端投递所需的完整 iLink Bot 信封：`client_id`、Bot 消息类型、完成状态和收到的 `context_token`。
 
 所有目录和收集规则都可以配置。
+
+## Fork 增强功能 (0.5.0)
+
+- **知乎剪藏 + 风控自动通过** —— 全新专用提取器，覆盖回答页、专栏文章与纯问题页（`/question/{id}`：标题 + 详情 + 首屏回答）。遇到 `403` 时自动拉起无头 Chrome 让知乎种下短时效的 `__zse_ck` 风控 Cookie 并重试——不再需要"先手动打开一次隔离会话"，公开问题无需登录（已实测通过）。
+- **无头浏览器反指纹** —— 无头 Chrome 现在会用真实浏览器 UA 覆盖标识，并在页面脚本执行前注入 MIT 许可的 stealth 规避脚本，`HeadlessChrome` 指纹不再触发硬 403。
+- **Bilibili 视频页剪藏** —— 新提取器直接读取 `window.__INITIAL_STATE__` 结构化元数据（标题、UP 主、日期、统计、标签），支持 `b23.tv` 短链；遇到验证壳页会报真实错误而不是存空笔记。
+- **回执优化** —— 剪藏回执附带保存正文的 markdown 预览（默认 200 字，开关与字数在收集规则里配置）；固定欢迎语只出现在纯日记/失败回执开头，不再拖在每条回执末尾。
+- **遗留编码支持** —— 非 UTF-8 页面（GBK/Big5/Shift_JIS/EUC-KR）按 HTTP 头/meta/嗅探解码，修复标题乱码。
+- **笔记文件名安全化** —— 清理替换符与孤立代理项，APFS 友好的字符白名单，杜绝 mojibake 文件名导致的 `EILSEQ` 打开失败。
+- **小红书抗风控** —— 403/429/461 退避后带 referer 重试，验证壳页产出可诊断的错误信息，不再回退到误导性的登录提示。
 
 可选的远程查询默认关闭。开启后，任意已连接渠道都可以发送「查 关键词」（查 和关键词之间必须有空格；「查手机卡」会记进日记），也可用「search keyword」。插件只返回标题、时间、来源和路径；回复「确认 1,3」或「confirm 1,3」后，再按电脑端默认格式打包成 Markdown、纯文本、Word 或 PDF，并尝试把可打开的附件发回当前渠道。详见[远程查询与导出](docs/remote-search.md)。
 

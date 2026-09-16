@@ -34,6 +34,7 @@ class OmnichannelDiaryPlugin extends Plugin {
       getLocale: () => this.locale(),
       getStorage: () => this.settings.storage,
       getRemoteSearch: () => this.settings.remoteSearch,
+      getCaptureSettings: () => this.settings.capture,
       remoteSearch: this.remoteSearch,
     });
     this.settingTab = new DiarySettingTab(this.app, this);
