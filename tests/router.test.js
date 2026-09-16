@@ -155,15 +155,24 @@ test("clipping receipts embed a configurable markdown preview line", () => {
   const clip = { article: { title: "预览页", extractionStatus: "complete", markdown: "A".repeat(300) }, savedImages: 1, imageFailures: [] };
   const result = { diaryPath: "日记/today.md", clips: [clip], clipFailures: [], attachmentFailures: [] };
   const on = formatCaptureReceipt(result, "zh-CN", { enabled: true, chars: 200 });
-  assert.match(on, /› A{200}…/);
+  assert.match(on, /\n\nA{200}…/);
   assert.doesNotMatch(on, /随手记/);
   const off = formatCaptureReceipt(result, "zh-CN", { enabled: false, chars: 200 });
-  assert.doesNotMatch(off, /› /);
+  assert.doesNotMatch(off, /A{200}/);
   const reused = formatCaptureReceipt({
     diaryPath: "日记/today.md",
     clips: [{ reused: true, notePath: "全渠道剪藏/x.md", savedImages: 0, imageFailures: [], fileFailures: [], article: { title: "x", extractionStatus: "complete", markdown: "B".repeat(300) } }],
   }, "zh-CN", { enabled: true, chars: 200 });
-  assert.doesNotMatch(reused, /› /);
+  assert.doesNotMatch(reused, /B{200}/);
+});
+
+test("receipt previews keep markdown line breaks after a blank line", () => {
+  const clip = { article: { title: "多行页", extractionStatus: "complete", markdown: "第一段开头。\n\n第二段另起。第三段同段。" }, savedImages: 0, imageFailures: [] };
+  const text = formatCaptureReceipt({
+    diaryPath: "日记/today.md", clips: [clip], clipFailures: [], attachmentFailures: [],
+  }, "zh-CN", { enabled: true, chars: 200 });
+  assert.match(text, /已提取正文和 0 张图片并保存到「全渠道剪藏」\n\n第一段开头。\n\n第二段另起。第三段同段。/);
+  assert.doesNotMatch(text, /› /);
 });
 
 test("community receipts report captured comment threads in both languages", () => {

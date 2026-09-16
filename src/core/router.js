@@ -81,18 +81,21 @@ function formatCaptureReceipt(result, locale = "zh-CN", preview = null) {
   const codePlatformFolder = displayFolder(result.codePlatformFolder || folderFromPath(codeLinks[0]?.notePath, codePlatformFallback), codePlatformFallback);
   const lines = [];
 
-  // 保存结果预览:与笔记同源的 markdown 正文,空白折叠为单行后截断。
+  // 保存结果预览:与笔记同源的 markdown 正文,保留换行,截断补 …。
   const buildPreviewLine = (clip) => {
     if (!preview?.enabled || !(Number(preview.chars) > 0)) return "";
-    const markdown = String(clip.article?.markdown || "").replace(/\s+/g, " ").trim();
+    const markdown = String(clip.article?.markdown || "").trim();
     if (!markdown) return "";
     const chars = Number(preview.chars);
-    return `  › ${markdown.length > chars ? `${markdown.slice(0, chars)}…` : markdown}`;
+    return markdown.length > chars ? `${markdown.slice(0, chars)}…` : markdown;
   };
   const pushWithPreview = (line, clip) => {
     lines.push(line);
     const previewLine = buildPreviewLine(clip);
-    if (previewLine) lines.push(previewLine);
+    if (previewLine) {
+      lines.push("");
+      lines.push(previewLine);
+    }
   };
 
   for (const clip of clips) {
