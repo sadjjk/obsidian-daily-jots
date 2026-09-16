@@ -1,6 +1,6 @@
 # Omnichannel Diary
 
-> 🍴 本项目是 [AI-Scarlett/obsidian-omnichannel-diary](https://github.com/AI-Scarlett/obsidian-omnichannel-diary) 的 fork,由 [JinYu](https://github.com/sadjjk) 维护。许可证 AGPL-3.0-only,沿用上游。
+> 🍴 本项目是 [AI-Scarlett/obsidian-omnichannel-diary](https://github.com/AI-Scarlett/obsidian-omnichannel-diary) 的 fork,由 [JinYu](https://github.com/sadjjk) 维护。许可证 AGPL-3.0-only。
 
 Omnichannel Diary 将聊天平台中的消息、网页和附件保存到本地 Obsidian Vault,支持微信、飞书/Lark、钉钉、企业微信、QQ、Slack、Telegram、Discord 和 WhatsApp。剪藏能力覆盖文章、云文档、PDF、技术社区讨论与代码平台,详见[支持的剪藏来源](docs/supported-sources.md)。可选的远程查询(「查 关键词」→ 回复「确认 1」打包发回)见[远程查询与导出](docs/remote-search.md)。
 
@@ -36,4 +36,4 @@ Node.js 20.18+:`npm install && npm run verify`
 
 ## 许可证
 
-AGPL-3.0-only(沿用上游)。
+AGPL-3.0-only。
