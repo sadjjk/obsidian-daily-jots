@@ -1,149 +1,39 @@
 # Omnichannel Diary
 
-**English** | [简体中文](README.zh-CN.md)
+> 🍴 本项目是 [AI-Scarlett/obsidian-omnichannel-diary](https://github.com/AI-Scarlett/obsidian-omnichannel-diary) 的 fork,由 [JinYu](https://github.com/sadjjk) 维护。许可证 AGPL-3.0-only,沿用上游。
 
-> 🍴 **Fork of [AI-Scarlett/obsidian-omnichannel-diary](https://github.com/AI-Scarlett/obsidian-omnichannel-diary)**, maintained by [JinYu](https://github.com/sadjjk). License AGPL-3.0-only, inherited from upstream. See [Fork enhancements](#fork-enhancements-050) for what this fork adds.
+Omnichannel Diary 将聊天平台中的消息、网页和附件保存到本地 Obsidian Vault,支持微信、飞书/Lark、钉钉、企业微信、QQ、Slack、Telegram、Discord 和 WhatsApp。剪藏能力覆盖文章、云文档、PDF、技术社区讨论与代码平台,详见[支持的剪藏来源](docs/supported-sources.md)。可选的远程查询(「查 关键词」→ 回复「确认 1」打包发回)见[远程查询与导出](docs/remote-search.md)。
 
-Omnichannel Diary saves messages, web pages, and attachments from chat platforms into a local Obsidian Vault. It supports WeChat, Feishu/Lark, DingTalk, WeCom, QQ, Slack, Telegram, Discord, and WhatsApp.
+## Fork 增强功能 (0.5.0)
 
-Version 0.4.x is an independent implementation. It does not contain source code from another Obsidian diary plugin and it has no AI provider, prompt, model, semantic routing, telemetry, account service, or hosted relay.
+- **知乎剪藏优化** —— 覆盖回答页、专栏文章与纯问题页(`/question/{id}`:标题 + 详情 + 首屏回答);遇到 `403` 时自动拉起无头 Chrome 种下 `__zse_ck` 风控 Cookie 并重试,公开问题无需登录。
 
-## What it saves
+- **Bilibili 视频页剪藏优化** —— 直接读取页面 `__INITIAL_STATE__`,提取标题、UP 主、日期、统计、标签等结构化信息,支持 `b23.tv` 短链;遇到验证壳页报真实错误,不再存空笔记。
 
-- Plain messages are appended to `Omnichannel Diary/Daily/YYYY-MM-DD.md`.
-- HTTP(S) links can be converted to readable Markdown notes under `Omnichannel Diary/Clippings`, then filed by type: Articles, Social, Community, Documents, and PDFs. Each type can be turned off or given its own subfolder in Capture rules.
-- Code-platform links have an independent rule: extract the page, file only a categorized bookmark under `Omnichannel Diary/Code Links/<Platform>`, or do both. Bookmark-only mode never opens the target page.
-- The built-in registry covers GitHub, GitLab, Bitbucket, Azure DevOps, Codeberg, SourceHut, SourceForge, Launchpad, GNU Savannah, Hugging Face Hub, GitFlic, Google Git, Gitee, GitCode, JiHu GitLab, CODING, AtomGit, and GitLink. Custom self-hosted GitLab, Gitea, Forgejo, or internal hosts can be added in settings.
-- X posts/articles and WeChat articles retain their dedicated extractors. Xiaohongshu/REDnote notes use the page's non-executable initial-state data to preserve the text and every full-size carousel image. Reddit posts include nested public comments when its public endpoint is available; an isolated signed-in browser session handles access challenges.
-- Technical-community detail pages use an extensible registry rather than hard-coded routing. Hacker News, GitHub issues/pull requests, Stack Exchange, DEV/Forem, Discourse forums, and V2EX have structured post/comment adapters with browser fallback.
-- Dynamic community pages cover Product Hunt, GitHub Discussions, Medium, Hashnode, Substack, Lobsters, Indie Hackers, Hugging Face, Kaggle, 掘金, CSDN, 博客园, SegmentFault, 开源中国, 知乎, 少数派, InfoQ, 腾讯云/阿里云开发者社区, 51CTO, Gitee, and GitCode. A generic forum detector also preserves visible comments from unlisted Discourse/Forem/Flarum/NodeBB-style pages.
-- Public and private Feishu/Lark, Tencent Docs, WPS/KDocs, Google Docs/Sheets/Slides, and Microsoft 365/OneDrive pages can be rendered with an isolated local browser profile. Public Google documents first try the official export endpoint. The plugin never imports cookies from the user's normal browser profile.
-- Direct online PDFs are extracted page by page and the original PDF is stored beside the clipping.
-- Community receipts report the number of captured comments in the same bilingual reply format used by every chat channel.
-- Chat attachments and web images are downloaded into `Omnichannel Diary/Attachments`.
-- Every entry identifies the channel, conversation, message ID, and any download failure.
-- If page extraction or an image download fails, the original URL remains in the daily note.
-- WeChat and WhatsApp use the same deterministic receipt text. Receipts are retried and kept pending locally until the channel confirms that they were sent.
-- WeChat messages are marked processed and its polling cursor is advanced only after the Vault write succeeds.
-- WeChat replies include the complete iLink Bot envelope (`client_id`, bot message type, finished state, and the inbound `context_token`) required for mobile delivery.
+- **小红书剪藏优化** —— `403/429/461` 退避后带 referer 重试;验证壳页产出可诊断的错误信息,不再误报"需要登录"。
 
-All folders and capture rules are configurable.
+- **剪藏回执附加预览** —— 剪藏回执附带保存正文的 markdown 预览(默认 200 字,开关与字数在「收集规则」里配置;图片不进预览,换行原样保留);固定欢迎语只在纯日记/失败回执开头出现。
 
-## Fork enhancements (0.5.0)
+## 渠道支持
 
-- **Zhihu clipping with automatic risk-control passage** — new dedicated extractor for answer pages, column articles, and pure question pages (`/question/{id}`: title + detail + first-screen answers). On `403`, the plugin launches a headless Chrome to let Zhihu plant its short-lived `__zse_ck` risk-control cookie and retries — no manual "open the isolated session once" step and no login required for public questions (verified against live pages).
-- **Anti-fingerprint headless browsing** — headless Chrome now overrides its UA with the real browser product string and injects MIT-licensed stealth evasions before page scripts run, so `HeadlessChrome` fingerprints no longer trigger hard 403s.
-- **Bilibili video clipping** — new extractor reads `window.__INITIAL_STATE__` for structured metadata (title, uploader, date, stats, tags), supports `b23.tv` short links, and surfaces real errors on challenge shells instead of saving an empty note.
-- **Receipt improvements** — clipping receipts embed a configurable markdown preview of the saved text (default 200 characters, toggle + length in Capture rules), and the fixed agent banner now only leads diary/failure receipts instead of trailing every one.
-- **Legacy encoding support** — non-UTF-8 pages (GBK/Big5/Shift_JIS/EUC-KR) are decoded per HTTP header/meta/sniffing, fixing mojibake titles.
-- **Safe note file names** — replacement chars and lone surrogates are stripped and an APFS-friendly script allowlist prevents `EILSEQ` open errors from mojibake names.
-- **Xiaohongshu resilience** — 403/429/461 responses back off and retry with a referer, and risk-control challenge shells produce diagnostic errors instead of misleading login hints.
-
-Optional remote search is off by default. When enabled, any connected channel can send `search keyword` or `查 关键词` — a space after the command is required, otherwise the message is saved as diary text. The plugin returns title, time, source, and path only. After `confirm 1,3` or `确认 1,3`, it packs those notes on this computer as Markdown, plain text, Word, or PDF and tries to send an openable file back through that channel. See [Remote search and export](docs/remote-search.md).
-
-![WhatsApp: search notes](docs/images/remote-search-whatsapp-query.png)
-
-`查 GEO` — keep a space after `查`. The bot replies immediately, then lists title, time, source, and path.
-
-![WhatsApp: confirm and receive a file](docs/images/remote-search-whatsapp-export.png)
-
-`确认 1` packs the selected note on this computer and sends an openable attachment back on WhatsApp.
-
-![Feishu/Lark: confirm and receive a file](docs/images/remote-search-feishu-export.png)
-
-The same confirmation on Feishu/Lark also returns an openable file through that channel.
-
-See [Supported clipping sources](docs/supported-sources.md) for the extraction method and limitations of each source family.
-
-## Channel support
-
-| Channel | Connection | Receive transport | Attachments |
+| 渠道 | 连接方式 | 接收通道 | 附件 |
 | --- | --- | --- | --- |
-| WeChat | Official iLink/ClawBot QR authorization | HTTPS long polling | AES-decrypted image, file, video, and voice media |
-| Feishu / Lark | Official device registration or App ID/Secret | Official WebSocket SDK | Message resources downloaded through the official API |
-| DingTalk | Client ID/Secret | Official Stream SDK | Text plus direct download resources supplied by the event |
-| WeCom | Bot ID/Secret | Official bot WebSocket SDK | SDK download and AES decryption |
-| QQ | App ID/Secret | Official QQ Bot Gateway SDK | Event attachment URLs |
-| Slack | Socket Mode app token and bot token | Socket Mode WebSocket | Authenticated private file URLs |
-| Telegram | BotFather token | Bot API long polling | Photo, document, audio, voice, video, and animation |
-| Discord | Bot token | Gateway v10 WebSocket | Message attachment URLs |
-| WhatsApp | Linked-device QR | Bundled Baileys Node transport | Image, document, audio, video, and sticker |
+| 微信 | 官方 iLink/ClawBot 扫码授权 | HTTPS 长轮询 | AES 解密图片、文件、视频和语音 |
+| 飞书 / Lark | 官方设备注册或 App ID/Secret | 官方 WebSocket SDK | 通过官方 API 下载消息资源 |
+| 钉钉 | Client ID/Secret | 官方 Stream SDK | 文字及事件提供的直接下载资源 |
+| 企业微信 | Bot ID/Secret | 官方机器人 WebSocket SDK | SDK 下载和 AES 解密 |
+| QQ | App ID/Secret | 官方 QQ Bot Gateway SDK | 事件附件 URL |
+| Slack | Socket Mode App Token 和 Bot Token | Socket Mode WebSocket | 需要鉴权的私有文件 URL |
+| Telegram | BotFather Token | Bot API 长轮询 | 图片、文档、音频、语音、视频和动画 |
+| Discord | Bot Token | Gateway v10 WebSocket | 消息附件 URL |
+| WhatsApp | 关联设备二维码 | 内置 Baileys Node 传输层 | 图片、文档、音频、视频和贴纸 |
 
-Platform access is subject to each platform's account eligibility and developer settings. Slack, Telegram, and Discord do not provide QR authorization for their official Bot APIs; their official developer tokens are required.
+Slack、Telegram 与 Discord 必须使用官方开发者 Token,其余支持扫码授权。
 
-## Install manually
+## 构建与测试
 
-Copy exactly these three release assets to:
+Node.js 20.18+:`npm install && npm run verify`
 
-```text
-<Vault>/.obsidian/plugins/omnichannel-diary/
-```
+## 许可证
 
-Required assets:
-
-```text
-main.js
-manifest.json
-styles.css
-```
-
-Then reload Obsidian, open **Settings → Community plugins**, and enable **Omnichannel Diary**.
-
-WhatsApp requires an installed Node.js 20.18 or later runtime. Its transport remains bundled in `main.js`, but runs as an isolated Node process so protocol failures cannot crash the Obsidian renderer. The plugin never downloads a runtime or executes a shell command; it launches only an allowlisted `node` / `node.exe` path with fixed arguments.
-
-## Configure
-
-Open **Settings → Omnichannel Diary**.
-
-1. In **Channels**, expand a card.
-2. Use QR authorization where the official platform supports it, or enter the official Bot credentials.
-3. Enable the channel and use **Test reconnect**.
-4. In **Capture rules**, choose folders, clipping types and subfolders, code-platform link handling, optional self-hosted code-platform domains, link clipping, dynamic-page rendering, image downloads, and file-size limits. To search notes from chat, enable **Remote search and export** on the same page. Channel SDKs are already bundled; do not install extra packages.
-5. For a private Feishu, Tencent Docs, WPS, Google, or Microsoft 365 link, open its isolated sign-in window in **Capture rules → Private cloud-document sessions**, complete sign-in, and close that window. Community sites that present a login or human check have separate opt-in verification windows.
-
-The **Storage & privacy** page explains every local and network data boundary and can clear individual channel credentials.
-
-## Privacy and network behavior
-
-- Message bodies, extracted pages, and successful downloads are written only to the current Vault.
-- Channel credentials are stored in the plugin's `data.json`. WhatsApp linked-device credentials and isolated document/community browser profiles are stored below `.channel-data`. These local values are not additionally encrypted.
-- Enabling a channel connects directly to that platform's official API and CDN domains.
-- Web clipping connects to the submitted page, its image/resource hosts, public community APIs selected by the registry, and any selected cloud-document/community site.
-- Code-platform bookmark-only mode parses the URL and writes a local categorized note without requesting that URL. Extract and combined modes use the normal clipping network path.
-- Dynamic cloud documents and challenged community pages use an installed Chrome, Edge, Brave, or Chromium executable with a Vault-specific profile. No browser is downloaded or installed by the plugin.
-- Direct filesystem access is limited to the plugin's `.channel-data` runtime state and checks for allowlisted Node/browser executable paths. External processes are started with fixed argument arrays and without a shell.
-- The isolated WhatsApp process runs the bundle that Obsidian already loaded; the plugin does not target, replace, unpack, or write its own release files. HTTP `gzip` and `deflate` responses use explicit stream decoders and are never treated as plugin archives.
-- Localhost, link-local, private IP ranges, and redirects to those addresses are blocked.
-- There is no telemetry, advertising, remote configuration, automatic publishing, self-update mechanism, or runtime package installation.
-
-See [Privacy and network access](docs/privacy.md) for the detailed list.
-
-## Build and test
-
-Requirements: Node.js 20.18 or later.
-
-```bash
-npm install
-npm run verify
-```
-
-The production build is generated from `src/main.js`. Verification checks the independent unit tests and confirms that the runtime needs only the official Obsidian release assets.
-
-## Release for the Obsidian community directory
-
-1. Keep `manifest.json`, `package.json`, and `versions.json` on the same version.
-2. Run `npm ci && npm run verify`.
-3. Create a GitHub release whose tag is the exact version, for example `1.0.0` (no `v` prefix).
-4. Generate GitHub build-provenance attestations for `main.js`, `manifest.json`, and `styles.css`.
-5. Attach `main.js`, `manifest.json`, and `styles.css` to the release.
-6. Submit the repository through [Obsidian's community plugin submission page](https://community.obsidian.md/).
-
-The repository must remain public and its source must correspond to the release bundle.
-
-## Independent implementation
-
-The 0.4.x codebase was designed from product requirements and public platform/API documentation. Its source tree, tests, UI, build, documentation, and generated bundle were written independently. See [Clean-room record](docs/clean-room.md).
-
-## License
-
-Omnichannel Diary is licensed under AGPL-3.0-only. Bundled third-party components retain their own licenses; see [NOTICE.md](NOTICE.md).
+AGPL-3.0-only(沿用上游)。
