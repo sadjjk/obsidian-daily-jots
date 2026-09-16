@@ -2,7 +2,7 @@
 
 const assert = require("node:assert/strict");
 const test = require("node:test");
-const { extractWeiboSearch, isWeiboSearchUrl, cleanWeiboText } = require("../src/core/weiboclip");
+const { extractWeibo, extractWeiboSearch, extractWeiboStatus, isWeiboSearchUrl, isWeiboStatusUrl, cleanWeiboText } = require("../src/core/weiboclip");
 
 const SEARCH_URL = "https://m.weibo.cn/search?containerid=231522type%3D1%26q%3D%23%E5%8D%97%E6%96%B9%E5%8C%BB%E7%A7%91%E5%A4%A7%E5%AD%A6%E5%AD%A6%E7%94%9F%E5%8F%91%E5%A3%B0%23&v_p=42";
 
@@ -136,4 +136,47 @@ test("missing SUB cookie fails with an actionable error", async () => {
 test("HTTP 432 and ok:0 both report risk control instead of empty content", async () => {
   await assert.rejects(() => extractWeiboSearch(SEARCH_URL, RISK_FETCH, COOKIE_GETTER), /HTTP 432/);
   await assert.rejects(() => extractWeiboSearch(SEARCH_URL, OK0_FETCH, COOKIE_GETTER), /ok=0/);
+});
+
+const STATUS_URL = "https://m.weibo.cn/status/5343749552473518";
+const STATUS_FIXTURE = {
+  visible: { type: 0 },
+  id: 5343749552473518,
+  idstr: "5343749552473518",
+  created_at: "Wed Sep 16 12:23:58 +0800 2026",
+  text: '#南方医科大学跳楼##南方医科大学工作人员回应# 没人觉得这些硕导博导权力太大了吗?<a href="//m.weibo.cn/search?q=%23跳楼%23">#南方医科大学跳楼#</a>',
+  user: { screen_name: "王者荣耀排行榜" },
+  reposts_count: 67,
+  comments_count: 87,
+  attitudes_count: 2114,
+  pics: [{ large: { url: "https://wx1.sinaimg.cn/large/status1.jpg" } }],
+};
+const STATUS_FETCH = async () => weiboResponse(STATUS_FIXTURE);
+const SHOW_REJECT_FETCH = async () => weiboResponse({ ok: 0, msg: "微博不存在" });
+
+test("weibo status urls are recognized and dispatched", async () => {
+  assert.equal(isWeiboStatusUrl(STATUS_URL), true);
+  assert.equal(isWeiboStatusUrl(SEARCH_URL), false);
+  let usedApi = "";
+  const fetchImpl = async (api) => { usedApi = api; return weiboResponse(STATUS_FIXTURE); };
+  const data = await extractWeibo(STATUS_URL, fetchImpl, COOKIE_GETTER);
+  assert.match(usedApi, /api\/statuses\/show\?id=5343749552473518/);
+  assert.equal(data.title, "@王者荣耀排行榜 微博 2026-09-16");
+  assert.match(data.contentHtml, /<h3 class="weibo-item-author">王者荣耀排行榜<\/h3>/);
+  assert.match(data.contentHtml, /赞 2114 · <a href="https:\/\/m\.weibo\.cn\/status\/5343749552473518">原文<\/a>/);
+  assert.match(data.contentHtml, /#南方医科大学跳楼##南方医科大学工作人员回应# 没人觉得/);
+  assert.doesNotMatch(data.contentHtml, /<a [^>]*search/);
+  assert.deepEqual(data.images, ["https://wx1.sinaimg.cn/large/status1.jpg"]);
+  assert.equal(data.identityUrl, "weibo-status:5343749552473518");
+});
+
+test("weibo status API rejections report the server message", async () => {
+  await assert.rejects(
+    () => extractWeiboStatus(STATUS_URL, SHOW_REJECT_FETCH, COOKIE_GETTER),
+    /微博不存在/,
+  );
+  await assert.rejects(
+    () => extractWeiboStatus(STATUS_URL, RISK_FETCH, COOKIE_GETTER),
+    /HTTP 432/,
+  );
 });

@@ -29,6 +29,18 @@ function isWeiboSearchUrl(value) {
   } catch (_) { return false; }
 }
 
+function weiboStatusId(value) {
+  try {
+    const url = new URL(String(value || ""));
+    if (!hostMatches(url, ["weibo.com", "weibo.cn"])) return "";
+    return /\/status\/(\d+)/i.exec(url.pathname)?.[1] || "";
+  } catch (_) { return ""; }
+}
+
+function isWeiboStatusUrl(value) {
+  return Boolean(weiboStatusId(value));
+}
+
 function searchContainerId(value) {
   try {
     return new URL(String(value || "")).searchParams.get("containerid") || "";
@@ -117,15 +129,74 @@ function mblogRetweetHtml(mblog) {
   return `<blockquote class="weibo-item-retweet">@${author}:${text}</blockquote>`;
 }
 
+function mblogItemHtml(mblog) {
+  const { html: text, videoUrl, statusUrl } = cleanWeiboText(mblog);
+  const pics = mblogPicsHtml(mblog);
+  const retweet = mblogRetweetHtml(mblog);
+  const author = String(mblog?.user?.screen_name || "微博用户");
+  return `<section class="weibo-item"><h3 class="weibo-item-author">${author}</h3>${mblogMetaHtml(mblog, statusUrl, videoUrl)}${text ? `<div class="weibo-item-text">${text}</div>` : ""}${retweet}${pics}</section>`;
+}
+
 function weiboSearchHtml(topicTitle, mblogs) {
-  const items = mblogs.map((mblog) => {
-    const { html: text, videoUrl, statusUrl } = cleanWeiboText(mblog);
-    const pics = mblogPicsHtml(mblog);
-    const retweet = mblogRetweetHtml(mblog);
-    const author = String(mblog?.user?.screen_name || "微博用户");
-    return `<section class="weibo-item"><h3 class="weibo-item-author">${author}</h3>${mblogMetaHtml(mblog, statusUrl, videoUrl)}${text ? `<div class="weibo-item-text">${text}</div>` : ""}${retweet}${pics}</section>`;
-  }).join("\n");
+  const items = mblogs.map((mblog) => mblogItemHtml(mblog)).join("\n");
   return `<article class="weibo-search"><p class="weibo-search-meta">${topicTitle} · 微博搜索 · 首屏 ${mblogs.length} 条</p>\n${items}\n</article>`;
+}
+
+async function extractWeiboStatus(url, fetchImpl = globalThis.fetch, cookieGetter = null) {
+  const id = weiboStatusId(url);
+  if (!id) return null;
+
+  const cookie = cookieGetter ? await cookieGetter("https://m.weibo.cn") : "";
+  const sub = /(?:^|;\s*)SUB=([^;]+)/.exec(String(cookie || ""));
+  if (!sub) {
+    throw new Error("Weibo status needs its visitor cookie (SUB); open the weibo isolated session in plugin settings once, or retry to let headless warmup plant it");
+  }
+
+  const api = `https://m.weibo.cn/api/statuses/show?id=${id}`;
+  // safeFetch 的 response 是自定义对象(headers.get + async-iterable body),
+  // 没有标准 .json();全项目统一用 readLimitedBody 读体。
+  const { response } = await fetchImpl(api, {
+    accept: "application/json, text/plain, */*",
+    headers: { "user-agent": WEIBO_UA, cookie: `SUB=${sub[1]}` },
+    timeoutMs: 30_000,
+  });
+  if (!response.ok) {
+    if (response.status === 432) {
+      throw new Error("Weibo status returned HTTP 432 (risk control): the visitor cookie (SUB) is missing or expired; retry to refresh it via headless warmup");
+    }
+    throw new Error(`Weibo status API returned HTTP ${response.status}`);
+  }
+  const payload = JSON.parse((await readLimitedBody(response, 5 * 1024 * 1024)).toString("utf8"));
+  // show 接口成功时顶层就是 status 对象(有 id/idstr);失败时是 { ok: 0, msg }。
+  if (!payload || (payload.ok === 0 || (!payload.id && !payload.idstr))) {
+    const msg = payload?.msg || payload?.message || "the visitor cookie may need a refresh";
+    throw new Error(`Weibo status API rejected the request: ${msg}`);
+  }
+  const mblog = payload;
+  const author = String(mblog?.user?.screen_name || "微博用户");
+  const statusUrl = `https://m.weibo.cn/status/${mblog.idstr || mblog.id}`;
+  const { html: text, videoUrl } = cleanWeiboText(mblog);
+  const day = formatWeiboTime(mblog?.created_at).slice(0, 10);
+  const contentHtml = `<article class="weibo-status">${mblogItemHtml({ ...mblog, id: mblog.idstr || mblog.id })}</article>`;
+  return {
+    title: `@${author} 微博 ${day}`,
+    byline: author,
+    siteName: "m.weibo.cn",
+    contentHtml,
+    images: (Array.isArray(mblog?.pics) ? mblog.pics : [])
+      .map((pic) => pic?.large?.url || pic?.url).filter(Boolean),
+    extractionMethod: "weibo-json",
+    url: String(url),
+    canonicalUrl: statusUrl,
+    identityUrl: `weibo-status:${mblog.idstr || mblog.id}`,
+    extractionStatus: "complete",
+  };
+}
+
+async function extractWeibo(url, fetchImpl = globalThis.fetch, cookieGetter = null) {
+  if (isWeiboSearchUrl(url)) return extractWeiboSearch(url, fetchImpl, cookieGetter);
+  if (weiboStatusId(url)) return extractWeiboStatus(url, fetchImpl, cookieGetter);
+  return null;
 }
 
 async function extractWeiboSearch(url, fetchImpl = globalThis.fetch, cookieGetter = null) {
@@ -184,9 +255,13 @@ module.exports = {
   WEIBO_UA,
   cleanWeiboText,
   collectMblogs,
+  extractWeibo,
   extractWeiboSearch,
+  extractWeiboStatus,
   isWeiboSearchUrl,
+  isWeiboStatusUrl,
   isWeiboUrl,
   searchContainerId,
   searchTopicTitle,
+  weiboStatusId,
 };
