@@ -175,6 +175,19 @@ test("receipt previews keep markdown line breaks after a blank line", () => {
   assert.doesNotMatch(text, /› /);
 });
 
+test("receipt previews filter out images and count text only", () => {
+  const clip = {
+    article: { title: "头图页", extractionStatus: "complete", markdown: "![封面](https://img.example/cover.jpg)\n\n![配图](https://img.example/2.jpg)\n\n正文第一句在这。\n\n第二段。" },
+    savedImages: 2, imageFailures: [],
+  };
+  const text = formatCaptureReceipt({
+    diaryPath: "日记/today.md", clips: [clip], clipFailures: [], attachmentFailures: [],
+  }, "zh-CN", { enabled: true, chars: 200 });
+  assert.doesNotMatch(text, /!\[/);
+  assert.match(text, /保存到「全渠道剪藏」\n\n正文第一句在这。\n\n第二段。/);
+  assert.doesNotMatch(text, /\n\n\n/);
+});
+
 test("community receipts report captured comment threads in both languages", () => {
   const clip = { article: { title: "技术讨论", extractionStatus: "complete", commentCount: 26 }, savedImages: 3, imageFailures: [] };
   assert.match(formatCaptureReceipt({ diaryPath: "日记/today.md", clips: [clip] }), /正文、26 条评论和 3 张图片/);

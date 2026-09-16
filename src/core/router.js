@@ -81,10 +81,14 @@ function formatCaptureReceipt(result, locale = "zh-CN", preview = null) {
   const codePlatformFolder = displayFolder(result.codePlatformFolder || folderFromPath(codeLinks[0]?.notePath, codePlatformFallback), codePlatformFallback);
   const lines = [];
 
-  // 保存结果预览:与笔记同源的 markdown 正文,保留换行,截断补 …。
+  // 保存结果预览:与笔记同源的 markdown 正文,滤掉图片,保留换行,截断补 …。
   const buildPreviewLine = (clip) => {
     if (!preview?.enabled || !(Number(preview.chars) > 0)) return "";
-    const markdown = String(clip.article?.markdown || "").trim();
+    const markdown = String(clip.article?.markdown || "")
+      .replace(/!\[[^\]]*\]\([^)]*\)/g, "")
+      .replace(/<img\b[^>]*>/gi, "")
+      .replace(/\n{3,}/g, "\n\n")
+      .trim();
     if (!markdown) return "";
     const chars = Number(preview.chars);
     return markdown.length > chars ? `${markdown.slice(0, chars)}…` : markdown;
