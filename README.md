@@ -2,7 +2,7 @@
 
 > 🍴 本项目是 [AI-Scarlett/obsidian-omnichannel-diary](https://github.com/AI-Scarlett/obsidian-omnichannel-diary) 的 fork
 
-Omnichannel Diary 将聊天平台中的消息、网页和附件保存到本地 Obsidian Vault,支持微信、飞书/Lark、钉钉、企业微信、QQ、Slack、Telegram、Discord 和 WhatsApp。剪藏能力覆盖文章、云文档、PDF、技术社区讨论与代码平台,详见[支持的剪藏来源](docs/supported-sources.md)。可选的远程查询(「查 关键词」→ 回复「确认 1」打包发回)见[远程查询与导出](docs/remote-search.md)。
+Omnichannel Diary 将聊天平台中的消息、网页和附件保存到本地 Obsidian Vault,支持微信、飞书/Lark、钉钉、企业微信、QQ、Slack、Telegram、Discord 和 WhatsApp。
 
 ## Fork 增强功能 (0.5.0)
 
@@ -28,7 +28,6 @@ Omnichannel Diary 将聊天平台中的消息、网页和附件保存到本地 O
 | Discord | Bot Token | Gateway v10 WebSocket | 消息附件 URL |
 | WhatsApp | 关联设备二维码 | 内置 Baileys Node 传输层 | 图片、文档、音频、视频和贴纸 |
 
-Slack、Telegram 与 Discord 必须使用官方开发者 Token,其余支持扫码授权。
 
 ## 构建与测试
 
