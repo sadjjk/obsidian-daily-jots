@@ -8,6 +8,7 @@ const path = require("node:path");
 const WebSocket = require("ws");
 const { validateResolvedHost } = require("./network");
 const { COMMUNITY_SERVICES, RENDER_SERVICES } = require("./web-platforms");
+const stealthScript = require("./stealth-script");
 
 const KNOWN_BROWSER_PATHS = process.platform === "darwin" ? [
   "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
@@ -439,6 +440,31 @@ class WebSessionManager {
     return CdpClient.connect(target.webSocketDebuggerUrl);
   }
 
+  /**
+   * Headless Chrome leaks automation fingerprints (UA contains "HeadlessChrome",
+   * navigator.webdriver is true), and hard-gated sites like Zhihu reject such
+   * requests with 403 before any cookie can be planted. Override the UA with the
+   * real browser product string and inject the MIT-licensed stealth evasions
+   * before any page script runs.
+   */
+  async configurePage(client) {
+    const platform = process.platform === "win32"
+      ? "Windows NT 10.0; Win64; x64"
+      : process.platform === "linux" ? "X11; Linux x86_64" : "Macintosh; Intel Mac OS X 10_15_7";
+    let engine = "132.0.0.0";
+    try {
+      // Browser.getVersion reports e.g. "HeadlessChrome/132.0.6834.83": keep the
+      // exact engine version of this executable in a normal-Chrome UA.
+      engine = String((await client.send("Browser.getVersion", {}, 5_000))?.product || "").match(/Chrome\/([\d.]+)/)?.[1] || engine;
+    } catch (_) { /* keep the static engine version */ }
+    // omni-article-markdown uses the same Edge-branded UA for its Zhihu cookie
+    // warmup; mirror it so hard-gated sites see a regular desktop browser.
+    const major = engine.split(".")[0];
+    const userAgent = `Mozilla/5.0 (${platform}) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${engine} Safari/537.36 Edg/${major}`;
+    await client.send("Emulation.setUserAgentOverride", { userAgent, acceptLanguage: "zh-CN,zh;q=0.9,en;q=0.8" }, 10_000).catch(() => undefined);
+    await client.send("Page.addScriptToEvaluateOnNewDocument", { source: stealthScript }, 10_000).catch(() => undefined);
+  }
+
   async extract(url, service, options = {}) {
     const previous = this.locks.get(service) || Promise.resolve();
     let release;
@@ -457,6 +483,7 @@ class WebSessionManager {
     await validateResolvedHost(url);
     const entry = await this.start(service, { browserExecutable: options.browserExecutable, headless: true });
     const client = await this.createPage(entry);
+    await this.configurePage(client);
     const validatedHosts = new Map();
     const validateRequest = async (requestUrl) => {
       if (/^(?:about|blob|data):/i.test(requestUrl)) return true;
@@ -540,6 +567,67 @@ class WebSessionManager {
 
   async closeAll() {
     await Promise.all([...this.active.keys()].map((service) => this.close(service)));
+  }
+
+  /**
+   * Launch (or reuse) the service's persistent headless profile and return the
+   * site's cookies as a Cookie header string. Order:
+   * 1. read cookies already persisted in the profile (instant when the user has
+   *    opened the isolated session once);
+   * 2. otherwise visit `warmupUrl` (UA override + stealth active) so the site
+   *    plants its cookies;
+   * 3. optionally retry with `options.fallbackUrl` when the warmup page did not
+   *    yield `options.requiredCookie`.
+   */
+  async collectCookies(service, warmupUrl, options = {}) {
+    const entry = await this.start(service, { browserExecutable: options.browserExecutable, headless: true });
+    let client;
+    try {
+      client = await this.createPage(entry);
+      await client.send("Page.enable");
+      await client.send("Runtime.enable");
+      await this.configurePage(client);
+      let suffix = "";
+      try { suffix = new URL(warmupUrl).hostname.toLowerCase().split(".").slice(-2).join("."); } catch (_) { return ""; }
+      const readCookies = async () => {
+        const result = await client.send("Storage.getCookies", {}, 10_000).catch(() => ({ cookies: [] }));
+        return (result.cookies || [])
+          .filter((cookie) => cookie.domain === suffix || cookie.domain === `.${suffix}` || cookie.domain.endsWith(`.${suffix}`))
+          .map((cookie) => `${cookie.name}=${cookie.value}`)
+          .join("; ");
+      };
+      const required = String(options.requiredCookie || "");
+      const persisted = await readCookies();
+      if (!required || persisted.includes(`${required}=`)) return persisted;
+      const settleMs = Math.max(0, Number(options.settleMs) || 4_000);
+      const visit = async (url) => {
+        // omni waits for DOMContentLoaded then polls for the required cookie
+        // instead of sleeping a fixed duration; mirror that here.
+        const domReady = client.waitFor("Page.domContentEventFired", 20_000).catch(() => undefined);
+        await client.send("Page.navigate", { url }, 20_000).catch(() => undefined);
+        await domReady;
+        await new Promise((resolve) => setTimeout(resolve, settleMs));
+        if (required) {
+          const deadline = Date.now() + 8_000;
+          let cookies = await readCookies();
+          while (!cookies.includes(`${required}=`) && Date.now() < deadline) {
+            await new Promise((resolve) => setTimeout(resolve, 500));
+            cookies = await readCookies();
+          }
+          return cookies;
+        }
+        return readCookies();
+      };
+      const warm = await visit(warmupUrl);
+      if (!required || warm.includes(`${required}=`)) return warm;
+      const fallbackUrl = String(options.fallbackUrl || "");
+      if (!fallbackUrl) return warm;
+      return await visit(fallbackUrl);
+    } finally {
+      try { if (client) { try { await client.send("Page.close", {}, 2_000); } catch (_) {} } } catch (_) {}
+      try { if (client) client.close(); } catch (_) {}
+      if (entry.owned) await this.close(service);
+    }
   }
 }
 

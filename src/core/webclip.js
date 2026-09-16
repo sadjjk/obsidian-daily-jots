@@ -3,13 +3,15 @@
 const { Readability } = require("@mozilla/readability");
 const { parseHTML } = require("linkedom");
 const { extractCommunityPost } = require("./communityclip");
-const { downloadRemoteFile, readLimitedBody, safeFetch } = require("./network");
+const { decodeHtmlBuffer, downloadRemoteFile, readLimitedBody, safeFetch } = require("./network");
 const { localDateParts, safeFileName, shortHash, yamlString } = require("./util");
 const { extractPdf } = require("./pdfclip");
 const { extractRedditPost, parseRedditUrl } = require("./redditclip");
 const { COMMUNITY_SERVICES, DOCUMENT_SERVICES, communityServiceForUrl, documentServiceForUrl, googleDocumentKind, googleExportUrl, googleFileIdFromUrl, isLikelyPdfUrl, renderServiceForUrl } = require("./web-platforms");
 const { extractXStatus } = require("./xclip");
-const { extractXiaohongshu, isXiaohongshuUrl } = require("./xhsclip");
+const { extractBilibili, isBilibiliUrl, isBilibiliVideoUrl } = require("./biliclip");
+const { extractXiaohongshu, isXiaohongshuUrl, isXhsNoteUrl } = require("./xhsclip");
+const { extractZhihu, isZhihuNoteUrl, isZhihuUrl } = require("./zhihuclip");
 const { classifyClipFamily, isClipFamilyEnabled, resolveClipFolder } = require("./clip-rules");
 
 const WECHAT_NOISE_SELECTORS = [
@@ -358,7 +360,11 @@ function selectArticle(document, finalUrl) {
       extractionMethod: "wechat-article",
     };
   }
-  const article = new Readability(document.cloneNode(true), { charThreshold: 40 }).parse();
+  // Some pages (bilibili video pages with huge inline JSON and custom elements)
+  // crash the Readability/linkedom internals with null references; degrade to a
+  // document-body extract instead of failing the whole capture.
+  let article = null;
+  try { article = new Readability(document.cloneNode(true), { charThreshold: 40 }).parse(); } catch (_) { article = null; }
   return {
     title: compactTitle(article?.title || document.title, hostname),
     byline: article?.byline || "",
@@ -373,12 +379,13 @@ function articleFromHtml(html, finalUrl, overrides = {}) {
   const rawHtml = String(html || "");
   const { document } = parseHTML(html);
   const canonicalUrl = canonicalUrlFromDocument(document, finalUrl);
-  prepareDocument(document, finalUrl);
+  try { prepareDocument(document, finalUrl); } catch (_) { /* keep the raw document when rewriting fails */ }
   const article = overrides.content !== undefined ? overrides : { ...selectArticle(document, finalUrl), ...overrides };
   let sourceHtml = article.content !== undefined ? article.content : document.body?.innerHTML || "";
   let commentCount = Number(article.commentCount) || 0;
   if (overrides.content === undefined) {
-    const articleText = normalizedText(parseHTML(`<body>${sourceHtml}</body>`).document.body);
+    let articleText = "";
+    try { articleText = normalizedText(parseHTML(`<body>${sourceHtml}</body>`).document.body); } catch (_) { /* comment detection degrades */ }
     const comments = genericCommentNodes(document).filter((node) => {
       const sample = normalizedText(node).slice(0, 100);
       return sample && !articleText.includes(sample);
@@ -389,8 +396,11 @@ function articleFromHtml(html, finalUrl, overrides = {}) {
       article.extractionMethod = `${article.extractionMethod || "readability"}-with-comments`;
     }
   }
-  const { document: articleDocument } = parseHTML(`<!doctype html><html><head></head><body>${sourceHtml}</body></html>`);
-  prepareDocument(articleDocument, finalUrl);
+  let articleDocument = document;
+  try {
+    articleDocument = parseHTML(`<!doctype html><html><head></head><body>${sourceHtml}</body></html>`).document;
+    prepareDocument(articleDocument, finalUrl);
+  } catch (_) { /* fall back to the already-parsed document */ }
   for (const image of articleDocument.querySelectorAll("img[src]")) {
     if (!isLikelyContentImage(image)) image.remove();
   }
@@ -442,7 +452,7 @@ async function extractGoogleExport(url, fetchImpl = safeFetch) {
     const buffer = await readLimitedBody(response, 20 * 1024 * 1024);
     return extractPdf(buffer, url, response.headers.get("content-disposition") || "");
   }
-  const body = (await readLimitedBody(response, 5 * 1024 * 1024)).toString("utf8");
+  const body = decodeHtmlBuffer(await readLimitedBody(response, 5 * 1024 * 1024), contentType);
   if (looksLikeGoogleExportLogin(body) || (contentType.includes("text/html") && /accounts\.google\.com|ServiceLogin/i.test(finalUrl))) {
     const error = new Error("Google Docs login is required; open its isolated session in plugin settings first");
     error.code = "DOCUMENT_LOGIN_REQUIRED";
@@ -502,13 +512,25 @@ class WebClipper {
     this.fetch = options.fetch || safeFetch;
   }
 
+  collectSessionCookies(service, warmupUrl) {
+    if (!this.sessionManager || typeof this.sessionManager.collectCookies !== "function") return Promise.resolve("");
+    return this.sessionManager.collectCookies(service, warmupUrl, {
+      browserExecutable: this.settings.capture.browserExecutable,
+      // __zse_ck 是知乎的短时效风控 cookie(实测匿名 headless 也能种出,且是
+      // 403 的唯一关键);以它为 requiredCookie,d_c0 常驻不会短路,过期即触发
+      // 无头 warmup 自动重种。d_c0 是一年期设备 cookie,作判据会让刷新永不发生。
+      requiredCookie: "__zse_ck",
+      fallbackUrl: "https://www.zhihu.com/explore",
+    }).catch(() => "");
+  }
+
   async extract(url) {
     const xStatus = await extractXStatus(url);
     if (xStatus) return xStatus;
     let xiaohongshuError;
     if (isXiaohongshuUrl(url)) {
       try {
-        const data = await extractXiaohongshu(url);
+        const data = await extractXiaohongshu(url, this.fetch);
         if (data) {
           const article = articleFromHtml(data.contentHtml, data.url || url, {
             title: data.title,
@@ -529,6 +551,44 @@ class WebClipper {
           };
         }
       } catch (error) { xiaohongshuError = error; }
+      // 小红书笔记页不需要登录:HTTP 提取失败时抛真实原因,
+      // 不再回退到隔离浏览器会话(未登录只会报误导性的 "login or browser verification")。
+      if (isXhsNoteUrl(url) && xiaohongshuError) throw xiaohongshuError;
+    }
+    let zhihuError;
+    if (isZhihuUrl(url)) {
+      try {
+        const data = await extractZhihu(url, this.fetch, (target) => this.collectSessionCookies("zhihu", target));
+        if (data) {
+          const article = articleFromHtml(data.contentHtml, data.url || url, {
+            title: data.title,
+            byline: data.byline,
+            excerpt: data.excerpt,
+            siteName: data.siteName,
+            content: data.contentHtml,
+            plainText: data.plainText,
+            extractionMethod: data.extractionMethod,
+          });
+          return {
+            ...article,
+            canonicalUrl: data.canonicalUrl,
+            identityUrl: data.identityUrl,
+            images: data.images,
+            publishedAt: data.publishedAt,
+            extractionStatus: data.extractionStatus,
+          };
+        }
+      } catch (error) { zhihuError = error; }
+      // 知乎失败时保留浏览器会话回退(登录用户的隔离会话仍有价值)。
+    }
+    let bilibiliError;
+    if (isBilibiliUrl(url)) {
+      try {
+        const data = await extractBilibili(url, this.fetch);
+        if (data) return data;
+      } catch (error) { bilibiliError = error; }
+      // 风控壳页重试后仍失败:抛真实原因,避免把空壳存成笔记。
+      if (bilibiliError && isBilibiliVideoUrl(url)) throw bilibiliError;
     }
     let communityError;
     if (parseRedditUrl(url)) {
@@ -588,14 +648,20 @@ class WebClipper {
     }
     if (parseRedditUrl(url) && communityError) throw renderError || communityError;
     const { response, finalUrl } = await safeFetch(url, { accept: "text/html,application/xhtml+xml,application/pdf", timeoutMs: 30_000 });
-    if (!response.ok) throw new Error(`Page returned HTTP ${response.status}`);
+    if (!response.ok) {
+      // 知乎对无 cookie 的裸 HTTP 一律 403:报出可操作的真实原因,而不是裸的 "Page returned HTTP 403"。
+      if (isZhihuNoteUrl(url) && response.status === 403) {
+        throw new Error(`Zhihu returned HTTP 403 (cookie-gated); open its isolated session in plugin settings once to refresh cookies${zhihuError ? `, HTTP extraction also failed: ${zhihuError.message}` : ""}`);
+      }
+      throw new Error(`Page returned HTTP ${response.status}`);
+    }
     const contentType = response.headers.get("content-type") || "";
     if (contentType.includes("application/pdf") || (isLikelyPdfUrl(finalUrl) && !contentType.includes("html"))) {
       const buffer = await readLimitedBody(response, this.settings.capture.maxFileMb * 1024 * 1024);
       return extractPdf(buffer, finalUrl, response.headers.get("content-disposition") || "");
     }
     if (!contentType.includes("html") && !contentType.includes("xml")) throw new Error(`Unsupported page type: ${contentType || "unknown"}`);
-    const html = (await readLimitedBody(response, 5 * 1024 * 1024)).toString("utf8");
+    const html = decodeHtmlBuffer(await readLimitedBody(response, 5 * 1024 * 1024), contentType);
     if (!renderService && this.settings.capture.renderDynamicPages !== false && this.sessionManager && detectCommunityPage(html, finalUrl)) {
       try {
         const rendered = await this.sessionManager.extract(finalUrl, "community-generic", {

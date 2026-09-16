@@ -5,6 +5,13 @@ const net = require("node:net");
 
 function safeFileName(value, fallback = "item") {
   const cleaned = String(value || "").normalize("NFKC")
+    // Strip replacement chars and lone surrogates (u flag keeps paired emoji
+    // intact) so note file names can never trip the OS with EILSEQ on open.
+    .replace(/[\uFFFD\uD800-\uDFFF]/gu, "")
+    // macOS APFS rejects even some assigned code points (e.g. U+07BE, reached
+    // via mojibake) with EILSEQ on open. Keep a name-friendly script allowlist
+    // and turn everything else into spaces; body text keeps the original.
+    .replace(/[^\u0020-\u007E\u00A1-\u024F\u0370-\u03FF\u0400-\u04FF\u0590-\u05FF\u0600-\u06FF\u3000-\u303F\u3040-\u30FF\u3100-\u312F\u3130-\u318F\u3200-\u32FF\u3400-\u4DBF\u4E00-\u9FFF\uA000-\uA4CF\uAC00-\uD7AF\uF900-\uFAFF\uFF00-\uFFEF\u2000-\u206F\u2600-\u27BF\u{1F000}-\u{1FAFF}]/gu, " ")
     .replace(/[\\/:*?"<>|#^[\]]/g, "-")
     .replace(/\.{2,}/g, "-")
     .replace(/-+/g, "-")

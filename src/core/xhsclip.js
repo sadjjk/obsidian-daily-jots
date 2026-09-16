@@ -19,6 +19,27 @@ function isXiaohongshuUrl(value) {
   } catch (_) { return false; }
 }
 
+function isXhsNoteUrl(value) {
+  try {
+    const url = new URL(value);
+    const hostname = url.hostname.toLowerCase();
+    if (hostMatches(hostname, "xhslink.com") || hostMatches(hostname, "xhslink.cn")) return true;
+    return hostMatches(hostname, "xiaohongshu.com")
+      && /\/(?:explore|discovery\/item)\/[a-z0-9]+/i.test(url.pathname);
+  } catch (_) { return false; }
+}
+
+const XHS_CHALLENGE_PATTERN = /安全验证|verify you are human|当前环境异常|请完成验证|访问受限/i;
+
+function riskControlSignals(html) {
+  const source = String(html || "");
+  return {
+    bytes: source.length,
+    hasInitialState: /(?:window\.)?__INITIAL_STATE__\s*=/.test(source),
+    challenge: XHS_CHALLENGE_PATTERN.test(source),
+  };
+}
+
 function replaceBareUndefined(value) {
   const source = String(value || "");
   let output = "";
@@ -146,25 +167,46 @@ function xiaohongshuDataFromHtml(html, finalUrl) {
   };
 }
 
-async function extractXiaohongshu(value) {
+async function extractXiaohongshu(value, fetchImpl = safeFetch) {
   if (!isXiaohongshuUrl(value)) return null;
-  const { response, finalUrl } = await safeFetch(value, {
+  const fetchOptions = {
     accept: "text/html,application/xhtml+xml",
+    headers: { "accept-language": "zh-CN,zh;q=0.9" },
     timeoutMs: 30_000,
-  });
+  };
+  let { response, finalUrl } = await fetchImpl(value, fetchOptions);
+  if ([403, 429, 461].includes(response.status)) {
+    // 小红书风控对裸请求偶发 403/461/429:短暂退避后带 referer 重试一次
+    await new Promise((resolve) => setTimeout(resolve, 700));
+    ({ response, finalUrl } = await fetchImpl(value, {
+      ...fetchOptions,
+      headers: { ...fetchOptions.headers, referer: "https://www.xiaohongshu.com/" },
+    }));
+  }
   if (!response.ok) throw new Error(`Xiaohongshu page returned HTTP ${response.status}`);
   const contentType = response.headers.get("content-type") || "";
   if (!contentType.includes("html") && !contentType.includes("xml")) {
     throw new Error(`Unsupported Xiaohongshu page type: ${contentType || "unknown"}`);
   }
   const html = (await readLimitedBody(response, XHS_HTML_LIMIT)).toString("utf8");
-  return xiaohongshuDataFromHtml(html, finalUrl);
+  const data = xiaohongshuDataFromHtml(html, finalUrl);
+  if (!data && isXhsNoteUrl(finalUrl)) {
+    const signals = riskControlSignals(html);
+    throw new Error(
+      `Xiaohongshu note extraction failed: no note data in page (HTTP ${response.status}, `
+      + `${signals.bytes} bytes, initial-state ${signals.hasInitialState ? "present" : "missing"}, `
+      + `${signals.challenge ? "risk-control challenge detected" : "no challenge marker"}). `
+      + `Open the link in a browser or retry later.`,
+    );
+  }
+  return data;
 }
 
 module.exports = {
   XHS_HTML_LIMIT,
   extractXiaohongshu,
   isXiaohongshuUrl,
+  isXhsNoteUrl,
   noteImages,
   parseInitialState,
   replaceBareUndefined,

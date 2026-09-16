@@ -7,6 +7,56 @@ const {
   WebClipper, articleFromHtml, bestSrcset, cleanMarkdown, detectCommunityPage, escapeWebText,
   isLikelyContentImage, nodeToMarkdown, prepareDocument, selectArticle, wechatArticleIdentityUrl,
 } = require("../src/core/webclip");
+const { decodeHtmlBuffer } = require("../src/core/network");
+const { safeFileName } = require("../src/core/util");
+
+test("HTML buffers decode with the declared GBK charset instead of forcing UTF-8", () => {
+  // "测试" in GBK is B2 E2 CA D4; force-decoding those bytes as UTF-8 garbles them.
+  const gbkBytes = Buffer.from([0x3c, 0x68, 0x31, 0x3e, 0xb2, 0xe2, 0xca, 0xd4, 0x3c, 0x2f, 0x68, 0x31, 0x3e]); // <h1>...</h1>
+  const metaHtml = Buffer.concat([
+    Buffer.from('<!doctype html><html><head><meta charset="gb2312"></head><body>'),
+    gbkBytes,
+  ]);
+  assert.equal(decodeHtmlBuffer(metaHtml, "text/html"), "<!doctype html><html><head><meta charset=\"gb2312\"></head><body><h1>测试</h1>");
+  assert.equal(decodeHtmlBuffer(gbkBytes, "text/html; charset=GBK"), "<h1>测试</h1>");
+  // No declaration anywhere: UTF-8 replacement density triggers legacy-charset sniffing.
+  assert.equal(decodeHtmlBuffer(gbkBytes, "text/html"), "<h1>测试</h1>");
+  const utf8 = Buffer.from("<h1>测试</h1>", "utf8");
+  assert.equal(decodeHtmlBuffer(utf8, "text/html"), "<h1>测试</h1>");
+});
+
+test("safe file names strip replacement chars and lone surrogates but keep emoji", () => {
+  const cleaned = safeFileName("bad\uFFFD\uFFFDtitle \uD800lonely");
+  assert.doesNotMatch(cleaned, /[\uFFFD]/);
+  assert.doesNotMatch(cleaned, /[\uD800-\uDFFF]/);
+  assert.match(cleaned, /badtitle lonely/);
+  assert.match(safeFileName("apple 🍏 pie"), /apple 🍏 pie/);
+});
+
+test("safe file names drop code points macOS APFS refuses (U+07BE and friends)", () => {
+  const { writeFileSync, unlinkSync, existsSync } = require("node:fs");
+  const name = safeFileName("ʲ이-ͼ20260914ƾڷ\u07BE");
+  assert.doesNotMatch(name, /\u07BE/);
+  // The whole point: the cleaned name must be openable on this filesystem.
+  const probe = `/tmp/eilseq-guard-${name}.txt`;
+  writeFileSync(probe, "x");
+  assert.ok(existsSync(probe));
+  unlinkSync(probe);
+});
+
+test("article extraction survives malformed and parser-hostile HTML without throwing", () => {
+  const hostile = [
+    '<!doctype html><html><body><table><tr><td><div><script>document.write("<div>")</script>',
+    '<bili-header><bili-toolbar></bili-toolbar></bili-header>',
+    '<svg><foreignObject><div><span>nested',
+    '<p class="video-title">B站视频标题'.repeat(40) + "正文内容需要足够长以便阅读算法识别为文章主体。".repeat(20),
+    '</td></tr></table></body>',
+  ].join("");
+  const article = articleFromHtml(hostile, "https://www.bilibili.com/video/BV1Dve565ENK/");
+  assert.ok(article);
+  assert.ok(["readability", "document-body"].includes(article.extractionMethod));
+  assert.ok(String(article.title || "").length > 0);
+});
 
 test("lazy images and relative links become absolute before extraction", () => {
   const { document } = parseHTML('<!doctype html><html><body><a href="/next">next</a><img data-src="/photo.jpg"><script>bad()</script></body></html>');
@@ -159,4 +209,143 @@ test("unknown forum engines and generic comment markup receive a conversation fa
   assert.equal(article.commentCount, 2);
   assert.match(article.extractionMethod, /with-comments/);
   assert.match(article.markdown, /First useful reply/);
+});
+
+function xhsTestSettings() {
+  return {
+    storage: { clippingFolder: "Clippings", attachmentFolder: "Attachments" },
+    capture: { renderDynamicPages: true, webClipBudgetSeconds: 75, downloadWebImages: false },
+  };
+}
+
+function xhsNoteHtml() {
+  const state = `{"note":{"currentNoteId":"note123","noteDetailMap":{"note123":{"note":{"noteId":"note123","title":"A useful note","desc":"First line\\nSecond line with enough useful text to save, padded past the completeness threshold for tests.","time":1788253336000,"user":{"nickname":"Alice"},"imageList":[]}}}}}`;
+  return `<!doctype html><html><body><script>window.__INITIAL_STATE__=${state}</script></body></html>`;
+}
+
+function fakeHtmlResponse(html, status = 200) {
+  return {
+    ok: status >= 200 && status < 300,
+    status,
+    headers: { get: (name) => (String(name).toLowerCase() === "content-type" ? "text/html; charset=utf-8" : null) },
+    body: (async function* () { yield Buffer.from(String(html || "")); })(),
+  };
+}
+
+test("Xiaohongshu note pages surface the real error instead of falling back to a browser session", async () => {
+  const sessionCalls = [];
+  const clipper = new WebClipper({}, xhsTestSettings(), {
+    fetch: async () => { throw new Error("network down"); },
+    sessionManager: { extract: async (...args) => { sessionCalls.push(args); return { html: "", url: "", title: "", text: "" }; } },
+  });
+  await assert.rejects(clipper.extract("https://xhslink.cn/o/8MV5eiZ7OR9"), /network down/);
+  assert.equal(sessionCalls.length, 0);
+});
+
+test("Xiaohongshu notes clip through the injected fetch without browser sessions", async () => {
+  const sessionCalls = [];
+  const clipper = new WebClipper({}, xhsTestSettings(), {
+    fetch: async () => ({
+      response: fakeHtmlResponse(xhsNoteHtml()),
+      finalUrl: "https://www.xiaohongshu.com/explore/note123?xsec_token=temporary",
+    }),
+    sessionManager: { extract: async (...args) => { sessionCalls.push(args); return { html: "", url: "", title: "", text: "" }; } },
+  });
+  const article = await clipper.extract("https://xhslink.cn/o/8MV5eiZ7OR9");
+  assert.equal(article.title, "A useful note");
+  assert.equal(article.extractionMethod, "xiaohongshu-initial-state");
+  assert.equal(article.extractionStatus, "complete");
+  assert.equal(sessionCalls.length, 0);
+});
+
+function zhihuTestSettings() {
+  return { storage: { clippingFolder: "Clippings", attachmentFolder: "Attachments" }, capture: { renderDynamicPages: true, webClipBudgetSeconds: 75, downloadWebImages: false } };
+}
+
+function zhihuAnswerHtml() {
+  const state = {
+    initialState: {
+      entities: {
+        users: { u1: { id: "u1", name: "张三" } },
+        questions: { q1: { id: "q1", title: "如何优雅地抓取知乎回答?" } },
+        answers: {
+          a1: {
+            id: "a1",
+            question: "q1",
+            author: "u1",
+            content: `<p>${"关键是要带 cookie 才能通过知乎的风控,回答正文需要足够长。".repeat(5)}</p>`,
+            createdTime: 1700000000,
+            voteupCount: 12,
+          },
+        },
+      },
+    },
+  };
+  const json = JSON.stringify(state).replace(/</g, "\\u003c");
+  return `<!doctype html><html><head></head><body><script id="js-initialData" type="text/json">${json}</script></body></html>`;
+}
+
+test("Zhihu answers clip through the injected fetch and cookie bridge without browser sessions", async () => {
+  const sessionCalls = [];
+  const cookieCalls = [];
+  const clipper = new WebClipper({}, zhihuTestSettings(), {
+    fetch: async () => ({
+      response: fakeHtmlResponse(zhihuAnswerHtml()),
+      finalUrl: "https://www.zhihu.com/question/1951716962645288920/answer/2035816979085390373",
+    }),
+    sessionManager: {
+      collectCookies: async (service, warmupUrl) => { cookieCalls.push([service, warmupUrl]); return ""; },
+      extract: async (...args) => { sessionCalls.push(args); return { html: "", url: "", title: "", text: "" }; },
+    },
+  });
+  const article = await clipper.extract("https://www.zhihu.com/question/1951716962645288920/answer/2035816979085390373?share_code=x");
+  assert.equal(article.title, "如何优雅地抓取知乎回答?");
+  assert.equal(article.extractionMethod, "zhihu-initial-state");
+  assert.equal(article.extractionStatus, "complete");
+  assert.equal(article.siteName, "知乎");
+  assert.equal(sessionCalls.length, 0);
+  assert.equal(cookieCalls.length, 0);
+});
+
+test("Zhihu pages keep the browser-session fallback when HTTP extraction fails", async () => {
+  const sessionCalls = [];
+  const rendered = {
+    html: `<!doctype html><html><body><div class="QuestionHeader-title">渲染路径的问题</div><div class="RichContent-inner"><p>${"浏览器会话渲染出的回答正文,长度需要超过完整性阈值。".repeat(6)}</p></div></body></html>`,
+    url: "https://www.zhihu.com/question/1951716962645288920/answer/2035816979085390373",
+    title: "渲染路径的问题",
+    author: "赵六",
+    text: "浏览器会话渲染出的回答正文,长度需要超过完整性阈值。".repeat(6),
+  };
+  const clipper = new WebClipper({}, zhihuTestSettings(), {
+    fetch: async () => ({ response: fakeHtmlResponse("", 403), finalUrl: rendered.url }),
+    sessionManager: {
+      collectCookies: async () => "",
+      extract: async (...args) => { sessionCalls.push(args); return rendered; },
+    },
+  });
+  const article = await clipper.extract("https://www.zhihu.com/question/1951716962645288920/answer/2035816979085390373");
+  assert.equal(sessionCalls.length, 1);
+  assert.equal(sessionCalls[0][1], "zhihu");
+  assert.equal(article.extractionStatus, "complete");
+  assert.match(article.extractionMethod, /zhihu-rendered/);
+});
+
+test("the session-cookie bridge passes the site-specific refresh parameters", async () => {
+  const cookieOptions = [];
+  const clipper = new WebClipper({}, zhihuTestSettings(), {
+    sessionManager: { collectCookies: async (service, warmupUrl, options) => { cookieOptions.push([service, warmupUrl, options]); return "d_c0=x"; } },
+  });
+  const cookieHeader = await clipper.collectSessionCookies("zhihu", "https://www.zhihu.com/question/1/answer/2");
+  assert.equal(cookieHeader, "d_c0=x");
+  assert.equal(cookieOptions[0][0], "zhihu");
+  assert.equal(cookieOptions[0][1], "https://www.zhihu.com/question/1/answer/2");
+  assert.equal(cookieOptions[0][2].requiredCookie, "__zse_ck");
+  assert.equal(cookieOptions[0][2].fallbackUrl, "https://www.zhihu.com/explore");
+});
+
+test("stealth evasions ship as a non-empty bundled script", () => {
+  const stealthScript = require("../src/core/stealth-script");
+  assert.equal(typeof stealthScript, "string");
+  assert.ok(stealthScript.length > 10_000);
+  assert.doesNotMatch(stealthScript, /HeadlessChrome/);
 });

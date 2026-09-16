@@ -1,6 +1,7 @@
 "use strict";
 
 const { parseXStatusUrl } = require("./xclip");
+const { isBilibiliUrl } = require("./biliclip");
 const { isXiaohongshuUrl } = require("./xhsclip");
 const { communityServiceForUrl, documentServiceForUrl, isLikelyPdfUrl } = require("./web-platforms");
 
@@ -101,8 +102,8 @@ function classifyClipFamily(url, article = null) {
     || isLikelyPdfUrl(raw)
   ) return "pdfs";
   if (documentServiceForUrl(raw) || method.includes("rendered-document")) return "documents";
-  if (parseXStatusUrl(raw) || isXiaohongshuUrl(raw) || isWeChatArticleUrl(raw)
-    || method.includes("xiaohongshu") || method.includes("wechat-article") || /^x-/.test(method)) {
+  if (parseXStatusUrl(raw) || isXiaohongshuUrl(raw) || isWeChatArticleUrl(raw) || isBilibiliUrl(raw)
+    || method.includes("xiaohongshu") || method.includes("wechat-article") || method.includes("bilibili") || /^x-/.test(method)) {
     return "social";
   }
   if (

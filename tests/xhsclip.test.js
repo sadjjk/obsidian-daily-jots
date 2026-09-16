@@ -3,7 +3,9 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const {
+  extractXiaohongshu,
   isXiaohongshuUrl,
+  isXhsNoteUrl,
   parseInitialState,
   replaceBareUndefined,
   xiaohongshuDataFromHtml,
@@ -40,4 +42,65 @@ test("Xiaohongshu initial state yields full-size localizable images and stable i
   ]);
   assert.match(data.contentHtml, /小红书图片 1/);
   assert.match(data.contentHtml, /First line<br>Second line/);
+});
+
+test("note URLs cover share short links and note pages only", () => {
+  assert.equal(isXhsNoteUrl("https://xhslink.cn/o/8MV5eiZ7OR9"), true);
+  assert.equal(isXhsNoteUrl("https://xhslink.com/a/AbCd12"), true);
+  assert.equal(isXhsNoteUrl("https://www.xiaohongshu.com/explore/note123?xsec_token=temporary"), true);
+  assert.equal(isXhsNoteUrl("https://www.xiaohongshu.com/discovery/item/note123"), true);
+  assert.equal(isXhsNoteUrl("https://www.xiaohongshu.com/user/profile/abc"), false);
+  assert.equal(isXhsNoteUrl("https://example.com/explore/note123"), false);
+});
+
+function fakeHtmlResponse(html, status = 200) {
+  return {
+    ok: status >= 200 && status < 300,
+    status,
+    headers: { get: (name) => (String(name).toLowerCase() === "content-type" ? "text/html; charset=utf-8" : null) },
+    body: (async function* () { yield Buffer.from(String(html || "")); })(),
+  };
+}
+
+test("note pages without note data fail with diagnostics instead of returning null", async () => {
+  const challengeHtml = "<!doctype html><html><body>当前环境异常，完成验证后即可继续访问。</body></html>";
+  await assert.rejects(
+    extractXiaohongshu(SOURCE_URL, async () => ({
+      response: fakeHtmlResponse(challengeHtml),
+      finalUrl: SOURCE_URL,
+    })),
+    (error) => {
+      assert.match(error.message, /no note data/);
+      assert.match(error.message, /initial-state missing/);
+      assert.match(error.message, /risk-control challenge detected/);
+      return true;
+    },
+  );
+});
+
+test("transient risk-control statuses retry once with a referer before giving up", async () => {
+  const calls = [];
+  const fetchImpl = async (url, options) => {
+    calls.push(options);
+    if (calls.length === 1) {
+      return {
+        response: { ok: false, status: 461, headers: { get: () => null }, body: null },
+        finalUrl: url,
+      };
+    }
+    return { response: fakeHtmlResponse(sampleHtml()), finalUrl: SOURCE_URL };
+  };
+  const data = await extractXiaohongshu("https://xhslink.cn/o/8MV5eiZ7OR9", fetchImpl);
+  assert.equal(calls.length, 2);
+  assert.equal(calls[1].headers.referer, "https://www.xiaohongshu.com/");
+  assert.equal(calls[0].headers["accept-language"], "zh-CN,zh;q=0.9");
+  assert.equal(data.title, "A useful note");
+});
+
+test("non-note Xiaohongshu pages keep returning null when no note data exists", async () => {
+  const data = await extractXiaohongshu("https://www.xiaohongshu.com/user/profile/abc", async (url) => ({
+    response: fakeHtmlResponse("<!doctype html><html><body>profile</body></html>"),
+    finalUrl: url,
+  }));
+  assert.equal(data, null);
 });

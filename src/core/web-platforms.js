@@ -180,7 +180,7 @@ const COMMUNITY_SERVICES = {
   },
   zhihu: {
     name: "知乎", region: "china", session: true, loginUrl: "https://www.zhihu.com/signin",
-    hosts: ["zhihu.com"], paths: [/\/(?:question\/\d+\/answer\/\d+|p\/\d+)/i], contentSelectors: [".Post-RichTextContainer", ".QuestionAnswer-content", "article", "main", "body"],
+    hosts: ["zhihu.com"], paths: [/\/(?:question\/\d+\/answer\/\d+|p\/\d+)/i, /\/question\/\d+\/?$/i], contentSelectors: [".Post-RichTextContainer", ".QuestionAnswer-content", "article", "main", "body"],
     commentSelectors: [".Comments-container", ".CommentItem"], authPattern: "登录知乎|扫码登录|sign in.*zhihu",
   },
   xiaohongshu: {

@@ -242,4 +242,55 @@ function decodeDataUrl(value, requestedName) {
   };
 }
 
-module.exports = { PUBLIC_DNS_ENDPOINT, TRUSTED_SYNTHETIC_DNS_SUFFIXES, USER_AGENT, decodeDataUrl, downloadRemoteFile, isRetryableTransportError, isTrustedSyntheticDnsUrl, lookupPublicDns, nodeRequest, parsePublicDnsAnswer, queryPublicDns, readLimitedBody, requestWithRetry, safeFetch, validateResolvedHost };
+// Legacy sites (Dapenti, old forums) serve GBK/Big5/Shift_JIS HTML while the
+// plugin previously force-decoded every response as UTF-8, garbling Chinese
+// titles and, for some byte sequences, producing paths the OS refuses to open.
+// Decode with the declared charset (HTTP header first, then <meta charset>),
+// falling back to plain UTF-8 when the label is unknown or unsupported.
+function charsetFromContentType(contentType) {
+  const match = String(contentType || "").match(/charset\s*=\s*"?([\w:-]+)"?/i);
+  return match ? match[1].trim().toLowerCase() : "";
+}
+
+function charsetFromHtmlMeta(buffer) {
+  try {
+    const head = buffer.subarray(0, 2048).toString("latin1");
+    const meta = head.match(/<meta[^>]+charset\s*=\s*["']?\s*([\w:-]+)/i);
+    return meta ? meta[1].trim().toLowerCase() : "";
+  } catch (_) { return ""; }
+}
+
+function countReplacementChars(text) {
+  let count = 0;
+  for (const ch of text) if (ch === "\uFFFD") count += 1;
+  return count;
+}
+
+function decodeHtmlBuffer(buffer, contentType = "") {
+  const label = charsetFromContentType(contentType) || charsetFromHtmlMeta(buffer);
+  if (label && !/^(?:utf-?8|us-ascii|ansi_x3\.4-1968|iso-8859-1|latin1|windows-1252)$/.test(label)) {
+    try { return new TextDecoder(label, { fatal: false }).decode(buffer); } catch (_) { /* unsupported label: fall through */ }
+  }
+  const utf8 = Buffer.from(buffer).toString("utf8");
+  const replacementChars = countReplacementChars(utf8);
+  // Undeclared legacy pages (e.g. GBK blogs): UTF-8 decoding leaves a trail of
+  // replacement chars. Sniff the common legacy encodings against the raw bytes
+  // and adopt the candidate with clearly fewer replacements; otherwise keep UTF-8.
+  if (replacementChars >= 4) {
+    let best = utf8;
+    let bestBad = replacementChars;
+    // gbk (ICU's CP936 table) precedes gb18030: their two-byte regions differ,
+    // and real-world pages are far more often Windows GBK.
+    for (const legacy of ["gbk", "big5", "shift_jis", "euc-kr", "gb18030"]) {
+      try {
+        const candidate = new TextDecoder(legacy, { fatal: false }).decode(buffer);
+        const bad = countReplacementChars(candidate);
+        if (bad < bestBad) { best = candidate; bestBad = bad; }
+      } catch (_) { /* label unsupported in this runtime */ }
+    }
+    return best;
+  }
+  return utf8;
+}
+
+module.exports = { PUBLIC_DNS_ENDPOINT, TRUSTED_SYNTHETIC_DNS_SUFFIXES, USER_AGENT, decodeDataUrl, decodeHtmlBuffer, downloadRemoteFile, isRetryableTransportError, isTrustedSyntheticDnsUrl, lookupPublicDns, nodeRequest, parsePublicDnsAnswer, queryPublicDns, readLimitedBody, requestWithRetry, safeFetch, validateResolvedHost };
