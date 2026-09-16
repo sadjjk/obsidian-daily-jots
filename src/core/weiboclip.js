@@ -7,6 +7,9 @@
 // referer/x-xsrf-token 等全部非必须,缺 SUB 时任何请求头都拿不到数据(432)。
 
 const { readLimitedBody } = require("./network");
+const { parseHTML } = require("linkedom");
+
+const TTARTICLE_UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36";
 
 const WEIBO_UA = "Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.5 Mobile/15E148 Safari/604.1";
 
@@ -39,6 +42,59 @@ function weiboStatusId(value) {
 
 function isWeiboStatusUrl(value) {
   return Boolean(weiboStatusId(value));
+}
+
+// 微博头条文章(weibo.com/ttarticle/p/show?id=…):页面 SSR 直出正文且无登录墙,
+// 但通用 Readability 会误选页头的作者信息卡而丢掉正文容器,必须固定选择器提取。
+// 实测正文容器为 .WB_editor_iframe_new(fallback .main_editor);页面匿名可读,无需 cookie。
+function isWeiboArticleUrl(value) {
+  try {
+    const url = new URL(String(value || ""));
+    if (!hostMatches(url, ["weibo.com", "weibo.cn"])) return false;
+    return /\/ttarticle\/p\/show/i.test(url.pathname) && Boolean(url.searchParams.get("id"));
+  } catch (_) { return false; }
+}
+
+function weiboArticleId(value) {
+  try {
+    return new URL(String(value || "")).searchParams.get("id") || "";
+  } catch (_) { return ""; }
+}
+
+async function extractWeiboArticle(url, fetchImpl = globalThis.fetch, cookieGetter = null) {
+  if (!isWeiboArticleUrl(url)) return null;
+
+  const cookie = cookieGetter ? await cookieGetter("https://weibo.com") : "";
+  const headers = { "user-agent": TTARTICLE_UA };
+  if (cookie) headers.cookie = cookie;
+  const { response } = await fetchImpl(String(url), { accept: "text/html", headers, timeoutMs: 30_000 });
+  if (!response.ok) throw new Error(`Weibo article returned HTTP ${response.status}`);
+  const html = (await readLimitedBody(response, 5 * 1024 * 1024)).toString("utf8");
+
+  const document = parseHTML(html).document;
+  const container = document.querySelector(".WB_editor_iframe_new") || document.querySelector(".main_editor");
+  if (!container || !container.innerHTML.trim()) {
+    throw new Error("Weibo article body container was not found on the page (markup may have changed)");
+  }
+  const title = String(document.querySelector('meta[property="og:title"]')?.getAttribute("content") || document.title || "").trim();
+  const images = [...container.querySelectorAll("img")]
+    .map((img) => img.getAttribute("src"))
+    .filter(Boolean)
+    .map((src) => (src.startsWith("//") ? `https:${src}` : src));
+  const id = weiboArticleId(url);
+
+  return {
+    title: title || "微博头条文章",
+    byline: "微博",
+    siteName: "weibo.com",
+    contentHtml: `<article class="weibo-ttarticle">${container.innerHTML}</article>`,
+    images,
+    extractionMethod: "ttarticle",
+    url: String(url),
+    canonicalUrl: String(url),
+    identityUrl: `weibo-ttarticle:${id}`,
+    extractionStatus: "complete",
+  };
 }
 
 function searchContainerId(value) {
@@ -195,7 +251,8 @@ async function extractWeiboStatus(url, fetchImpl = globalThis.fetch, cookieGette
 
 async function extractWeibo(url, fetchImpl = globalThis.fetch, cookieGetter = null) {
   if (isWeiboSearchUrl(url)) return extractWeiboSearch(url, fetchImpl, cookieGetter);
-  if (weiboStatusId(url)) return extractWeiboStatus(url, fetchImpl, cookieGetter);
+  if (isWeiboStatusUrl(url)) return extractWeiboStatus(url, fetchImpl, cookieGetter);
+  if (isWeiboArticleUrl(url)) return extractWeiboArticle(url, fetchImpl, cookieGetter);
   return null;
 }
 
@@ -256,8 +313,10 @@ module.exports = {
   cleanWeiboText,
   collectMblogs,
   extractWeibo,
+  extractWeiboArticle,
   extractWeiboSearch,
   extractWeiboStatus,
+  isWeiboArticleUrl,
   isWeiboSearchUrl,
   isWeiboStatusUrl,
   isWeiboUrl,

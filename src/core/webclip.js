@@ -12,7 +12,7 @@ const { extractXStatus } = require("./xclip");
 const { extractBilibili, isBilibiliUrl, isBilibiliVideoUrl } = require("./biliclip");
 const { extractXiaohongshu, isXiaohongshuUrl, isXhsNoteUrl } = require("./xhsclip");
 const { extractZhihu, isZhihuNoteUrl, isZhihuUrl } = require("./zhihuclip");
-const { extractWeibo, isWeiboSearchUrl, isWeiboStatusUrl } = require("./weiboclip");
+const { extractWeibo, isWeiboArticleUrl, isWeiboSearchUrl, isWeiboStatusUrl } = require("./weiboclip");
 const { classifyClipFamily, isClipFamilyEnabled, resolveClipFolder } = require("./clip-rules");
 
 const WECHAT_NOISE_SELECTORS = [
@@ -585,7 +585,7 @@ class WebClipper {
       // 知乎失败时保留浏览器会话回退(登录用户的隔离会话仍有价值)。
     }
     let weiboError;
-    if (isWeiboSearchUrl(url) || isWeiboStatusUrl(url)) {
+    if (isWeiboSearchUrl(url) || isWeiboStatusUrl(url) || isWeiboArticleUrl(url)) {
       try {
         const data = await extractWeibo(url, this.fetch, (target) => this.collectSessionCookies("weibo", target));
         if (data) {

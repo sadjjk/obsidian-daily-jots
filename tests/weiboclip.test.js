@@ -2,7 +2,7 @@
 
 const assert = require("node:assert/strict");
 const test = require("node:test");
-const { extractWeibo, extractWeiboSearch, extractWeiboStatus, isWeiboSearchUrl, isWeiboStatusUrl, cleanWeiboText } = require("../src/core/weiboclip");
+const { extractWeibo, extractWeiboArticle, extractWeiboSearch, extractWeiboStatus, isWeiboArticleUrl, isWeiboSearchUrl, isWeiboStatusUrl, cleanWeiboText } = require("../src/core/weiboclip");
 
 const SEARCH_URL = "https://m.weibo.cn/search?containerid=231522type%3D1%26q%3D%23%E5%8D%97%E6%96%B9%E5%8C%BB%E7%A7%91%E5%A4%A7%E5%AD%A6%E5%AD%A6%E7%94%9F%E5%8F%91%E5%A3%B0%23&v_p=42";
 
@@ -55,12 +55,12 @@ const FIXTURE = {
 const SUB_COOKIE = "SUBP=xxx; SUB=_2AkTestCookieValue; XSRF-TOKEN=985607";
 // 与 safeFetch 的真实契约一致:{ response, finalUrl },response 是自定义对象
 // (headers.get + async-iterable body,无标准 .json(),须用 readLimitedBody 读)。
-function weiboResponse(payload, ok = true, status = 200) {
+function weiboResponse(payload, ok = true, status = 200, contentType = "application/json") {
   return {
     response: {
       ok, status,
-      headers: { get: () => null },
-      body: ok ? (async function* () { yield Buffer.from(JSON.stringify(payload)); })() : null,
+      headers: { get: () => contentType },
+      body: ok ? (async function* () { yield Buffer.from(typeof payload === "string" ? payload : JSON.stringify(payload)); })() : null,
     },
     finalUrl: "",
   };
@@ -178,5 +178,35 @@ test("weibo status API rejections report the server message", async () => {
   await assert.rejects(
     () => extractWeiboStatus(STATUS_URL, RISK_FETCH, COOKIE_GETTER),
     /HTTP 432/,
+  );
+});
+
+const ARTICLE_URL = `https://weibo.com/ttarticle/p/show?id=2309405343762020171911&luicode=10000011`;
+const ARTICLE_HTML = `<!doctype html><html><head><title>孙子非亲生案代理律师:此案最大难点是孩子母亲拒绝亲子鉴定</title></head><body>
+<div class="WB_editor_iframe_new"><p>第一段:案件的核心争议点。</p><p>第二段:<img src="//wx1.sinaimg.cn/large/art1.jpg">后续进展。</p></div>
+<div class="card"><a href="//weibo.com/u/1734530730">大河报</a>简介</div></body></html>`;
+const ARTICLE_FETCH = async () => ({ response: { ok: true, status: 200, headers: { get: () => "text/html" }, body: (async function* () { yield Buffer.from(ARTICLE_HTML); })() }, finalUrl: "" });
+
+test("weibo ttarticle urls are recognized and dispatched without cookie", async () => {
+  assert.equal(isWeiboArticleUrl(ARTICLE_URL), true);
+  assert.equal(isWeiboArticleUrl(SEARCH_URL), false);
+  let sawCookie;
+  const fetchImpl = async (api, options) => { sawCookie = options.headers.cookie; return weiboResponse(ARTICLE_HTML, true, 200, "text/html"); };
+  const data = await extractWeibo(ARTICLE_URL, fetchImpl, async () => "");
+  assert.ok(!sawCookie, "ttarticle is anonymously readable: no cookie header expected");
+  assert.equal(data.title, "孙子非亲生案代理律师:此案最大难点是孩子母亲拒绝亲子鉴定");
+  assert.equal(data.extractionMethod, "ttarticle");
+  assert.match(data.contentHtml, /第一段:案件的核心争议点/);
+  assert.match(data.contentHtml, /后续进展/);
+  assert.doesNotMatch(data.contentHtml, /大河报/);
+  assert.deepEqual(data.images, ["https://wx1.sinaimg.cn/large/art1.jpg"]);
+  assert.equal(data.identityUrl, "weibo-ttarticle:2309405343762020171911");
+});
+
+test("weibo ttarticle with a missing body container fails loudly", async () => {
+  const noContainer = async () => weiboResponse("<html><head><title>t</title></head><body><div>other</div></body></html>", true, 200, "text/html");
+  await assert.rejects(
+    () => extractWeiboArticle(ARTICLE_URL, noContainer, COOKIE_GETTER),
+    /body container was not found/,
   );
 });
