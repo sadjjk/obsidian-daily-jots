@@ -87,7 +87,7 @@ test("weibo search extraction renders mblogs into a structured article", async (
   const data = await extractWeiboSearch(SEARCH_URL, OK_FETCH, COOKIE_GETTER);
   assert.equal(data.extractionMethod, "weibo-json");
   assert.match(data.title, /南方医科大学学生发声/);
-  assert.match(data.contentHtml, /微博搜索 · 首屏 3 条/);
+  assert.match(data.contentHtml, /#南方医科大学学生发声# 微博搜索 · 首屏 3 条/);
   // 双重标题消除:正文不再携带 h1
   assert.doesNotMatch(data.contentHtml, /<h1/);
   // 作者进大纲级 h3,meta 行带干净的"原文"链接
@@ -209,4 +209,19 @@ test("weibo ttarticle with a missing body container fails loudly", async () => {
     () => extractWeiboArticle(ARTICLE_URL, noContainer, COOKIE_GETTER),
     /body container was not found/,
   );
+});
+
+test("unencoded containerid (&q= split into its own param) is reassembled", async () => {
+  const rawUrl = "https://m.weibo.cn/search?containerid=231522type=1&q=#野人先生创始人回应太贵#&_T_WM=47843839089&v_p=42";
+  let seenApi = "";
+  const fetchImpl = async (api) => { seenApi = api; return weiboResponse(FIXTURE); };
+  const data = await extractWeiboSearch(rawUrl, fetchImpl, COOKIE_GETTER);
+  // 重组后的接口请求必须带完整编码的 q,与标准形态逐字节一致
+  assert.match(seenApi, /containerid=231522type%3D1%26q%3D%23%E9%87%8E%E4%BA%BA%E5%85%88%E7%94%9F%E5%88%9B%E5%A7%8B%E4%BA%BA%E5%9B%9E%E5%BA%94%E5%A4%AA%E8%B4%B5%23&page_type=searchall/);
+  assert.equal(data.title, "#野人先生创始人回应太贵# 微博搜索");
+  // 标准形态(已编码)不受影响
+  let standardApi = "";
+  const standardFetch = async (api) => { standardApi = api; return weiboResponse(FIXTURE); };
+  await extractWeiboSearch(SEARCH_URL, standardFetch, COOKIE_GETTER);
+  assert.match(standardApi, /containerid=231522type%3D1%26q%3D%23/);
 });

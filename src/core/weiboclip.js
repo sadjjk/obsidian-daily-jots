@@ -97,9 +97,26 @@ async function extractWeiboArticle(url, fetchImpl = globalThis.fetch, cookieGett
   };
 }
 
-function searchContainerId(value) {
+function searchContainerId(url) {
   try {
-    return new URL(String(value || "")).searchParams.get("containerid") || "";
+    const u = new URL(String(url || ""));
+    let cid = u.searchParams.get("containerid") || "";
+    // 流传形态②:containerid 值里的 &q= 未编码,被裸 & 截断;q 降级成独立参数。
+    // 更糟的是 q 值里的裸 # 会把 "q=#话题#&_T_WM=…" 整段吞进 URL fragment,
+    // query 里 q 参数直接消失。fragment 首段 "#话题#" 正是搜索词,恢复出来。
+    // 微博 getIndex 认的是"含 q 的完整 containerid"——重组回去,恢复请求语义。
+    const queryQ = u.searchParams.get("q");
+    // WHATWG URL 会把 hash 里的非 ASCII percent-encode,恢复话题名要先解回来。
+    let hashQ = /^#([^#/]+)#/.exec(u.hash || "")?.[1] || "";
+    if (hashQ) { try { hashQ = decodeURIComponent(hashQ); } catch (_) { /* keep as-is */ } }
+    let q = queryQ || hashQ;
+    if (q && !q.includes("#")) q = `#${q}#`;
+    // q 保持解码后的原文,不做预编码——extractWeiboSearch 出口会对整个 cid
+    // 统一 encodeURIComponent,这里再编一次会变成双重编码。
+    if (q && !/(?:^|&)q=/.test(cid)) {
+      cid = `${cid}&q=${q}`;
+    }
+    return cid;
   } catch (_) { return ""; }
 }
 
@@ -195,7 +212,7 @@ function mblogItemHtml(mblog) {
 
 function weiboSearchHtml(topicTitle, mblogs) {
   const items = mblogs.map((mblog) => mblogItemHtml(mblog)).join("\n");
-  return `<article class="weibo-search"><p class="weibo-search-meta">${topicTitle} · 微博搜索 · 首屏 ${mblogs.length} 条</p>\n${items}\n</article>`;
+  return `<article class="weibo-search"><p class="weibo-search-meta">${topicTitle} · 首屏 ${mblogs.length} 条</p>\n${items}\n</article>`;
 }
 
 async function extractWeiboStatus(url, fetchImpl = globalThis.fetch, cookieGetter = null) {

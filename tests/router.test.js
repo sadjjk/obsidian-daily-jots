@@ -175,6 +175,19 @@ test("receipt previews keep markdown line breaks after a blank line", () => {
   assert.doesNotMatch(text, /› /);
 });
 
+test("receipt previews drop video links from the meta line", () => {
+  const clip = {
+    article: { title: "视频页", extractionStatus: "complete", markdown: "2024-06-04 17:00 · 转发 75 · [原文](https://m.weibo.cn/status/5041) · [视频](https://video.weibo.com/show?fid=1034:504151)\n\n正文第一行。" },
+    savedImages: 0, imageFailures: [],
+  };
+  const text = formatCaptureReceipt({
+    diaryPath: "日记/today.md", clips: [clip], clipFailures: [], attachmentFailures: [],
+  }, "zh-CN", { enabled: true, chars: 200 });
+  assert.doesNotMatch(text, /video\.weibo\.com/);
+  assert.doesNotMatch(text, /\[视频\]/);
+  assert.match(text, /\[原文\]\(https:\/\/m\.weibo\.cn\/status\/5041\)\n\n正文第一行。/);
+});
+
 test("receipt previews filter out images and count text only", () => {
   const clip = {
     article: { title: "头图页", extractionStatus: "complete", markdown: "![封面](https://img.example/cover.jpg)\n\n![配图](https://img.example/2.jpg)\n\n正文第一句在这。\n\n第二段。" },

@@ -3,7 +3,7 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const http = require("node:http");
-const { USER_AGENT, isTrustedSyntheticDnsUrl, nodeRequest, parsePublicDnsAnswer, readLimitedBody, requestWithRetry, validateResolvedHost } = require("../src/core/network");
+const { USER_AGENT, isTrustedSyntheticDnsUrl, nodeRequest, normalizeReferer, parsePublicDnsAnswer, readLimitedBody, requestWithRetry, validateResolvedHost } = require("../src/core/network");
 
 test("web requests use a plain browser user agent without a plugin suffix", () => {
   assert.match(USER_AGENT, /Chrome\/132\.0\.0\.0 Safari\/537\.36$/);
@@ -150,4 +150,13 @@ test("public DNS JSON parsing ignores CNAMEs and keeps only IP answers", () => {
     { type: 1, data: "203.0.113.12" },
     { type: 28, data: "2001:db8::12" },
   ] }), ["203.0.113.12", "2001:db8::12"]);
+});
+
+test("referers stay Latin1-safe: raw non-ASCII URLs are encoded, ASCII ones untouched", () => {
+  const raw = "https://m.weibo.cn/search?containerid=231522type=1&q=#野人先生创始人回应太贵#&_T_WM=47843839089&v_p=42";
+  const normalized = normalizeReferer(raw);
+  assert.doesNotMatch(normalized, /[^\x00-\xff]/);
+  assert.match(normalized, /q=#%E9%87%8E%E4%BA%BA/);
+  assert.equal(normalizeReferer("https://m.weibo.cn/search?containerid=231522type%3D1"), "https://m.weibo.cn/search?containerid=231522type%3D1");
+  assert.equal(normalizeReferer(""), "");
 });

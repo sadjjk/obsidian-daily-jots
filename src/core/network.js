@@ -199,7 +199,7 @@ async function safeFetch(input, options = {}) {
 async function downloadRemoteFile(url, options = {}) {
   if (String(url).startsWith("data:")) return decodeDataUrl(url, options.fileName);
   const headers = { ...(options.headers || {}) };
-  if (options.referrer) headers.referer = options.referrer;
+  if (options.referrer) headers.referer = normalizeReferer(options.referrer);
   let result;
   const retryable = new Set([429, 500, 502, 503, 504]);
   const httpAttempts = Math.max(1, Number(options.httpAttempts) || 4);
@@ -227,6 +227,15 @@ async function downloadRemoteFile(url, options = {}) {
   const remoteName = decodeURIComponent(pathName.slice(pathName.lastIndexOf("/") + 1));
   const fileName = safeFileName(options.fileName || remoteName, `attachment.${mimeExtension(mimeType)}`);
   return { buffer, mimeType, fileName, finalUrl: result.finalUrl };
+}
+
+// HTTP 头值必须全 Latin1;用户发的 URL 可能含未编码的裸中文(如微博搜索 q=#话题#),
+// 直接进 Referer 头会在设置请求头时抛 invalid character,导致所有图片下载失败。
+// 统一 encodeURI 兜底(对全 ASCII URL 幂等)。
+function normalizeReferer(referer) {
+  const value = String(referer || "");
+  if (!value) return "";
+  return /[^\x00-\xff]/.test(value) ? encodeURI(value) : value;
 }
 
 function decodeDataUrl(value, requestedName) {
@@ -293,4 +302,4 @@ function decodeHtmlBuffer(buffer, contentType = "") {
   return utf8;
 }
 
-module.exports = { PUBLIC_DNS_ENDPOINT, TRUSTED_SYNTHETIC_DNS_SUFFIXES, USER_AGENT, decodeDataUrl, decodeHtmlBuffer, downloadRemoteFile, isRetryableTransportError, isTrustedSyntheticDnsUrl, lookupPublicDns, nodeRequest, parsePublicDnsAnswer, queryPublicDns, readLimitedBody, requestWithRetry, safeFetch, validateResolvedHost };
+module.exports = { PUBLIC_DNS_ENDPOINT, TRUSTED_SYNTHETIC_DNS_SUFFIXES, USER_AGENT, decodeDataUrl, decodeHtmlBuffer, downloadRemoteFile, isRetryableTransportError, isTrustedSyntheticDnsUrl, lookupPublicDns, nodeRequest, normalizeReferer, parsePublicDnsAnswer, queryPublicDns, readLimitedBody, requestWithRetry, safeFetch, validateResolvedHost };
