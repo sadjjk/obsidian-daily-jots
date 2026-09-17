@@ -712,6 +712,7 @@ class DiarySettingTab extends PluginSettingTab {
     nameInput.style.minWidth = "0";
     const addRowActions = overridesList.createDiv({ cls: "od-session-row" });
     addRowActions.style.justifyContent = "flex-end";
+    addRowActions.style.borderBottom = "none";
     iconButton(addRowActions, this.tr("添加规则", "Add rule"), "plus", async () => {
       const host = hostInput.value.trim().toLowerCase().replace(/^www\./, "");
       const name = nameInput.value.trim().replace(/[\\/: \n\r\t]/g, "").slice(0, 20);
