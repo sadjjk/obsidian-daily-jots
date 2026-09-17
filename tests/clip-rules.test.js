@@ -82,8 +82,35 @@ test("enabled clipping types write into typed subfolders under the clipping root
     extractionMethod: "readability",
     extractionStatus: "complete",
   }, { timestamp: new Date("2026-09-02T00:00:00Z") });
-  assert.match(saved.notePath, /^Clippings\/Articles\//);
+  assert.match(saved.notePath, /^Clippings\/Articles\/2026-09-02-普通网页-Example-/);
+  assert.match(writes[0].content, /platform: "普通网页"/);
   assert.equal(isClipFamilyEnabled(settings, "articles"), true);
   assert.equal(resolveClipFolder(settings, "social"), "Clippings/Social");
   assert.equal(normalizeClipRules({ articles: { folder: " /News\\\\Blogs/ " } }).articles.folder, "News/Blogs");
+});
+
+test("mapped source lands in Social with source label in filename and platform", async () => {
+  const settings = {
+    storage: { clippingFolder: "Clippings", attachmentFolder: "Attachments" },
+    capture: { downloadWebImages: false, clipRules: defaultClipRules() },
+  };
+  const writes = [];
+  const writer = {
+    findTextBySuffix: () => "",
+    upsertText: async (path, content) => { writes.push({ path, content }); },
+  };
+  const clipper = new WebClipper(writer, settings, { download: async () => { throw new Error("no images"); } });
+  const saved = await clipper.saveArticle({
+    url: "https://www.ithome.com/0/891/329.htm",
+    identityUrl: "https://www.ithome.com/0/891/329.htm",
+    title: "IT之家新闻",
+    siteName: "IT之家",
+    byline: "",
+    markdown: "Body text that is long enough to keep.",
+    images: [],
+    extractionMethod: "readability",
+    extractionStatus: "complete",
+  }, { timestamp: new Date("2026-09-02T00:00:00Z") });
+  assert.match(saved.notePath, /^Clippings\/Social\/2026-09-02-IT之家-IT之家新闻-/);
+  assert.match(writes[0].content, /platform: "IT之家"/);
 });

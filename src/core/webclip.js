@@ -15,6 +15,7 @@ const { extractZhihu, isZhihuNoteUrl, isZhihuUrl } = require("./zhihuclip");
 const { extractWeibo, isWeiboArticleUrl, isWeiboSearchUrl, isWeiboStatusUrl } = require("./weiboclip");
 const { extractWeixinArticle, isWeixinArticleUrl } = require("./weixinclip");
 const { extractDouyin, isDouyinUrl } = require("./douyinclip");
+const { sourceNameForUrl } = require("./source-names");
 const { classifyClipFamily, isClipFamilyEnabled, resolveClipFolder } = require("./clip-rules");
 
 const WECHAT_NOISE_SELECTORS = [
@@ -785,6 +786,7 @@ class WebClipper {
 
   async saveArticle(article, source = {}, options = {}) {
     const date = localDateParts(source.timestamp || new Date());
+    const sourceLabel = sourceNameForUrl(article.url, this.settings) || "普通网页";
     const title = compactTitle(article.title, new URL(article.url).hostname);
     const stem = safeFileName(title, new URL(article.url).hostname);
     const identityUrl = article.identityUrl || article.canonicalUrl || normalizedIdentityUrl(article.url);
@@ -794,7 +796,7 @@ class WebClipper {
     const existingPath = typeof this.writer.findTextBySuffix === "function"
       ? this.writer.findTextBySuffix(clipFolder, suffix)
       : "";
-    const notePath = existingPath || `${clipFolder}/${date.day}-${stem}${suffix}`;
+    const notePath = existingPath || `${clipFolder}/${date.day}-${sourceLabel}-${stem}${suffix}`;
     const reused = Boolean(existingPath);
     let markdown = article.markdown || article.excerpt || article.url;
     const failures = [];
@@ -862,6 +864,7 @@ class WebClipper {
       `site: ${yamlString(article.siteName)}`,
       `author: ${yamlString(article.byline)}`,
       `published_at: ${yamlString(article.publishedAt || "")}`,
+      `platform: ${yamlString(sourceLabel)}`,
       `clipped_at: ${yamlString(date.iso)}`,
       `channel: ${yamlString(source.channel || "manual")}`,
       `extraction_method: ${yamlString(article.extractionMethod || "unknown")}`,
