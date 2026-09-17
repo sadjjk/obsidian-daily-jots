@@ -658,13 +658,30 @@ class DiarySettingTab extends PluginSettingTab {
       (isChineseName(name) ? groups.china : groups.international).entries.push([name, hosts]);
     }
     const coverageGrid = coverage.createDiv({ cls: "od-support-grid" });
+    // 原生 title 在 Obsidian 里时灵时不灵,改用自绘 tooltip(fixed 定位,挂在 tag 内随其销毁)。
+    let hoverTip = null;
+    const hideHoverTip = () => {
+      if (hoverTip) {
+        hoverTip.remove();
+        hoverTip = null;
+      }
+    };
+    const showHoverTip = (tag, text) => {
+      hideHoverTip();
+      hoverTip = tag.createDiv({ cls: "od-hover-tip", text });
+      const rect = tag.getBoundingClientRect();
+      const tipWidth = Math.min(360, Math.max(120, hoverTip.offsetWidth));
+      hoverTip.style.top = `${rect.bottom + 6}px`;
+      hoverTip.style.left = `${Math.min(Math.max(8, rect.left), window.innerWidth - tipWidth - 8)}px`;
+    };
     for (const group of Object.values(groups)) {
       const box = coverageGrid.createDiv({ cls: "od-support-group" });
       box.createEl("h4", { text: group.title });
       const tagWall = box.createDiv({ cls: "od-support-tags" });
       for (const [name, hosts] of group.entries) {
         const tag = tagWall.createSpan({ cls: "od-support-tag is-api", text: name });
-        tag.setAttr("title", `${this.tr("匹配域名: ", "Hosts: ")}${hosts.join(", ")}`);
+        tag.addEventListener("mouseenter", () => showHoverTip(tag, `${this.tr("匹配域名: ", "Hosts: ")}${hosts.join(", ")}`));
+        tag.addEventListener("mouseleave", hideHoverTip);
       }
     }
     coverage.createEl("h4", { text: this.tr("我的自定义规则(优先于内置)", "My custom rules (override built-ins)") });
@@ -686,12 +703,16 @@ class DiarySettingTab extends PluginSettingTab {
     const hostInput = addRow.createEl("input", {
       type: "text", placeholder: this.tr("域名，如 sspai.com（通配写 *.qq.com）", "host, e.g. sspai.com (wildcard: *.qq.com)"), cls: "text-input",
     });
-    hostInput.style.maxWidth = "260px";
+    hostInput.style.flex = "1";
+    hostInput.style.minWidth = "0";
     const nameInput = addRow.createEl("input", {
       type: "text", placeholder: this.tr("来源名，如 少数派", "name, e.g. Sspai"), cls: "text-input",
     });
-    nameInput.style.maxWidth = "200px";
-    iconButton(addRow, this.tr("添加规则", "Add rule"), "plus", async () => {
+    nameInput.style.flex = "1";
+    nameInput.style.minWidth = "0";
+    const addRowActions = overridesList.createDiv({ cls: "od-session-row" });
+    addRowActions.style.justifyContent = "flex-end";
+    iconButton(addRowActions, this.tr("添加规则", "Add rule"), "plus", async () => {
       const host = hostInput.value.trim().toLowerCase().replace(/^www\./, "");
       const name = nameInput.value.trim().replace(/[\\/: \n\r\t]/g, "").slice(0, 20);
       if (!host || !name) {
