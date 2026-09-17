@@ -3,11 +3,12 @@
 const { parseXStatusUrl } = require("./xclip");
 const { isBilibiliUrl } = require("./biliclip");
 const { isXiaohongshuUrl } = require("./xhsclip");
-const { isWeiboSearchUrl } = require("./weiboclip");
+const { isWeiboArticleUrl, isWeiboSearchUrl, isWeiboStatusUrl } = require("./weiboclip");
 const { isDouyinUrl } = require("./douyinclip");
-const { communityServiceForUrl, documentServiceForUrl, isLikelyPdfUrl } = require("./web-platforms");
+const { sourceNameForUrl } = require("./source-names");
+const { documentServiceForUrl, isLikelyPdfUrl } = require("./web-platforms");
 
-const CLIP_FAMILY_IDS = ["articles", "social", "community", "documents", "pdfs"];
+const CLIP_FAMILY_IDS = ["articles", "social", "documents", "pdfs"];
 
 const CLIP_FAMILIES = {
   articles: {
@@ -15,24 +16,16 @@ const CLIP_FAMILIES = {
     zh: "普通网页",
     en: "Articles",
     defaultFolder: "Articles",
-    zhDesc: "新闻、博客和未能归入其他类型的网页",
-    enDesc: "News, blogs, and pages that do not match another type",
+    zhDesc: "未被来源表收录的网站兜底(个人博客、官方博客、未收录新站)",
+    enDesc: "Fallback for sites not in the source table (personal blogs, official blogs, and unlisted sites)",
   },
   social: {
     id: "social",
-    zh: "社交内容",
-    en: "Social",
+    zh: "社区媒体",
+    en: "Community media",
     defaultFolder: "Social",
-    zhDesc: "X / Twitter、微信公众号、小红书",
-    enDesc: "X / Twitter, WeChat articles, and Xiaohongshu / REDnote",
-  },
-  community: {
-    id: "community",
-    zh: "技术社区",
-    en: "Community",
-    defaultFolder: "Community",
-    zhDesc: "论坛、问答、Issue / PR 和带评论的帖子",
-    enDesc: "Forums, Q&A, issues / PRs, and posts with comments",
+    zhDesc: "社交平台、新闻媒体和技术社区(微博、知乎、小红书、抖音、腾讯新闻、掘金等,含对应海外站点)",
+    enDesc: "Social platforms, news media, tech communities, and their overseas peers",
   },
   documents: {
     id: "documents",
@@ -94,7 +87,7 @@ function isWeChatArticleUrl(value) {
   }
 }
 
-function classifyClipFamily(url, article = null) {
+function classifyClipFamily(url, article = null, settings = null) {
   const raw = String(article?.url || url || "");
   const method = String(article?.extractionMethod || "");
   if (
@@ -104,16 +97,15 @@ function classifyClipFamily(url, article = null) {
     || isLikelyPdfUrl(raw)
   ) return "pdfs";
   if (documentServiceForUrl(raw) || method.includes("rendered-document")) return "documents";
-  if (parseXStatusUrl(raw) || isXiaohongshuUrl(raw) || isWeChatArticleUrl(raw) || isBilibiliUrl(raw) || isWeiboSearchUrl(raw) || isDouyinUrl(raw)
-    || method.includes("xiaohongshu") || method.includes("wechat-article") || method.includes("bilibili") || method.includes("weibo") || method.includes("douyin") || /^x-/.test(method)) {
+  if (parseXStatusUrl(raw) || isXiaohongshuUrl(raw) || isWeChatArticleUrl(raw) || isBilibiliUrl(raw)
+    || isWeiboSearchUrl(raw) || isWeiboStatusUrl(raw) || isWeiboArticleUrl(raw) || isDouyinUrl(raw)
+    || method.includes("xiaohongshu") || method.includes("wechat-article") || method.includes("bilibili")
+    || method.includes("weibo") || method.includes("douyin") || method.includes("zhihu")
+    || /^x-/.test(method)) {
     return "social";
   }
-  if (
-    communityServiceForUrl(raw)
-    || Number(article?.commentCount) > 0
-    || method.includes("comment")
-    || method.includes("community")
-  ) return "community";
+  // 来源映射命中(内置 + 自定义)即社区媒体;未命中一律兜底普通网页。
+  if (sourceNameForUrl(raw, settings)) return "social";
   return "articles";
 }
 

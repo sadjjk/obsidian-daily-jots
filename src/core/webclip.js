@@ -776,7 +776,7 @@ class WebClipper {
     const budgetMs = Math.max(10, Number(this.settings.capture.webClipBudgetSeconds) || 75) * 1000;
     const deadline = Number(source.deadline) || Date.now() + budgetMs;
     const article = await deadlinePromise(this.extract(url), deadline, "Web clipping exceeded its time budget");
-    const family = classifyClipFamily(url, article);
+    const family = classifyClipFamily(url, article, this.settings);
     if (!isClipFamilyEnabled(this.settings, family)) {
       throw new Error("该剪藏类型已关闭");
     }
@@ -789,7 +789,7 @@ class WebClipper {
     const stem = safeFileName(title, new URL(article.url).hostname);
     const identityUrl = article.identityUrl || article.canonicalUrl || normalizedIdentityUrl(article.url);
     const suffix = `-${shortHash(identityUrl)}.md`;
-    const family = options.family || classifyClipFamily(article.url, article);
+    const family = options.family || classifyClipFamily(article.url, article, this.settings);
     const clipFolder = resolveClipFolder(this.settings, family);
     const existingPath = typeof this.writer.findTextBySuffix === "function"
       ? this.writer.findTextBySuffix(clipFolder, suffix)

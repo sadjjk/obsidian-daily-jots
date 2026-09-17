@@ -184,7 +184,7 @@ class DiaryService {
           }
         }
         if (!codePlatform || codeMode === "extract" || codeMode === "both") {
-          if (isClipFamilyEnabled(settings, classifyClipFamily(url))) clipTargets.push(url);
+          if (isClipFamilyEnabled(settings, classifyClipFamily(url, null, settings))) clipTargets.push(url);
           else clipFailures.push(`${url}: 该剪藏类型已关闭`);
         }
       }

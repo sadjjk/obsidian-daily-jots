@@ -18,8 +18,16 @@ test("URLs are classified by source family before they are saved", () => {
   assert.equal(classifyClipFamily("https://x.com/openai/status/1234567890123456789"), "social");
   assert.equal(classifyClipFamily("https://mp.weixin.qq.com/s/abc"), "social");
   assert.equal(classifyClipFamily("https://www.xiaohongshu.com/explore/64f"), "social");
-  assert.equal(classifyClipFamily("https://news.ycombinator.com/item?id=1"), "community");
-  assert.equal(classifyClipFamily("https://community.obsidian.md/t/topic/123"), "community");
+  assert.equal(classifyClipFamily("https://news.ycombinator.com/item?id=1"), "social");
+  assert.equal(classifyClipFamily("https://view.inews.qq.com/a/20260915A07B1600"), "social");
+  assert.equal(classifyClipFamily("https://www.zhihu.com/question/2082906405447779781"), "social");
+  assert.equal(classifyClipFamily("https://weibo.com/1", { extractionMethod: "ttarticle" }), "social");
+  assert.equal(classifyClipFamily("https://openai.com/index/fyxer"), "articles");
+  assert.equal(classifyClipFamily("https://news.example.com/story", { commentCount: 5 }), "articles");
+  assert.equal(
+    classifyClipFamily("https://community.obsidian.md/t/topic/123", {}, { capture: { sourceNameOverrides: { "community.obsidian.md": "Obsidian 论坛" } } }),
+    "social",
+  );
   assert.equal(classifyClipFamily("https://docs.qq.com/doc/abc"), "documents");
   assert.equal(classifyClipFamily("https://docs.google.com/document/d/abc123xyz/edit"), "documents");
   assert.equal(classifyClipFamily("https://contoso.sharepoint.com/:w:/r/sites/team/Shared%20Documents/plan.docx"), "documents");
