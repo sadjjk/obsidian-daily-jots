@@ -3,6 +3,7 @@
 const { normalizeLanguagePreference } = require("./i18n");
 const { normalizeAdditionalHosts, normalizeCodePlatformMode } = require("./code-platforms");
 const { defaultClipRules, normalizeClipRules } = require("./clip-rules");
+const { normalizeSourceOverrides } = require("./source-names");
 const { normalizeRemoteSearchSettings } = require("./remote-search");
 
 const CHANNEL_IDS = ["wechat", "feishu", "dingtalk", "wecom", "qq", "slack", "telegram", "discord", "whatsapp"];
@@ -66,6 +67,7 @@ const DEFAULT_SETTINGS = {
     receiptPreview: true,
     receiptPreviewChars: 200,
     clipRules: defaultClipRules(),
+    sourceNameOverrides: {},
   },
   channels: {
     wechat: { enabled: false, token: "", accountId: "", userId: "", baseUrl: "https://ilinkai.weixin.qq.com", syncBuf: "" },
@@ -118,6 +120,8 @@ function normalizeSettings(saved) {
   value.capture.receiptPreviewChars = Math.min(1000, Math.max(20, Number(value.capture.receiptPreviewChars) || 200));
   value.capture.browserExecutable = String(value.capture.browserExecutable || "").trim();
   value.capture.clipRules = normalizeClipRules(value.capture.clipRules);
+  // deepMerge 以 defaults 的键为基准,空对象默认值会吞掉用户数据——从原始输入直取。
+  value.capture.sourceNameOverrides = normalizeSourceOverrides(source.capture?.sourceNameOverrides);
   value.ui.language = normalizeLanguagePreference(value.ui.language);
   value.runtime.recentMessageIds = Array.isArray(value.runtime.recentMessageIds) ? value.runtime.recentMessageIds.slice(-500) : [];
   value.runtime.pendingReceipts = Array.isArray(value.runtime.pendingReceipts)
