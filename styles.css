@@ -1,8 +1,14 @@
-.omnichannel-diary-settings {
+/* 变量在设置页与手动保存弹窗(独立 Modal,不挂在设置页里)共用,
+   否则弹窗内 var(--od-accent) 解析为空,is-primary 按钮变白字透明底。 */
+.omnichannel-diary-settings,
+.od-manual-modal {
   --od-accent: #6d5dfc;
   --od-accent-soft: color-mix(in srgb, var(--od-accent) 12%, transparent);
   --od-border: color-mix(in srgb, var(--text-normal) 12%, transparent);
   --od-surface: color-mix(in srgb, var(--background-primary) 92%, var(--background-secondary));
+}
+
+.omnichannel-diary-settings {
   max-width: 1120px;
   margin: 0 auto;
   padding: 24px 8px 64px;
