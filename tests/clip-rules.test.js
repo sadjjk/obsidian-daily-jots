@@ -82,7 +82,7 @@ test("enabled clipping types write into typed subfolders under the clipping root
     extractionMethod: "readability",
     extractionStatus: "complete",
   }, { timestamp: new Date("2026-09-02T00:00:00Z") });
-  assert.match(saved.notePath, /^Clippings\/Articles\/2026-09-02-普通网页-Example-/);
+  assert.match(saved.notePath, /^Clippings\/Articles\/2026-09-02\/2026-09-02-普通网页-Example-/);
   assert.match(writes[0].content, /platform: "普通网页"/);
   assert.equal(isClipFamilyEnabled(settings, "articles"), true);
   assert.equal(resolveClipFolder(settings, "social"), "Clippings/Social");
@@ -92,25 +92,33 @@ test("enabled clipping types write into typed subfolders under the clipping root
 test("mapped source lands in Social with source label in filename and platform", async () => {
   const settings = {
     storage: { clippingFolder: "Clippings", attachmentFolder: "Attachments" },
-    capture: { downloadWebImages: false, clipRules: defaultClipRules() },
+    capture: { downloadWebImages: true, clipRules: defaultClipRules() },
   };
   const writes = [];
+  const binaries = [];
   const writer = {
     findTextBySuffix: () => "",
     upsertText: async (path, content) => { writes.push({ path, content }); },
+    saveBinary: async (folder, name) => { binaries.push({ folder, name }); return `${folder}/${name}.png`; },
   };
-  const clipper = new WebClipper(writer, settings, { download: async () => { throw new Error("no images"); } });
+  const clipper = new WebClipper(writer, settings, {
+    download: async (url, opts) => ({ buffer: Buffer.from("img"), mimeType: "image/png", fileName: opts.fileName, finalUrl: url }),
+  });
   const saved = await clipper.saveArticle({
     url: "https://www.ithome.com/0/891/329.htm",
     identityUrl: "https://www.ithome.com/0/891/329.htm",
     title: "IT之家新闻",
     siteName: "IT之家",
     byline: "",
-    markdown: "Body text that is long enough to keep.",
-    images: [],
+    markdown: "Body text that is long enough to keep.\n\n![](https://www.ithome.com/a.png)",
+    images: ["https://www.ithome.com/a.png"],
     extractionMethod: "readability",
     extractionStatus: "complete",
   }, { timestamp: new Date("2026-09-02T00:00:00Z") });
-  assert.match(saved.notePath, /^Clippings\/Social\/2026-09-02-IT之家-IT之家新闻-/);
+  assert.match(saved.notePath, /^Clippings\/Social\/2026-09-02\/2026-09-02-IT之家-IT之家新闻-/);
   assert.match(writes[0].content, /platform: "IT之家"/);
+  assert.equal(binaries.length, 1);
+  assert.match(binaries[0].name, /^IT之家新闻-01$/);
+  assert.match(binaries[0].folder, /^Attachments\/Web\/2026-09-02\/2026-09-02-IT之家-IT之家新闻-[0-9a-f]+$/);
+  assert.ok(writes[0].content.includes(encodeURI(binaries[0].folder + "/" + binaries[0].name + ".png")));
 });

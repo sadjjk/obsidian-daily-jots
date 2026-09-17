@@ -796,14 +796,14 @@ class WebClipper {
     const existingPath = typeof this.writer.findTextBySuffix === "function"
       ? this.writer.findTextBySuffix(clipFolder, suffix)
       : "";
-    const notePath = existingPath || `${clipFolder}/${date.day}-${sourceLabel}-${stem}${suffix}`;
+    const notePath = existingPath || `${clipFolder}/${date.day}/${date.day}-${sourceLabel}-${stem}${suffix}`;
     const reused = Boolean(existingPath);
     let markdown = article.markdown || article.excerpt || article.url;
     const failures = [];
     const fileFailures = [];
     let savedImages = 0;
     let savedFiles = 0;
-    const assetFolder = `${this.settings.storage.attachmentFolder}/Web/${date.day}/${stem}-${shortHash(identityUrl)}`;
+    const assetFolder = `${this.settings.storage.attachmentFolder}/Web/${date.day}/${date.day}-${sourceLabel}-${stem}-${shortHash(identityUrl)}`;
     for (const [index, file] of (article.binaryFiles || []).entries()) {
       try {
         const localPath = await this.writer.saveBinary(assetFolder, file.fileName || `source-${index + 1}`, file.buffer, file.mimeType);
@@ -832,7 +832,7 @@ class WebClipper {
             requestAttempts: 2,
             shouldRetry: (error) => error?.code === "ECONNRESET",
             httpAttempts: 1,
-            fileName: `image-${String(index + 1).padStart(2, "0")}`,
+            fileName: `${stem}-${String(index + 1).padStart(2, "0")}`,
           });
           if (!downloaded.mimeType.startsWith("image/")) throw new Error(`not an image (${downloaded.mimeType})`);
           if (reservedBytes + downloaded.buffer.length > maxTotalBytes) throw new Error(`skipped because the article image budget is ${this.settings.capture.maxWebImageTotalMb || 50} MB`);
