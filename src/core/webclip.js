@@ -12,6 +12,7 @@ const { extractXStatus } = require("./xclip");
 const { extractBilibili, isBilibiliUrl, isBilibiliVideoUrl } = require("./biliclip");
 const { extractXiaohongshu, isXiaohongshuUrl, isXhsNoteUrl } = require("./xhsclip");
 const { extractZhihu, isZhihuNoteUrl, isZhihuUrl } = require("./zhihuclip");
+const { extractWeiboSearch, isWeiboSearchUrl } = require("./weiboclip");
 const { classifyClipFamily, isClipFamilyEnabled, resolveClipFolder } = require("./clip-rules");
 
 const WECHAT_NOISE_SELECTORS = [
@@ -514,13 +515,15 @@ class WebClipper {
 
   collectSessionCookies(service, warmupUrl) {
     if (!this.sessionManager || typeof this.sessionManager.collectCookies !== "function") return Promise.resolve("");
+    // 每个服务的硬门槛 cookie 不同:知乎是短时效 __zse_ck(403 唯一关键),
+    // 微博是访客票据 SUB(432 唯一关键)。requiredCookie 只指向短时效票,
+    // 常驻长时效 cookie(d_c0/SUBP)作判据会让刷新永不发生。
+    const required = service === "weibo" ? "SUB" : "__zse_ck";
+    const fallback = service === "weibo" ? undefined : "https://www.zhihu.com/explore";
     return this.sessionManager.collectCookies(service, warmupUrl, {
       browserExecutable: this.settings.capture.browserExecutable,
-      // __zse_ck 是知乎的短时效风控 cookie(实测匿名 headless 也能种出,且是
-      // 403 的唯一关键);以它为 requiredCookie,d_c0 常驻不会短路,过期即触发
-      // 无头 warmup 自动重种。d_c0 是一年期设备 cookie,作判据会让刷新永不发生。
-      requiredCookie: "__zse_ck",
-      fallbackUrl: "https://www.zhihu.com/explore",
+      requiredCookie: required,
+      fallbackUrl: fallback,
     }).catch(() => "");
   }
 
@@ -580,6 +583,33 @@ class WebClipper {
         }
       } catch (error) { zhihuError = error; }
       // 知乎失败时保留浏览器会话回退(登录用户的隔离会话仍有价值)。
+    }
+    let weiboError;
+    if (isWeiboSearchUrl(url)) {
+      try {
+        const data = await extractWeiboSearch(url, this.fetch, (target) => this.collectSessionCookies("weibo", target));
+        if (data) {
+          const article = articleFromHtml(data.contentHtml, data.url || url, {
+            title: data.title,
+            byline: data.byline,
+            excerpt: data.title,
+            siteName: data.siteName,
+            content: data.contentHtml,
+            extractionMethod: data.extractionMethod,
+          });
+          return {
+            ...article,
+            canonicalUrl: data.canonicalUrl,
+            identityUrl: data.identityUrl,
+            images: data.images,
+            extractionStatus: data.extractionStatus,
+          };
+        }
+      } catch (error) {
+        // 微博搜索页没有可用的 HTML 回退(页面壳是游客墙),失败即抛真实原因。
+        weiboError = error;
+        throw weiboError;
+      }
     }
     let bilibiliError;
     if (isBilibiliUrl(url)) {

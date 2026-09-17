@@ -183,6 +183,13 @@ const COMMUNITY_SERVICES = {
     hosts: ["zhihu.com"], paths: [/\/(?:question\/\d+\/answer\/\d+|p\/\d+)/i, /\/question\/\d+\/?$/i], contentSelectors: [".Post-RichTextContainer", ".QuestionAnswer-content", "article", "main", "body"],
     commentSelectors: [".Comments-container", ".CommentItem"], authPattern: "登录知乎|扫码登录|sign in.*zhihu",
   },
+  weibo: {
+    name: "微博", region: "china", api: "container-json", session: true,
+    loginUrl: "https://m.weibo.cn/", hosts: ["weibo.com", "weibo.cn"],
+    paths: [/\/search\/?$/i],
+    contentSelectors: [".weibo-search", "main", "body"],
+    commentSelectors: [],
+  },
   xiaohongshu: {
     name: "小红书 / REDnote", region: "china", api: "initial-state", session: true,
     loginUrl: "https://www.xiaohongshu.com/", hosts: ["xiaohongshu.com", "xhslink.com", "xhslink.cn"],
