@@ -9,8 +9,8 @@
 // 用法:
 //   node scripts/migrate-source-names.mjs [--vault <路径>] [--apply]
 
-import { readdirSync, readFileSync, renameSync, writeFileSync, mkdirSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { readdirSync, readFileSync, renameSync, writeFileSync, mkdirSync, existsSync, rmdirSync } from "node:fs";
+import { basename, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
 
@@ -73,13 +73,22 @@ function main() {
   // 阶段 1:md 日期分层 + platform 补齐;建立 hash → 新路径索引。
   for (const family of readdirSync(clippingRoot)) {
     const dir = join(clippingRoot, family);
-    let entries;
-    try {
-      entries = readdirSync(dir).filter((name) => name.endsWith(".md"));
-    } catch (_) {
-      continue;
+    // 兼容平铺与已分层两种结构:family 下两层内的 md 都收集。
+    const mdPaths = [];
+    for (const entry of readdirSync(dir)) {
+      const entryPath = join(dir, entry);
+      if (entry.endsWith(".md")) {
+        mdPaths.push(entryPath);
+        continue;
+      }
+      try {
+        for (const inner of readdirSync(entryPath)) {
+          if (inner.endsWith(".md")) mdPaths.push(join(entryPath, inner));
+        }
+      } catch (_) {}
     }
-    for (const name of entries) {
+    for (const from of mdPaths) {
+      const name = basename(from);
       const dateMatch = name.match(/^(\d{4}-\d{2}-\d{2})-/);
       if (!dateMatch) {
         stats.skipped += 1;
@@ -88,7 +97,6 @@ function main() {
       stats.scanned += 1;
       const date = dateMatch[1];
       const targetDir = join(dir, date);
-      const from = join(dir, name);
       const to = join(targetDir, name);
       let content = readFileSync(from, "utf8");
       const label = noteLabel(content);
@@ -148,7 +156,7 @@ function main() {
         replacements.set(oldRel, newRel);
         replacements.set(encodeURI(oldRel), encodeURI(newRel));
       }
-      attachmentOps.push({ from: subDir, to: newSubDir, renamePairs });
+      attachmentOps.push({ from: subDir, to: newSubDir, renamePairs, date, sub, noteName });
       stats.renamed += 1;
       console.log(`${args.apply ? "改名" : "[dry-run] 将改名"}: Web/${date}/${sub} -> ${noteName}(含图片 ${renamePairs.length})`);
     }
@@ -196,6 +204,15 @@ function main() {
 
   if (args.apply) {
     for (const { from, to, renamePairs } of attachmentOps) {
+      if (existsSync(to)) {
+        // 目标已存在(历史重复文件夹):逐文件合并(不覆盖),源空则删。
+        for (const file of readdirSync(from)) {
+          const dst = join(to, file);
+          if (!existsSync(dst)) renameSync(join(from, file), dst);
+        }
+        if (readdirSync(from).length === 0) rmdirSync(from);
+        continue;
+      }
       for (const [file, next] of renamePairs) {
         renameSync(join(from, file), join(from, next));
       }
