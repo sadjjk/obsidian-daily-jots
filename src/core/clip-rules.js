@@ -4,6 +4,7 @@ const { parseXStatusUrl } = require("./xclip");
 const { isBilibiliUrl } = require("./biliclip");
 const { isXiaohongshuUrl } = require("./xhsclip");
 const { isWeiboSearchUrl } = require("./weiboclip");
+const { isDouyinUrl } = require("./douyinclip");
 const { communityServiceForUrl, documentServiceForUrl, isLikelyPdfUrl } = require("./web-platforms");
 
 const CLIP_FAMILY_IDS = ["articles", "social", "community", "documents", "pdfs"];
@@ -103,8 +104,8 @@ function classifyClipFamily(url, article = null) {
     || isLikelyPdfUrl(raw)
   ) return "pdfs";
   if (documentServiceForUrl(raw) || method.includes("rendered-document")) return "documents";
-  if (parseXStatusUrl(raw) || isXiaohongshuUrl(raw) || isWeChatArticleUrl(raw) || isBilibiliUrl(raw) || isWeiboSearchUrl(raw)
-    || method.includes("xiaohongshu") || method.includes("wechat-article") || method.includes("bilibili") || method.includes("weibo") || /^x-/.test(method)) {
+  if (parseXStatusUrl(raw) || isXiaohongshuUrl(raw) || isWeChatArticleUrl(raw) || isBilibiliUrl(raw) || isWeiboSearchUrl(raw) || isDouyinUrl(raw)
+    || method.includes("xiaohongshu") || method.includes("wechat-article") || method.includes("bilibili") || method.includes("weibo") || method.includes("douyin") || /^x-/.test(method)) {
     return "social";
   }
   if (

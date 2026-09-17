@@ -14,6 +14,7 @@ const { extractXiaohongshu, isXiaohongshuUrl, isXhsNoteUrl } = require("./xhscli
 const { extractZhihu, isZhihuNoteUrl, isZhihuUrl } = require("./zhihuclip");
 const { extractWeibo, isWeiboArticleUrl, isWeiboSearchUrl, isWeiboStatusUrl } = require("./weiboclip");
 const { extractWeixinArticle, isWeixinArticleUrl } = require("./weixinclip");
+const { extractDouyin, isDouyinUrl } = require("./douyinclip");
 const { classifyClipFamily, isClipFamilyEnabled, resolveClipFolder } = require("./clip-rules");
 
 const WECHAT_NOISE_SELECTORS = [
@@ -637,6 +638,31 @@ class WebClipper {
         // 微博搜索页没有可用的 HTML 回退(页面壳是游客墙),失败即抛真实原因。
         weiboError = error;
         throw weiboError;
+      }
+    }
+    if (isDouyinUrl(url)) {
+      try {
+        const data = await extractDouyin(url, this.fetch);
+        if (data) {
+          const article = articleFromHtml(data.contentHtml, data.url || url, {
+            title: data.title,
+            byline: data.byline,
+            excerpt: data.title,
+            siteName: data.siteName,
+            content: data.contentHtml,
+            extractionMethod: data.extractionMethod,
+          });
+          return {
+            ...article,
+            canonicalUrl: data.canonicalUrl,
+            identityUrl: data.identityUrl,
+            images: data.images,
+            extractionStatus: data.extractionStatus,
+          };
+        }
+      } catch (error) {
+        // 抖音无票请求是降级壳,没有 HTML 回退价值,失败即抛真实原因。
+        throw error;
       }
     }
     let bilibiliError;

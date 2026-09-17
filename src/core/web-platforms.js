@@ -190,6 +190,13 @@ const COMMUNITY_SERVICES = {
     contentSelectors: [".weibo-search", "main", "body"],
     commentSelectors: [],
   },
+  douyin: {
+    name: "抖音", region: "china", api: "router-data", session: false,
+    loginUrl: "https://www.douyin.com/", hosts: ["douyin.com", "iesdouyin.com", "v.douyin.com"],
+    paths: [/\/(?:video|note)\/\d+/i],
+    contentSelectors: [".douyin-item", "main", "body"],
+    commentSelectors: [],
+  },
   xiaohongshu: {
     name: "小红书 / REDnote", region: "china", api: "initial-state", session: true,
     loginUrl: "https://www.xiaohongshu.com/", hosts: ["xiaohongshu.com", "xhslink.com", "xhslink.cn"],
