@@ -99,6 +99,9 @@ function formatCaptureReceipt(result, locale = "zh-CN", preview = null) {
     const previewLine = buildPreviewLine(clip);
     if (previewLine) {
       lines.push("");
+      lines.push(locale === "en"
+        ? `Preview (first ${Number(preview.chars) || 200} chars):`
+        : `预览如下，仅展示前 ${Number(preview.chars) || 200} 字：`);
       lines.push(previewLine);
     }
   };

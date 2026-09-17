@@ -155,7 +155,7 @@ test("clipping receipts embed a configurable markdown preview line", () => {
   const clip = { article: { title: "预览页", extractionStatus: "complete", markdown: "A".repeat(300) }, savedImages: 1, imageFailures: [] };
   const result = { diaryPath: "日记/today.md", clips: [clip], clipFailures: [], attachmentFailures: [] };
   const on = formatCaptureReceipt(result, "zh-CN", { enabled: true, chars: 200 });
-  assert.match(on, /\n\nA{200}…/);
+  assert.match(on, /预览如下，仅展示前 200 字：\nA{200}…/);
   assert.doesNotMatch(on, /随手记/);
   const off = formatCaptureReceipt(result, "zh-CN", { enabled: false, chars: 200 });
   assert.doesNotMatch(off, /A{200}/);
@@ -171,7 +171,7 @@ test("receipt previews keep markdown line breaks after a blank line", () => {
   const text = formatCaptureReceipt({
     diaryPath: "日记/today.md", clips: [clip], clipFailures: [], attachmentFailures: [],
   }, "zh-CN", { enabled: true, chars: 200 });
-  assert.match(text, /已提取正文和 0 张图片并保存到「全渠道剪藏」\n\n第一段开头。\n\n第二段另起。第三段同段。/);
+  assert.match(text, /已提取正文和 0 张图片并保存到「全渠道剪藏」\n\n预览如下，仅展示前 200 字：\n第一段开头。\n\n第二段另起。第三段同段。/);
   assert.doesNotMatch(text, /› /);
 });
 
@@ -186,6 +186,7 @@ test("receipt previews drop video links from the meta line", () => {
   assert.doesNotMatch(text, /video\.weibo\.com/);
   assert.doesNotMatch(text, /\[视频\]/);
   assert.match(text, /\[原文\]\(https:\/\/m\.weibo\.cn\/status\/5041\)\n\n正文第一行。/);
+  assert.match(text, /预览如下，仅展示前 200 字：/);
 });
 
 test("receipt previews filter out images and count text only", () => {
@@ -197,7 +198,7 @@ test("receipt previews filter out images and count text only", () => {
     diaryPath: "日记/today.md", clips: [clip], clipFailures: [], attachmentFailures: [],
   }, "zh-CN", { enabled: true, chars: 200 });
   assert.doesNotMatch(text, /!\[/);
-  assert.match(text, /保存到「全渠道剪藏」\n\n正文第一句在这。\n\n第二段。/);
+  assert.match(text, /保存到「全渠道剪藏」\n\n预览如下，仅展示前 200 字：\n正文第一句在这。\n\n第二段。/);
   assert.doesNotMatch(text, /\n\n\n/);
 });
 
