@@ -6,7 +6,8 @@ const { CHANNEL_IDS, clearChannelCredentials, getChannelMeta } = require("../cor
 const { CLIP_FAMILIES, CLIP_FAMILY_IDS } = require("../core/clip-rules");
 const { REMOTE_EXPORT_FORMATS, remoteExportFormat } = require("../core/remote-search");
 const { codePlatformCoverage } = require("../core/code-platforms");
-const { COMMUNITY_SERVICES, DOCUMENT_SERVICES, communityCoverage } = require("../core/web-platforms");
+const { COMMUNITY_SERVICES, DOCUMENT_SERVICES } = require("../core/web-platforms");
+const { BUILTIN_SOURCE_NAMES } = require("../core/source-names");
 const { shortHash } = require("../core/util");
 
 const PROJECT_URL = "https://github.com/sadjjk/obsidian-omnichannel-diary";
@@ -165,7 +166,7 @@ class ManualCaptureModal extends Modal {
     this.titleEl.setText(this.plugin.t("保存到 Omnichannel Diary", "Save to Omnichannel Diary"));
     this.contentEl.addClass("od-manual-modal");
     this.contentEl.createEl("p", { text: this.plugin.t(
-      "粘贴文字或网页链接。普通链接会提取文章、云文档、PDF 和技术社区内容；代码平台地址按设置提取、分类收藏，或两者都做。",
+      "粘贴文字或网页链接。普通链接会提取文章、云文档、PDF 和社区媒体内容；代码平台地址按设置提取、分类收藏，或两者都做。",
       "Paste text or a web link. Regular links extract articles, cloud documents, PDFs, and technical-community content. Code-platform links are extracted, filed as categorized bookmarks, or both according to your settings.",
     ) });
     const textarea = this.contentEl.createEl("textarea", { cls: "od-manual-input" });
@@ -248,7 +249,7 @@ class DiarySettingTab extends PluginSettingTab {
     copy.createDiv({ cls: "od-eyebrow", text: "LOCAL-FIRST CAPTURE" });
     copy.createEl("h1", { text: "Omnichannel Diary" });
     copy.createEl("p", { text: this.tr(
-      "把聊天里的灵感、网页、代码平台地址、云文档、PDF、技术社区讨论和附件，可靠地沉淀到当前 Obsidian Vault。没有 AI 路由，也不会把笔记上传到中间服务。",
+      "把聊天里的灵感、网页、代码平台地址、云文档、PDF、社区媒体和附件，可靠地沉淀到当前 Obsidian Vault。没有 AI 路由，也不会把笔记上传到中间服务。",
       "Capture ideas, web pages, code-platform links, cloud documents, PDFs, technical-community discussions, and attachments into this Obsidian Vault. No AI routing and no intermediary note-upload service.",
     ) });
     const actions = hero.createDiv({ cls: "od-hero-actions" });
@@ -469,7 +470,7 @@ class DiarySettingTab extends PluginSettingTab {
     this.addToggle(rules, this.tr("自动剪藏网页", "Automatically clip web pages"), this.tr("检测消息中的 HTTP(S) 链接并按下面的类型规则保存", "Detect HTTP(S) links in messages and save them using the type rules below"), "autoClipLinks");
     this.addToggle(rules, this.tr("保存网页图片", "Save web images"), this.tr("把正文图片下载到 Vault；失败时保留远程地址并写明数量", "Download article images into the Vault; keep remote URLs and report failures"), "downloadWebImages");
     this.addToggle(rules, this.tr("渲染动态网页与云文档", "Render dynamic pages and cloud documents"), this.tr(
-      "用独立本地浏览器提取云文档及国内外技术社区的正文、问答和评论",
+      "用独立本地浏览器提取云文档及国内外社区媒体的正文、问答和评论",
       "Use an isolated local browser for cloud documents and posts, answers, and comments from technical communities worldwide",
     ), "renderDynamicPages");
     this.addToggle(rules, this.tr("保存聊天附件", "Save chat attachments"), this.tr("图片、文件、音频和视频按渠道保存", "Store images, files, audio, and video by channel"), "downloadChatAttachments");
@@ -638,21 +639,69 @@ class DiarySettingTab extends PluginSettingTab {
       for (const service of codePlatformCoverage(region)) tags.createSpan({ cls: "od-support-tag is-api", text: service.name });
     }
     const coverage = parent.createDiv({ cls: "od-panel" });
-    coverage.createEl("h3", { text: this.tr("技术社区覆盖", "Technical-community coverage") });
+    coverage.createEl("h3", { text: this.tr("社区媒体来源", "Community-media sources") });
     coverage.createEl("p", { text: this.tr(
-      "公开接口优先，动态页面使用隔离浏览器，未列出的普通文章仍会尝试通用正文提取。站点改版或登录墙可能导致部分评论暂时不可见。",
-      "Public APIs are preferred, dynamic pages use an isolated browser, and unlisted articles still use generic readable-content extraction. Site redesigns or sign-in walls can temporarily hide some comments.",
+      "命中以下来源的剪藏会归入「社区媒体」文件夹，并在文件名与 YAML platform 标注来源；未收录的站点自动归入「普通网页」。自定义规则优先于内置，支持 *.example.com 通配整个域名族。",
+      "Clippings from the sources below go to the Community-media folder with their source name in the filename and YAML platform. Unlisted sites fall back to Articles. Custom rules override built-ins and support *.example.com wildcards.",
     ) });
+    const domainsByName = new Map();
+    for (const [host, name] of Object.entries(BUILTIN_SOURCE_NAMES)) {
+      if (!domainsByName.has(name)) domainsByName.set(name, []);
+      domainsByName.get(name).push(host);
+    }
+    const isChineseName = (name) => /[\u4e00-\u9fff]/.test(name);
+    const groups = {
+      china: { title: this.tr("国内来源", "China"), entries: [] },
+      international: { title: this.tr("国外来源", "International"), entries: [] },
+    };
+    for (const [name, hosts] of domainsByName) {
+      (isChineseName(name) ? groups.china : groups.international).entries.push([name, hosts]);
+    }
     const coverageGrid = coverage.createDiv({ cls: "od-support-grid" });
-    for (const [region, titleZh, titleEn] of [["international", "国外社区", "International"], ["china", "国内社区", "China"]]) {
-      const group = coverageGrid.createDiv({ cls: "od-support-group" });
-      group.createEl("h4", { text: this.tr(titleZh, titleEn) });
-      const tags = group.createDiv({ cls: "od-support-tags" });
-      for (const service of communityCoverage(region)) {
-        const tag = tags.createSpan({ cls: `od-support-tag ${service.api === "rendered" ? "" : "is-api"}`.trim(), text: service.name });
-        tag.setAttr("title", service.api === "rendered" ? this.tr("隔离浏览器 + 通用兜底", "Isolated browser + generic fallback") : this.tr("结构化公开接口 + 浏览器兜底", "Structured public API + browser fallback"));
+    for (const group of Object.values(groups)) {
+      const box = coverageGrid.createDiv({ cls: "od-support-group" });
+      box.createEl("h4", { text: group.title });
+      const tagWall = box.createDiv({ cls: "od-support-tags" });
+      for (const [name, hosts] of group.entries) {
+        const tag = tagWall.createSpan({ cls: "od-support-tag is-api", text: name });
+        tag.setAttr("title", `${this.tr("匹配域名: ", "Hosts: ")}${hosts.join(", ")}`);
       }
     }
+    coverage.createEl("h4", { text: this.tr("我的自定义规则(优先于内置)", "My custom rules (override built-ins)") });
+    const overridesList = coverage.createDiv({ cls: "od-session-list" });
+    const refreshCoveragePanel = () => this.display();
+    const overrides = this.plugin.settings.capture.sourceNameOverrides || {};
+    for (const [host, name] of Object.entries(overrides)) {
+      const row = overridesList.createDiv({ cls: "od-session-row" });
+      const copy = row.createDiv({ cls: "od-session-copy" });
+      copy.createEl("strong", { text: host });
+      copy.createSpan({ text: `→ ${name}` });
+      iconButton(row, this.tr("删除", "Remove"), "trash-2", async () => {
+        delete this.plugin.settings.capture.sourceNameOverrides[host];
+        await this.plugin.saveSettings();
+        refreshCoveragePanel();
+      });
+    }
+    const addRow = overridesList.createDiv({ cls: "od-session-row" });
+    const hostInput = addRow.createEl("input", {
+      type: "text", placeholder: this.tr("域名，如 sspai.com（通配写 *.qq.com）", "host, e.g. sspai.com (wildcard: *.qq.com)"), cls: "text-input",
+    });
+    hostInput.style.maxWidth = "260px";
+    const nameInput = addRow.createEl("input", {
+      type: "text", placeholder: this.tr("来源名，如 少数派", "name, e.g. Sspai"), cls: "text-input",
+    });
+    nameInput.style.maxWidth = "200px";
+    iconButton(addRow, this.tr("添加规则", "Add rule"), "plus", async () => {
+      const host = hostInput.value.trim().toLowerCase().replace(/^www\./, "");
+      const name = nameInput.value.trim().replace(/[\\/: \n\r\t]/g, "").slice(0, 20);
+      if (!host || !name) {
+        new Notice(this.tr("域名与来源名都要填写", "Both host and name are required"), 5000);
+        return;
+      }
+      this.plugin.settings.capture.sourceNameOverrides[host] = name;
+      await this.plugin.saveSettings();
+      refreshCoveragePanel();
+    });
     const sessions = parent.createDiv({ cls: "od-panel" });
     sessions.createEl("h3", { text: this.tr("私有云文档登录", "Private cloud-document sessions") });
     sessions.createEl("p", { text: this.tr(
@@ -677,7 +726,7 @@ class DiarySettingTab extends PluginSettingTab {
         }
       }, "is-primary");
     }
-    sessions.createEl("h4", { text: this.tr("技术社区浏览器会话", "Technical-community browser sessions") });
+    sessions.createEl("h4", { text: this.tr("社区媒体浏览器会话", "Community-media browser sessions") });
     sessions.createEl("p", { text: this.tr(
       "部分社区触发登录或真人验证时，可在对应隔离窗口完成一次验证；插件不会读取你现有浏览器的 Cookie。其他已支持社区默认直接公开提取。",
       "When a community requires sign-in or human verification, complete it once in its isolated window. The plugin never reads existing browser cookies. Other supported communities use public extraction by default.",
