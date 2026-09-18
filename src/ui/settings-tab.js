@@ -739,7 +739,7 @@ class DiarySettingTab extends PluginSettingTab {
         : this.tr("尚未建立本地会话", "No local session yet") });
       iconButton(row, this.tr("打开登录窗口", "Open sign-in window"), "log-in", async () => {
         try {
-          const result = await this.plugin.webSessionManager.openLogin(id, { browserExecutable: this.plugin.settings.capture.browserExecutable });
+          const result = await this.plugin.webSessionManager.openLogin(id, {});
           new Notice(result.alreadyOpen
             ? this.tr("{name} 登录窗口已打开", "The {name} sign-in window is already open", { name: service.name })
             : this.tr("请在新窗口完成 {name} 登录，完成后关闭窗口", "Sign in to {name} in the new window, then close it", { name: service.name }), 9000);
