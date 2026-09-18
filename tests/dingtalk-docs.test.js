@@ -80,7 +80,7 @@ function packageSample() {
   });
 }
 
-test("packageToHtml renders title, headings, bold+italic, images and unknown-node fallback", () => {
+test("packageToHtml renders title, headings, bold+italic, images, links and unknown-node fallback", () => {
   const { title, html } = packageToHtml({ data: { documentContent: packageSample() } });
   assert.equal(title, "测试文档");
   assert.ok(html.includes("<h1>标题一</h1>"));
@@ -91,6 +91,29 @@ test("packageToHtml renders title, headings, bold+italic, images and unknown-nod
   assert.ok(html.includes("<h3>三级标题</h3>"));
   assert.ok(html.includes("表格兜底"));
   assert.doesNotMatch(html, /\[object Object\]/); // props 不泄漏为正文
+});
+
+test("packageToHtml resolves the body part in knowledge-base note/preview packages", () => {
+  // 实测 note/preview:main.data 只有文件元数据,正文在 UUID key part 的 data.body
+  const h1 = ["h1", {}, ["span", { "data-type": "text" }, ["span", { "data-type": "leaf" }, "ragflow 介绍"]]];
+  const para = [
+    "p", {},
+    ["span", { "data-type": "text" }, ["span", { "data-type": "leaf" }, "参考资料："]],
+    ["a", { "href": "https://ragflow.io/docs/dev/" }, ["span", { "data-type": "text" }, ["span", { "data-type": "leaf" }, "官方文档"]]],
+  ];
+  const body = ["root", {}, h1, para];
+  const pkg = JSON.stringify({
+    parts: {
+      "5524b0d8-aad3-4973-a566-cfcdcc7a20b4": {
+        data: { fileName: "ragflow——一个非常强大的开源RAG引擎", fileType: "adoc", url: "https://alidocs.dingtalk.com/i/nodes/G53mjyd80pAor2A7SdO5n3p986zbX04v" },
+      },
+      "00000000-0000-0000-0000-000000000001": { data: { body } },
+    },
+  });
+  const { title, html } = packageToHtml({ data: { documentContent: pkg } });
+  assert.equal(title, "ragflow——一个非常强大的开源RAG引擎"); // fileMetaInfo 缺失时兜底 fileName
+  assert.ok(html.includes("<h1>ragflow 介绍</h1>"));
+  assert.ok(html.includes('<a href="https://ragflow.io/docs/dev/">官方文档</a>'));
 });
 
 test("packageToHtml unwraps resultValue and checkpoint layers (observed response shapes)", () => {

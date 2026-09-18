@@ -162,7 +162,11 @@ class DiaryService {
     if (attachmentLines.length) lines.push(...attachmentLines, "");
     for (const clip of clips) {
       const pdfAttachment = String(clip.article?.url || "").startsWith("attachment:");
-      const detail = pdfAttachment ? `正文 ${Number(clip.article?.pageCount) || 0} 页` : `本地图片 ${clip.savedImages} 张`;
+      const skipped = clip.imageSkipped?.length || 0;
+      const failed = clip.imageFailures?.length || 0;
+      let detail = pdfAttachment ? `正文 ${Number(clip.article?.pageCount) || 0} 页` : `本地图片 ${clip.savedImages} 张`;
+      if (skipped) detail += `，另有 ${skipped} 张超出上限保留原链`;
+      if (failed) detail += `，${failed} 张图片保存失败`;
       lines.push(`- ${pdfAttachment ? "PDF 剪藏" : "网页剪藏"}：[[${clip.notePath.replace(/\.md$/i, "")}]]（${detail}）`);
     }
     if (attachmentFailures.length) lines.push(`> [!warning] ${attachmentFailures.length} 个聊天附件保存失败\n> ${attachmentFailures.join("\n> ")}`);

@@ -66,6 +66,12 @@ const HELP_TEXT = formatHelpText("zh-CN");
 function formatCaptureReceipt(result, locale = "zh-CN", preview = null) {
   const clips = result.clips || [];
   const clipFailures = result.clipFailures?.length || 0;
+  // 明细为 diary 层拼好的 "URL: 错误信息" 字符串;回复中只保留错误信息(链接已在日记里)
+  const clipFailureDetails = Array.isArray(result.clipFailures) ? result.clipFailures : [];
+  const failureReason = (line) => {
+    const idx = String(line).indexOf(": ");
+    return idx > 0 ? String(line).slice(idx + 2) : String(line);
+  };
   const attachmentFailures = result.attachmentFailures?.length || 0;
   const attachmentExtractionFailures = result.attachmentExtractionFailures?.length || 0;
   const savedAttachments = Number(result.savedAttachments) || 0;
@@ -174,13 +180,19 @@ function formatCaptureReceipt(result, locale = "zh-CN", preview = null) {
   if (locale === "en") {
     if (!clips.length && !clipFailures) lines.push(`✍️ Saved to today's note in “${diaryFolder}”.`);
     if (savedAttachments) lines.push(`📎 Saved ${savedAttachments} attachment${savedAttachments === 1 ? "" : "s"} to today's note in “${diaryFolder}”.`);
-    if (clipFailures) lines.push(`⚠️ ${clipFailures} web page${clipFailures === 1 ? "" : "s"} could not be extracted. The original link${clipFailures === 1 ? " was" : "s were"} kept in today's note in “${diaryFolder}”.`);
+    if (clipFailures) {
+      lines.push(`⚠️ ${clipFailures} web page${clipFailures === 1 ? "" : "s"} could not be extracted. The original link${clipFailures === 1 ? " was" : "s were"} kept in today's note in “${diaryFolder}”.`);
+      for (const detail of clipFailureDetails) lines.push(`Reason: ${failureReason(detail)}`);
+    }
     if (attachmentFailures) lines.push(`⚠️ ${attachmentFailures} attachment${attachmentFailures === 1 ? "" : "s"} failed to save. The original message was kept in today's note in “${diaryFolder}”.`);
     if (attachmentExtractionFailures) lines.push(`⚠️ Text could not be extracted from ${attachmentExtractionFailures} saved PDF attachment${attachmentExtractionFailures === 1 ? "" : "s"}. The original PDF${attachmentExtractionFailures === 1 ? " was" : "s were"} kept.`);
   } else {
     if (!clips.length && !clipFailures) lines.push(`✍️ 已保存到今天的「${diaryFolder}」`);
     if (savedAttachments) lines.push(`📎 已保存 ${savedAttachments} 个附件到今天的「${diaryFolder}」`);
-    if (clipFailures) lines.push(`⚠️ ${clipFailures} 个网页未能提取正文，原始链接已保存在今天的「${diaryFolder}」`);
+    if (clipFailures) {
+      lines.push(`⚠️ ${clipFailures} 个网页未能提取正文，原始链接已保存在今天的「${diaryFolder}」`);
+      for (const detail of clipFailureDetails) lines.push(`原因：${failureReason(detail)}`);
+    }
     if (attachmentFailures) lines.push(`⚠️ ${attachmentFailures} 个附件保存失败，原消息已保存在今天的「${diaryFolder}」`);
     if (attachmentExtractionFailures) lines.push(`⚠️ ${attachmentExtractionFailures} 个 PDF 附件未能提取正文，原 PDF 已保存`);
   }

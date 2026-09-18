@@ -142,6 +142,20 @@ test("partial extraction produces a warning instead of a false success", () => {
   assert.doesNotMatch(text, /随手记/);
 });
 
+test("failure receipts append per-link reasons after the summary line", () => {
+  const text = formatCaptureReceipt({
+    diaryPath: "日记/today.md",
+    clips: [],
+    clipFailures: [
+      "https://alidocs.dingtalk.com/note/preview?docId=abc&dentryKey=j7jrNLO1sQ0yKa0o: 钉钉文档 package 中未找到正文 body 节点(parts 中无 data.body)",
+    ],
+    attachmentFailures: [],
+  });
+  assert.match(text, /⚠️ 1 个网页未能提取正文，原始链接已保存在今天的「日记」/);
+  assert.match(text, /原因：钉钉文档 package 中未找到正文 body 节点\(parts 中无 data\.body\)/);
+  assert.doesNotMatch(text, /dentryKey=j7jrNLO1sQ0yKa0o:/); // URL 前缀不进回复
+});
+
 test("images skipped by the per-clipping limit are reported as kept remote URLs, not failures", () => {
   const skipped = Array.from({ length: 43 }, (_, i) => `https://alidocs.dingtalk.com/core/api/resources/img/${i}`);
   const text = formatCaptureReceipt({

@@ -133,6 +133,10 @@ function slateNodeToHtml(node) {
     if (props.italic) out = `<em>${out}</em>`;
     return out;
   }
+  if (type === "a") {
+    const href = String((props && props.href) || "");
+    return href ? `<a href="${escapeHtml(href)}">${inner}</a>` : inner;
+  }
   return inner;
 }
 
@@ -157,13 +161,18 @@ function packageToHtml(payload) {
   if (content && content.checkpoint) content = parsePackageJson(content.checkpoint.content);
   const meta = (root && root.fileMetaInfo) || (content && content.fileMetaInfo) || {};
   const parts = (content && content.parts) || {};
-  const main = parts.main || parts[Object.keys(parts)[0]];
-  const body = main && main.data && main.data.body;
+  const values = Object.values(parts);
+  // 正文 part:普通文档在 parts.main;知识库(PORTAL)的 note/preview 中 main.data 只有文件元数据,
+  // 正文在 UUID key 的 part(实测:ragflow 便签正文在 00000000-…0001 的 data.body)。遍历取首个带 body 的 part。
+  const bodyOwner = values.find((part) => part && part.data && Array.isArray(part.data.body)) || parts.main;
+  const body = bodyOwner && bodyOwner.data && bodyOwner.data.body;
   if (!body) {
-    throw dingtalkError("钉钉文档 package 中未找到 parts[main].data.body", "DINGTALK_PACKAGE_MALFORMED");
+    throw dingtalkError("钉钉文档 package 中未找到正文 body 节点(parts 中无 data.body)", "DINGTALK_PACKAGE_MALFORMED");
   }
+  // 标题兜底:fileMetaInfo.name 缺失时,文件名在元数据 part 的 data.fileName(与正文 part 可能不同)
+  const metaPart = values.find((part) => part && part.data && part.data.fileName);
   const html = slateNodeToHtml(body).replace(/\n{3,}/g, "\n\n").trim();
-  return { title: String(meta.name || "钉钉文档"), html };
+  return { title: String(meta.name || (metaPart && metaPart.data && metaPart.data.fileName) || "钉钉文档"), html };
 }
 
 async function extractDingtalkDoc(url, { webSessionManager, fetchImpl = globalThis.fetch } = {}) {
