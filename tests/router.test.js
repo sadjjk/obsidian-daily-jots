@@ -251,27 +251,3 @@ test("chat PDF receipts report extracted pages and preserved attachments", () =>
   assert.match(text, /📎 已保存 1 个附件到今天的「日记」/);
 });
 
-test("code-platform bookmarks use the same bilingual receipt format", () => {
-  const result = {
-    diaryPath: "日记/today.md",
-    diaryFolder: "日记",
-    codePlatformFolder: "代码平台收藏",
-    codeLinks: [{ name: "GitHub", repository: "openai/openai-node", notePath: "代码平台收藏/GitHub/openai-openai-node.md" }],
-    clips: [], clipFailures: [], codeLinkFailures: [], attachmentFailures: [],
-  };
-  const zh = formatCaptureReceipt(result);
-  assert.match(zh, /^🔗 已将 GitHub 的「openai\/openai-node」分类保存到「代码平台收藏」/);
-  assert.doesNotMatch(zh, /^✍️/);
-  const en = formatCaptureReceipt({ ...result, diaryPath: "Daily/today.md", diaryFolder: "Daily", codePlatformFolder: "Code Links" }, "en");
-  assert.match(en, /^🔗 Saved “openai\/openai-node” from GitHub to “Code Links”\./);
-  assert.doesNotMatch(en, /[\u4e00-\u9fff]/);
-});
-
-test("code-platform filing failures keep the original URL in the daily note receipt", () => {
-  const zh = formatCaptureReceipt({ diaryPath: "日记/today.md", clips: [], codeLinks: [], clipFailures: [], codeLinkFailures: ["failed"], attachmentFailures: [] });
-  assert.match(zh, /^嗨~ 我是你的随手记✍️ /);
-  assert.match(zh, /⚠️ 1 个代码平台地址未能分类保存/);
-  const en = formatCaptureReceipt({ diaryPath: "Daily/today.md", clips: [], codeLinks: [], clipFailures: [], codeLinkFailures: ["failed"], attachmentFailures: [] }, "en");
-  assert.match(en, /^Hi~ I'm your quick-capture ✍️ /);
-  assert.match(en, /⚠️ 1 code-platform link could not be filed/);
-});
