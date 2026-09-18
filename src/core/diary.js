@@ -1,7 +1,6 @@
 "use strict";
 
 const { downloadRemoteFile, decodeDataUrl } = require("./network");
-const { CodePlatformBookmarkStore, classifyCodePlatformUrl, normalizeCodePlatformMode } = require("./code-platforms");
 const { extractPdf } = require("./pdfclip");
 const { WebClipper } = require("./webclip");
 const { extractUrls, localDateParts, markdownEscape, safeFileName, shortHash } = require("./util");
@@ -133,8 +132,6 @@ class DiaryService {
     const attachmentExtractionFailures = [];
     const clips = [];
     const clipFailures = [];
-    const codeLinks = [];
-    const codeLinkFailures = [];
     let clipper;
     const getClipper = () => {
       if (!clipper) clipper = this.webClipperFactory(this.writer, settings, { sessionManager: this.sessionManager });
@@ -171,22 +168,10 @@ class DiaryService {
     }
 
     if (settings.capture.autoClipLinks) {
-      const codeStore = new CodePlatformBookmarkStore(this.writer, settings);
-      const codeMode = normalizeCodePlatformMode(settings.capture.codePlatformMode);
       const clipTargets = [];
       for (const url of extractUrls(envelope.text).slice(0, 5)) {
-        const codePlatform = classifyCodePlatformUrl(url, settings.capture.codePlatformAdditionalHosts);
-        if (codePlatform && (codeMode === "bookmark" || codeMode === "both")) {
-          try {
-            codeLinks.push(await codeStore.save(url, { channel: envelope.channel, timestamp: envelope.timestamp }, codePlatform));
-          } catch (error) {
-            codeLinkFailures.push(`${url}: ${error?.message || error}`);
-          }
-        }
-        if (!codePlatform || codeMode === "extract" || codeMode === "both") {
-          if (isClipFamilyEnabled(settings, classifyClipFamily(url, null, settings))) clipTargets.push(url);
-          else clipFailures.push(`${url}: 该剪藏类型已关闭`);
-        }
+        if (isClipFamilyEnabled(settings, classifyClipFamily(url, null, settings))) clipTargets.push(url);
+        else clipFailures.push(`${url}: 该剪藏类型已关闭`);
       }
       const messageBudgetMs = Math.max(15, Number(settings.capture.webClipBudgetSeconds) || 75) * 1000;
       const deadline = Date.now() + messageBudgetMs;
@@ -209,11 +194,9 @@ class DiaryService {
       const detail = pdfAttachment ? `正文 ${Number(clip.article?.pageCount) || 0} 页` : `本地图片 ${clip.savedImages} 张`;
       lines.push(`- ${pdfAttachment ? "PDF 剪藏" : "网页剪藏"}：[[${clip.notePath.replace(/\.md$/i, "")}]]（${detail}）`);
     }
-    for (const link of codeLinks) lines.push(`- 代码平台收藏：[[${link.notePath.replace(/\.md$/i, "")}]]（${link.name} · ${link.repository}）`);
     if (attachmentFailures.length) lines.push(`> [!warning] ${attachmentFailures.length} 个聊天附件保存失败\n> ${attachmentFailures.join("\n> ")}`);
     if (attachmentExtractionFailures.length) lines.push(`> [!warning] ${attachmentExtractionFailures.length} 个 PDF 附件正文提取失败，原文件已保存\n> ${attachmentExtractionFailures.join("\n> ")}`);
     if (clipFailures.length) lines.push(`> [!warning] ${clipFailures.length} 个链接提取失败，原始链接已保留\n> ${clipFailures.join("\n> ")}`);
-    if (codeLinkFailures.length) lines.push(`> [!warning] ${codeLinkFailures.length} 个代码平台地址分类保存失败，原始链接已保留\n> ${codeLinkFailures.join("\n> ")}`);
     if (settings.storage.addSourceMetadata) {
       lines.push(`> [!info] 来源\n> 渠道：${envelope.channelName || envelope.channel} · 会话：${envelope.chatName || "私聊"} · 消息 ID：${envelope.id || "无"}`);
     }
@@ -226,14 +209,11 @@ class DiaryService {
       diaryPath,
       diaryFolder: settings.storage.diaryFolder,
       clippingFolder: settings.storage.clippingFolder,
-      codePlatformFolder: settings.storage.codePlatformFolder,
       clips,
-      codeLinks,
       savedAttachments: attachmentLines.length,
       attachmentFailures,
       attachmentExtractionFailures,
       clipFailures,
-      codeLinkFailures,
       messageKey,
     };
   }

@@ -39,7 +39,6 @@ function formatHelpText(locale = "zh-CN", result = {}) {
     "Available commands:",
     "• Send text, a voice note, an image, or a file: add it to today's note",
     "• Send a web link: extract articles, cloud documents, PDFs, images, technical-community posts, answers, and supported comment threads into a Markdown clipping",
-    "• Send a code-platform link: extract it, file it as a categorized bookmark, or do both according to Capture rules",
     "• /clip <URL>: clip only the specified page",
     "• /status: show the current channel connection status",
     "• Remote search needs a space: search keyword. Without the space it is saved as diary text.",
@@ -51,7 +50,6 @@ function formatHelpText(locale = "zh-CN", result = {}) {
     "可用指令：",
     "• 直接发送文字、语音、图片或文件：写入今天的笔记",
     "• 直接发送网页链接：提取文章、云文档、PDF、图片，以及社区媒体帖子、问答和支持的评论串，生成 Markdown 剪藏",
-    "• 发送代码平台地址：按收集规则提取正文、分类收藏地址，或两者都做",
     "• /clip <链接>：只剪藏指定网页",
     "• /status：查看当前渠道连接状态",
     "• 远程查询必须加空格：查 关键词。写成「查手机卡」会当作普通日记记录。",
@@ -67,18 +65,14 @@ const HELP_TEXT = formatHelpText("zh-CN");
 
 function formatCaptureReceipt(result, locale = "zh-CN", preview = null) {
   const clips = result.clips || [];
-  const codeLinks = result.codeLinks || [];
   const clipFailures = result.clipFailures?.length || 0;
-  const codeLinkFailures = result.codeLinkFailures?.length || 0;
   const attachmentFailures = result.attachmentFailures?.length || 0;
   const attachmentExtractionFailures = result.attachmentExtractionFailures?.length || 0;
   const savedAttachments = Number(result.savedAttachments) || 0;
   const diaryFallback = translate(locale, "日记", "Daily");
   const clippingFallback = translate(locale, "全渠道剪藏", "Clippings");
-  const codePlatformFallback = translate(locale, "代码平台收藏", "Code Links");
   const diaryFolder = displayFolder(result.diaryFolder || folderFromPath(result.diaryPath, diaryFallback), diaryFallback);
   const clippingFolder = displayFolder(result.clippingFolder || folderFromPath(clips[0]?.notePath, clippingFallback), clippingFallback);
-  const codePlatformFolder = displayFolder(result.codePlatformFolder || folderFromPath(codeLinks[0]?.notePath, codePlatformFallback), codePlatformFallback);
   const lines = [];
 
   // 保存结果预览:与笔记同源的 markdown 正文,滤掉图片与视频链接,保留换行,截断补 …。
@@ -170,30 +164,21 @@ function formatCaptureReceipt(result, locale = "zh-CN", preview = null) {
     }
   }
 
-  for (const link of codeLinks) {
-    const repository = displayTitle(link.repository || link.title || link.url, locale);
-    const platform = displayTitle(link.name || link.hostname || translate(locale, "代码平台", "Code platform"), locale);
-    lines.push(locale === "en"
-      ? `🔗 Saved “${repository}” from ${platform} to “${codePlatformFolder}”.`
-      : `🔗 已将 ${platform} 的「${repository}」分类保存到「${codePlatformFolder}」`);
-  }
 
   if (locale === "en") {
-    if (!clips.length && !codeLinks.length && !clipFailures && !codeLinkFailures) lines.push(`✍️ Saved to today's note in “${diaryFolder}”.`);
+    if (!clips.length && !clipFailures) lines.push(`✍️ Saved to today's note in “${diaryFolder}”.`);
     if (savedAttachments) lines.push(`📎 Saved ${savedAttachments} attachment${savedAttachments === 1 ? "" : "s"} to today's note in “${diaryFolder}”.`);
     if (clipFailures) lines.push(`⚠️ ${clipFailures} web page${clipFailures === 1 ? "" : "s"} could not be extracted. The original link${clipFailures === 1 ? " was" : "s were"} kept in today's note in “${diaryFolder}”.`);
-    if (codeLinkFailures) lines.push(`⚠️ ${codeLinkFailures} code-platform link${codeLinkFailures === 1 ? "" : "s"} could not be filed. The original link${codeLinkFailures === 1 ? " was" : "s were"} kept in today's note in “${diaryFolder}”.`);
     if (attachmentFailures) lines.push(`⚠️ ${attachmentFailures} attachment${attachmentFailures === 1 ? "" : "s"} failed to save. The original message was kept in today's note in “${diaryFolder}”.`);
     if (attachmentExtractionFailures) lines.push(`⚠️ Text could not be extracted from ${attachmentExtractionFailures} saved PDF attachment${attachmentExtractionFailures === 1 ? "" : "s"}. The original PDF${attachmentExtractionFailures === 1 ? " was" : "s were"} kept.`);
   } else {
-    if (!clips.length && !codeLinks.length && !clipFailures && !codeLinkFailures) lines.push(`✍️ 已保存到今天的「${diaryFolder}」`);
+    if (!clips.length && !clipFailures) lines.push(`✍️ 已保存到今天的「${diaryFolder}」`);
     if (savedAttachments) lines.push(`📎 已保存 ${savedAttachments} 个附件到今天的「${diaryFolder}」`);
     if (clipFailures) lines.push(`⚠️ ${clipFailures} 个网页未能提取正文，原始链接已保存在今天的「${diaryFolder}」`);
-    if (codeLinkFailures) lines.push(`⚠️ ${codeLinkFailures} 个代码平台地址未能分类保存，原始链接已保存在今天的「${diaryFolder}」`);
     if (attachmentFailures) lines.push(`⚠️ ${attachmentFailures} 个附件保存失败，原消息已保存在今天的「${diaryFolder}」`);
     if (attachmentExtractionFailures) lines.push(`⚠️ ${attachmentExtractionFailures} 个 PDF 附件未能提取正文，原 PDF 已保存`);
   }
-  const hasResults = clips.length > 0 || codeLinks.length > 0;
+  const hasResults = clips.length > 0;
   if (hasResults) return lines.join("\n");
   return [formatAgentGuide({ ...result, diaryFolder }, locale), "", ...lines].join("\n");
 }
