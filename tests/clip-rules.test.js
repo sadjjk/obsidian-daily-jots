@@ -66,9 +66,9 @@ test("document service clip labels the platform in filename and YAML platform", 
     extractionMethod: "rendered-document-browser",
     extractionStatus: "complete",
   }, { timestamp: new Date("2026-09-18T00:00:00Z") });
-  assert.match(saved.notePath, /^Clippings\/Documents\/2026-09-18\/2026-09-18-Feishu - Lark-AI 鹊桥-/);
+  assert.match(saved.notePath, /^Clippings\/Documents\/2026-09-18\/2026-09-18-飞书文档-AI 鹊桥-/);
   assert.doesNotMatch(saved.notePath, /普通网页/);
-  assert.match(writes[0].content, /platform: "Feishu \/ Lark"/);
+  assert.match(writes[0].content, /platform: "飞书文档"/);
 });
 
 test("disabled clipping types stay in the daily note and skip extraction", async () => {

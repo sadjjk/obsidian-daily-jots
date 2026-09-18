@@ -2,7 +2,7 @@
 
 const DOCUMENT_SERVICES = {
   feishu: {
-    name: "Feishu / Lark",
+    name: "飞书文档",
     loginUrl: "https://www.feishu.cn/",
     hosts: ["feishu.cn", "larksuite.com", "larkoffice.com"],
     contentSelectors: ["[data-testid='doc-content']", ".docx-content", ".suite-page-canvas", "[contenteditable='true']", "main", "body"],
@@ -17,13 +17,13 @@ const DOCUMENT_SERVICES = {
     },
   },
   tencent: {
-    name: "Tencent Docs",
+    name: "腾讯文档",
     loginUrl: "https://docs.qq.com/desktop/",
     hosts: ["docs.qq.com"],
     contentSelectors: [".editor-content", ".ql-editor", ".canvas-content", "[contenteditable='true']", "main", "body"],
   },
   wps: {
-    name: "WPS Docs",
+    name: "WPS文档",
     loginUrl: "https://www.kdocs.cn/",
     hosts: ["kdocs.cn", "wps.cn"],
     contentSelectors: [".kdocs-reader-content", ".editor-container", "[contenteditable='true']", "main", "body"],
