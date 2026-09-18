@@ -40,6 +40,35 @@ test("URLs are classified by source family before they are saved", () => {
   assert.equal(classifyClipFamily("https://contoso.sharepoint.com/:w:/r/sites/team/Shared%20Documents/plan.docx"), "documents");
   assert.equal(classifyClipFamily("https://files.example.com/report.pdf"), "articles");
   assert.equal(classifyClipFamily("attachment://wechat/1/report.pdf", { extractionMethod: "pdf-text" }), "articles");
+  assert.equal(classifyClipFamily("https://alidocs.dingtalk.com/i/nodes/xxx?utm_scene=person_space"), "documents");
+});
+
+test("document service clip labels the platform in filename and YAML platform", async () => {
+  const settings = {
+    storage: { clippingFolder: "Clippings", attachmentFolder: "Attachments" },
+    capture: { downloadWebImages: false, clipRules: defaultClipRules() },
+  };
+  const writes = [];
+  const writer = {
+    findTextBySuffix: () => "",
+    upsertText: async (path, content) => { writes.push({ path, content }); },
+    saveBinary: async (folder, name) => `${folder}/${name}`,
+  };
+  const clipper = new WebClipper(writer, settings, { download: async () => { throw new Error("no images"); } });
+  const saved = await clipper.saveArticle({
+    url: "https://feishu.cn/docx/abc123",
+    identityUrl: "https://feishu.cn/docx/abc123",
+    title: "AI 鹊桥",
+    siteName: "飞书云文档",
+    byline: "",
+    markdown: "Body text that is long enough to keep.",
+    images: [],
+    extractionMethod: "rendered-document-browser",
+    extractionStatus: "complete",
+  }, { timestamp: new Date("2026-09-18T00:00:00Z") });
+  assert.match(saved.notePath, /^Clippings\/Documents\/2026-09-18\/2026-09-18-Feishu - Lark-AI 鹊桥-/);
+  assert.doesNotMatch(saved.notePath, /普通网页/);
+  assert.match(writes[0].content, /platform: "Feishu \/ Lark"/);
 });
 
 test("disabled clipping types stay in the daily note and skip extraction", async () => {
