@@ -55,8 +55,7 @@ test("clipping type rules keep unknown families out and sanitize subfolders", ()
   assert.equal(settings.capture.clipRules.articles.folder, "News/Blogs");
   assert.equal(settings.capture.clipRules.social.enabled, true);
   assert.equal(settings.capture.clipRules.social.folder, "Social");
-  assert.equal(settings.capture.clipRules.pdfs.enabled, true);
-  assert.equal(settings.capture.clipRules.pdfs.folder, "escape");
+  assert.equal(settings.capture.clipRules.pdfs, undefined);
   assert.equal(settings.capture.clipRules.mystery, undefined);
 });
 

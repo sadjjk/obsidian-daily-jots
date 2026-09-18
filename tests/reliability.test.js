@@ -77,7 +77,7 @@ test("multiple web links share one bounded capture window and one daily-note blo
   assert.match(writes[0].content, /网页剪藏：\[\[剪藏\/two\]\]/);
 });
 
-test("chat PDF attachments are saved once, extracted, and linked from the daily note", async () => {
+test("chat PDF attachments are saved once and linked from the daily note without generating a clipping", async () => {
   const value = settings();
   value.capture.downloadChatAttachments = true;
   const writes = [];
@@ -90,22 +90,7 @@ test("chat PDF attachments are saved once, extracted, and linked from the daily 
     upsertText: async (path, content) => { writes.push({ path, content }); return { path }; },
     append: async (path, content) => { writes.push({ path, content }); return { path }; },
   };
-  const diary = new DiaryService(writer, () => value, async () => {}, {
-    pdfExtractor: async (buffer, url) => ({
-      url,
-      title: "季度报告",
-      byline: "",
-      excerpt: "PDF text",
-      siteName: "PDF",
-      markdown: "## Page 1\n\nPDF text",
-      images: [],
-      contentChars: 120,
-      extractionMethod: "pdf-text",
-      extractionStatus: "complete",
-      binaryFiles: [{ buffer, fileName: "report.pdf", mimeType: "application/pdf" }],
-      pageCount: 1,
-    }),
-  });
+  const diary = new DiaryService(writer, () => value, async () => {}, {});
   const result = await diary.capture({
     channel: "feishu",
     channelName: "飞书 / Lark",
@@ -116,13 +101,9 @@ test("chat PDF attachments are saved once, extracted, and linked from the daily 
   });
   assert.equal(binaryWrites, 1);
   assert.equal(result.savedAttachments, 1);
-  assert.equal(result.clips.length, 1);
-  assert.equal(result.attachmentExtractionFailures.length, 0);
-  assert.match(writes[0].path, /^剪藏\/PDFs\//);
-  assert.match(writes[0].content, /Original PDF/);
-  assert.match(writes[0].content, /PDF text/);
-  assert.match(writes[1].content, /PDF 剪藏：\[\[/);
-  assert.match(writes[1].content, /\[\[附件\/Chat\/2026-08-31\/feishu\/report\.pdf\]\]/);
+  assert.equal(result.clips.length, 0);
+  assert.equal(writes.length, 1);
+  assert.match(writes[0].content, /\[\[附件\/Chat\/2026-08-31\/feishu\/report\.pdf\]\]/);
 });
 
 test("WeChat advances its sync cursor only after every message succeeds", async () => {
