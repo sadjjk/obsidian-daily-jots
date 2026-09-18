@@ -74,7 +74,7 @@ const DOCUMENT_SERVICES = {
     hosts: ["alidocs.dingtalk.com"],
     paths: [],
     contentSelectors: ["[contenteditable='true']", "main", "body"],
-    authPattern: "登录钉钉|login\\.dingtalk\\.com|钉钉扫码|sign in.*dingtalk",
+    authPattern: "login\.dingtalk\.com|钉钉扫码登录|请先登录|会话已过期",
   },
 };
 
