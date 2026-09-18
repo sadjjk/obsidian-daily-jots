@@ -63,7 +63,7 @@ function main() {
   const attachmentRoot = join(args.vault, data.storage?.attachmentFolder || "Attachments", "Web");
   const diaryDir = join(args.vault, data.storage?.diaryFolder || "Omnichannel Diary/Daily");
   const vaultRel = (abs) => abs.slice(args.vault.length + 1);
-  const stats = { scanned: 0, moved: 0, platform: 0, times: 0, renamed: 0, skipped: 0, links: 0 };
+  const stats = { scanned: 0, moved: 0, platform: 0, times: 0, renamed: 0, skipped: 0, links: 0, orphans: 0 };
   const hashToNote = new Map();
   const attachmentOps = [];
 
@@ -215,6 +215,60 @@ function main() {
     }
   }
 
+  // 阶段 3.5:孤儿引用修复——引用指向不存在的附件时,按 hash+序号重定向到当前实际文件。
+  // 覆盖历史遗留的 <...> 包裹、Omnichannel Diary/ 前缀、旧子文件夹名等形态。
+  const attachmentIndex = new Map(); // hash -> { dirRel, files:Set }
+  for (const date of webDates) {
+    for (const sub of readdirSync(join(attachmentRoot, date))) {
+      const dirAbs = join(attachmentRoot, date, sub);
+      let files;
+      try {
+        files = readdirSync(dirAbs);
+      } catch (_) {
+        continue;
+      }
+      const hash = sub.match(/-([0-9a-f]{8,16})$/)?.[1];
+      if (hash) attachmentIndex.set(hash, { dirRel: vaultRel(dirAbs), files: new Set(files) });
+    }
+  }
+  for (const [, note] of hashToNote) {
+    let content = readFileSync(note.abs, "utf8");
+    let changed = 0;
+    const ORPHAN_RE = /[([<]([^()[\]<>]*Attachments\/Web\/[^()[\]<>]+)[)\]>]/g;
+    const matches = [...content.matchAll(ORPHAN_RE)];
+    for (const match of matches) {
+      const raw = match[1];
+      let decoded;
+      try {
+        decoded = decodeURIComponent(raw);
+      } catch (_) {
+        decoded = raw;
+      }
+      const hashMatch = decoded.match(/-([0-9a-f]{8,16})\/([^/]+)$/);
+      const tailHash = decoded.match(/-([0-9a-f]{8,16})(\.\w+)?$/);
+      const hash = hashMatch?.[1] || tailHash?.[1];
+      const entry = hash ? attachmentIndex.get(hash) : null;
+      if (!entry) continue;
+      const fileName = hashMatch?.[2] || "";
+      const seq = fileName.match(/(?:image-|^.*-)(\d{1,3})$/)?.[1];
+      if (!seq) continue;
+      const nn = seq.padStart(2, "0");
+      const target = [...entry.files].find((f) => f.match(new RegExp(`-img-${nn}(\\..+)?$`)));
+      if (!target) continue;
+      const newRel = `${entry.dirRel}/${target}`;
+      const newEncoded = encodeURI(newRel);
+      if (raw === newRel || raw === newEncoded) continue;
+      changed += 1;
+      const replacement = raw === decoded ? newRel : newEncoded;
+      content = content.split(raw).join(replacement);
+    }
+    if (changed > 0) {
+      stats.orphans += changed;
+      console.log(`${args.apply ? "修孤儿引用" : "[dry-run] 将修孤儿引用"}: ${vaultRel(note.abs)}(${changed} 处)`);
+      if (args.apply) writeFileSync(note.abs, content);
+    }
+  }
+
   // 阶段 4:Daily 双链按 hash 重写(含日期层)。
   let diaryEntries = [];
   try {
@@ -294,7 +348,7 @@ function main() {
     }
   } catch (_) {}
 
-  console.log(`\n扫描 ${stats.scanned} | 移动 ${stats.moved} | platform 补 ${stats.platform} | 时间转换 ${stats.times} | 附件文件夹改名 ${stats.renamed} | 跳过 ${stats.skipped} | 双链更新 ${stats.links} | 空目录 ${emptyDirs}`);
+  console.log(`\n扫描 ${stats.scanned} | 移动 ${stats.moved} | platform 补 ${stats.platform} | 时间转换 ${stats.times} | 附件文件夹改名 ${stats.renamed} | 跳过 ${stats.skipped} | 双链更新 ${stats.links} | 孤儿引用 ${stats.orphans} | 空目录 ${emptyDirs}`);
   if (!args.apply) console.log("以上为 dry-run 预览;确认无误后追加 --apply 执行。");
 }
 
