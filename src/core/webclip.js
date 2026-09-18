@@ -559,7 +559,7 @@ class WebClipper {
         }
       } catch (error) { xiaohongshuError = error; }
       // 小红书笔记页不需要登录:HTTP 提取失败时抛真实原因,
-      // 不再回退到隔离浏览器会话(未登录只会报误导性的 "login or browser verification")。
+      // 不再回退到隔离浏览器会话(未登录只报中文登录引导)。
       if (isXhsNoteUrl(url) && xiaohongshuError) throw xiaohongshuError;
     }
     let zhihuError;

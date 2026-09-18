@@ -608,7 +608,8 @@ class WebSessionManager {
         throw error;
       }
       if (looksLikeAuthentication(payload, service)) {
-        const error = new Error(`${RENDER_SERVICES[service]?.name || service} login or browser verification is required; open its isolated session in plugin settings first`);
+        const serviceName = RENDER_SERVICES[service]?.name || service;
+        const error = new Error(`${serviceName}页面需要登录:请先在「浏览器会话」面板打开「${serviceName}」登录窗口完成登录,再重新剪藏`);
         error.code = "DOCUMENT_LOGIN_REQUIRED";
         throw error;
       }
