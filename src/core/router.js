@@ -104,6 +104,8 @@ function formatCaptureReceipt(result, locale = "zh-CN", preview = null) {
     const title = displayTitle(clip.article?.title, locale);
     const savedImages = Math.max(0, Number(clip.savedImages) || 0);
     const failedImages = clip.imageFailures?.length || 0;
+    // 超出单篇图片上限被跳过的图片:保留远程地址,不算保存失败,单独说明
+    const skippedImages = clip.imageSkipped?.length || 0;
     const savedFiles = Math.max(0, Number(clip.savedFiles) || 0);
     const failedFiles = clip.fileFailures?.length || 0;
     const commentCount = Math.max(0, Number(clip.article?.commentCount) || 0);
@@ -136,30 +138,34 @@ function formatCaptureReceipt(result, locale = "zh-CN", preview = null) {
     const extractedZh = commentCount ? `正文、${commentCount} 条评论和 ${savedImages} 张图片` : `正文和 ${savedImages} 张图片`;
     const partialZh = commentCount ? `正文片段、${commentCount} 条评论和 ${savedImages} 张图片` : `正文片段和 ${savedImages} 张图片`;
     const savedFileDetail = savedFiles ? (locale === "en" ? ` The original source file was also saved.` : `，并保留 ${savedFiles} 个原文件`) : "";
+    const skippedDetail = skippedImages ? (locale === "en"
+      ? `; ${skippedImages} more image${skippedImages === 1 ? "" : "s"} beyond the per-clipping limit kept their remote URLs`
+      : `，另有 ${skippedImages} 张图片超出单篇上限已在正文保留原链`)
+      : "";
     if (locale === "en") {
       if (clip.article?.extractionStatus === "partial") {
         const failed = [];
         if (failedImages) failed.push(`${failedImages} additional image${failedImages === 1 ? "" : "s"}`);
         if (failedFiles) failed.push(`${failedFiles} original file${failedFiles === 1 ? "" : "s"}`);
         const failedDetail = failed.length ? `; ${failed.join(" and ")} failed to save` : "";
-        pushWithPreview(`⚠️ “${title}” was only partially extracted. ${partialEn[0].toUpperCase()}${partialEn.slice(1)} were saved to “${clippingFolder}”${failedDetail}.`, clip);
+        pushWithPreview(`⚠️ “${title}” was only partially extracted. ${partialEn[0].toUpperCase()}${partialEn.slice(1)} were saved to “${clippingFolder}”${failedDetail}${skippedDetail}.`, clip);
       } else if (failedImages || failedFiles) {
         const failed = [];
         if (failedImages) failed.push(`${failedImages} additional image${failedImages === 1 ? "" : "s"}`);
         if (failedFiles) failed.push(`${failedFiles} original file${failedFiles === 1 ? "" : "s"}`);
-        pushWithPreview(`⚠️ “${title}” was saved to “${clippingFolder}” with ${extractedEn}; ${failed.join(" and ")} failed to save.`, clip);
+        pushWithPreview(`⚠️ “${title}” was saved to “${clippingFolder}” with ${extractedEn}; ${failed.join(" and ")} failed to save${skippedDetail}.`, clip);
       } else {
-        pushWithPreview(`🔖 “${title}” was saved to “${clippingFolder}” with ${extractedEn}.${savedFileDetail}`, clip);
+        pushWithPreview(`🔖 “${title}” was saved to “${clippingFolder}” with ${extractedEn}.${savedFileDetail}${skippedDetail}`, clip);
       }
     } else {
       if (clip.article?.extractionStatus === "partial") {
         const failedDetail = `${failedImages ? `，另有 ${failedImages} 张图片保存失败` : ""}${failedFiles ? `，${failedFiles} 个原文件保存失败` : ""}`;
-        pushWithPreview(`⚠️ 《${title}》正文提取不完整，已保存${partialZh}到「${clippingFolder}」${failedDetail}`, clip);
+        pushWithPreview(`⚠️ 《${title}》正文提取不完整，已保存${partialZh}到「${clippingFolder}」${failedDetail}${skippedDetail}`, clip);
       } else if (failedImages || failedFiles) {
         const failedDetail = `${failedImages ? `，另有 ${failedImages} 张图片保存失败` : ""}${failedFiles ? `，${failedFiles} 个原文件保存失败` : ""}`;
-        pushWithPreview(`⚠️ 《${title}》已提取${extractedZh}并保存到「${clippingFolder}」${failedDetail}`, clip);
+        pushWithPreview(`⚠️ 《${title}》已提取${extractedZh}并保存到「${clippingFolder}」${failedDetail}${skippedDetail}`, clip);
       } else {
-        pushWithPreview(`🔖 《${title}》已提取${extractedZh}并保存到「${clippingFolder}」${savedFileDetail}`, clip);
+        pushWithPreview(`🔖 《${title}》已提取${extractedZh}并保存到「${clippingFolder}」${savedFileDetail}${skippedDetail}`, clip);
       }
     }
   }

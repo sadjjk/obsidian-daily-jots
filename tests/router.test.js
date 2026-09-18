@@ -142,6 +142,27 @@ test("partial extraction produces a warning instead of a false success", () => {
   assert.doesNotMatch(text, /随手记/);
 });
 
+test("images skipped by the per-clipping limit are reported as kept remote URLs, not failures", () => {
+  const skipped = Array.from({ length: 43 }, (_, i) => `https://alidocs.dingtalk.com/core/api/resources/img/${i}`);
+  const text = formatCaptureReceipt({
+    diaryPath: "日记/today.md",
+    clips: [{ article: { title: "操作手册", extractionStatus: "complete" }, savedImages: 30, imageFailures: [], imageSkipped: skipped }],
+    clipFailures: [],
+    attachmentFailures: [],
+  });
+  assert.match(text, /^🔖 《操作手册》已提取正文和 30 张图片并保存到「全渠道剪藏」，另有 43 张图片超出单篇上限已在正文保留原链$/);
+  assert.doesNotMatch(text, /保存失败/);
+  assert.doesNotMatch(text, /⚠️/);
+  // 真失败仍按失败话术
+  const mixed = formatCaptureReceipt({
+    diaryPath: "日记/today.md",
+    clips: [{ article: { title: "操作手册", extractionStatus: "complete" }, savedImages: 30, imageFailures: ["img-31"], fileFailures: [] }],
+    clipFailures: [],
+    attachmentFailures: [],
+  });
+  assert.match(mixed, /⚠️ 《操作手册》已提取正文和 30 张图片并保存到「全渠道剪藏」，另有 1 张图片保存失败/);
+});
+
 test("diary-only receipts lead with the agent guide", () => {
   const text = formatCaptureReceipt({
     diaryPath: "日记/today.md",

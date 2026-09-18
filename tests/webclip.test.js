@@ -197,7 +197,9 @@ test("web image localization is concurrent, bounded, and reuses the stable clipp
   assert.equal(second.reused, true);
   assert.equal(second.notePath, first.notePath);
   assert.equal(first.savedImages, 2);
-  assert.equal(first.imageFailures.length, 3);
+  // 第 3 张超出 maxWebImageTotalMb=1MB 预算(真失败),第 4、5 张超出 maxWebImages=3 上限(保留原链)
+  assert.equal(first.imageSkipped.length, 2);
+  assert.equal(first.imageFailures.length, 1);
   assert.equal(peak > 1 && peak <= 4, true);
   assert.equal(writes.length, 2);
 });

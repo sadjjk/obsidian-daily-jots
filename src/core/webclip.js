@@ -822,6 +822,7 @@ class WebClipper {
     const reused = Boolean(existingPath);
     let markdown = article.markdown || article.excerpt || article.url;
     const failures = [];
+    const skippedImages = [];
     const fileFailures = [];
     let savedImages = 0;
     let savedFiles = 0;
@@ -842,7 +843,7 @@ class WebClipper {
       const maxTotalBytes = Math.max(1, Number(this.settings.capture.maxWebImageTotalMb) || 50) * 1024 * 1024;
       const deadline = Number(options.deadline) || Date.now() + (Math.max(10, Number(this.settings.capture.webClipBudgetSeconds) || 75) * 1000);
       let reservedBytes = 0;
-      for (const imageUrl of allImages.slice(maxImages)) failures.push(`${imageUrl}: skipped because the article image-count limit is ${maxImages}`);
+      for (const imageUrl of allImages.slice(maxImages)) skippedImages.push(imageUrl);
       const localized = await mapWithConcurrency(selectedImages, 4, async (imageUrl, index) => {
         try {
           const remaining = deadline - Date.now();
@@ -895,13 +896,14 @@ class WebClipper {
       "",
     ].join("\n");
     const warningParts = [];
-    if (failures.length) warningParts.push(`${failures.length} 张图片未能本地保存，正文中保留远程地址`);
+    if (skippedImages.length) warningParts.push(`${skippedImages.length} 张图片超出单篇上限,已保留远程地址`);
+    if (failures.length) warningParts.push(`${failures.length} 张图片未能本地保存,正文中保留远程地址`);
     if (fileFailures.length) warningParts.push(`${fileFailures.length} 个原文件未能本地保存`);
     const report = warningParts.length ? `\n\n> [!warning] ${warningParts.join("；")}。` : "";
     const content = `${frontmatter}# ${escapeWebText(title)}\n\n${markdown}${report}\n`;
     if (typeof this.writer.upsertText === "function") await this.writer.upsertText(notePath, content);
     else await this.writer.createText(notePath, content);
-    return { notePath, article: { ...article, title, identityUrl }, reused, savedImages, savedFiles, imageFailures: failures, fileFailures };
+    return { notePath, article: { ...article, title, identityUrl }, reused, savedImages, savedFiles, imageFailures: failures, imageSkipped: skippedImages, fileFailures };
   }
 }
 
