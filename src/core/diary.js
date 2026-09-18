@@ -1,18 +1,9 @@
 "use strict";
 
 const { downloadRemoteFile, decodeDataUrl } = require("./network");
-const { extractPdf } = require("./pdfclip");
 const { WebClipper } = require("./webclip");
 const { extractUrls, localDateParts, markdownEscape, safeFileName, shortHash } = require("./util");
 const { classifyClipFamily, isClipFamilyEnabled } = require("./clip-rules");
-
-function isPdfAttachment(saved) {
-  return String(saved.mimeType || "").toLowerCase().includes("application/pdf") || /\.pdf$/i.test(saved.fileName || "");
-}
-
-function attachmentSourceUrl(envelope, fileName) {
-  return `attachment://${encodeURIComponent(envelope.channel || "chat")}/${encodeURIComponent(envelope.id || "message")}/${encodeURIComponent(fileName || "document.pdf")}`;
-}
 
 function normalizeDiaryMessage(value) {
   return String(value || "")
@@ -50,7 +41,6 @@ class DiaryService {
     this.getSettings = getSettings;
     this.onSettingsChanged = onSettingsChanged;
     this.sessionManager = options.sessionManager;
-    this.pdfExtractor = options.pdfExtractor || extractPdf;
     this.webClipperFactory = options.webClipperFactory || ((writer, settings, clipperOptions) => new WebClipper(writer, settings, clipperOptions));
   }
 
@@ -129,7 +119,6 @@ class DiaryService {
     const attachmentFolder = `${settings.storage.attachmentFolder}/Chat/${date.day}/${envelope.channel}`;
     const attachmentLines = [];
     const attachmentFailures = [];
-    const attachmentExtractionFailures = [];
     const clips = [];
     const clipFailures = [];
     let clipper;
@@ -142,24 +131,6 @@ class DiaryService {
         try {
           const saved = await this.materializeAttachment(attachment, attachmentFolder, index);
           attachmentLines.push(saved.mimeType.startsWith("image/") ? `![[${saved.path}]]` : `[[${saved.path}]]`);
-          if (isPdfAttachment(saved) && isClipFamilyEnabled(settings, "pdfs")) {
-            try {
-              const sourceUrl = attachmentSourceUrl(envelope, saved.fileName);
-              const article = await this.pdfExtractor(
-                saved.buffer,
-                sourceUrl,
-                `attachment; filename*=UTF-8''${encodeURIComponent(saved.fileName)}`,
-              );
-              const originalLink = `[Original PDF](${encodeURI(saved.path)})`;
-              clips.push(await getClipper().saveArticle({
-                ...article,
-                binaryFiles: [],
-                markdown: `${originalLink}\n\n${article.markdown || article.excerpt || ""}`,
-              }, { channel: envelope.channel, timestamp: envelope.timestamp }));
-            } catch (error) {
-              attachmentExtractionFailures.push(`${saved.fileName}: ${error?.message || error}`);
-            }
-          }
         } catch (error) {
           const label = attachment.fileName || attachment.url || `附件 ${index + 1}`;
           attachmentFailures.push(`${label}: ${error?.message || error}`);
@@ -195,7 +166,6 @@ class DiaryService {
       lines.push(`- ${pdfAttachment ? "PDF 剪藏" : "网页剪藏"}：[[${clip.notePath.replace(/\.md$/i, "")}]]（${detail}）`);
     }
     if (attachmentFailures.length) lines.push(`> [!warning] ${attachmentFailures.length} 个聊天附件保存失败\n> ${attachmentFailures.join("\n> ")}`);
-    if (attachmentExtractionFailures.length) lines.push(`> [!warning] ${attachmentExtractionFailures.length} 个 PDF 附件正文提取失败，原文件已保存\n> ${attachmentExtractionFailures.join("\n> ")}`);
     if (clipFailures.length) lines.push(`> [!warning] ${clipFailures.length} 个链接提取失败，原始链接已保留\n> ${clipFailures.join("\n> ")}`);
     if (settings.storage.addSourceMetadata) {
       lines.push(`> [!info] 来源\n> 渠道：${envelope.channelName || envelope.channel} · 会话：${envelope.chatName || "私聊"} · 消息 ID：${envelope.id || "无"}`);
@@ -212,11 +182,10 @@ class DiaryService {
       clips,
       savedAttachments: attachmentLines.length,
       attachmentFailures,
-      attachmentExtractionFailures,
       clipFailures,
       messageKey,
     };
   }
 }
 
-module.exports = { DiaryService, attachmentSourceUrl, isPdfAttachment, mapCaptureTargets, normalizeDiaryMessage, safeDiaryLabel };
+module.exports = { DiaryService, mapCaptureTargets, normalizeDiaryMessage, safeDiaryLabel };
