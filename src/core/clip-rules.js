@@ -24,16 +24,16 @@ const CLIP_FAMILIES = {
     zh: "社区媒体",
     en: "Community media",
     defaultFolder: "Social",
-    zhDesc: "社交平台、新闻媒体和技术社区(微博、知乎、小红书、抖音、腾讯新闻、掘金等,含对应海外站点)",
-    enDesc: "Social platforms, news media, tech communities, and their overseas peers",
+    zhDesc: "微博、知乎、小红书、抖音等；完整来源见下方「社区媒体来源」清单",
+    enDesc: "Weibo, Zhihu, Xiaohongshu, Douyin, and more; see the Community-media sources list below",
   },
   documents: {
     id: "documents",
     zh: "云文档",
     en: "Cloud documents",
     defaultFolder: "Documents",
-    zhDesc: "飞书 / Lark、腾讯文档、WPS、Google Docs / Sheets / Slides、Microsoft 365 / OneDrive",
-    enDesc: "Feishu / Lark, Tencent Docs, WPS, Google Docs / Sheets / Slides, and Microsoft 365 / OneDrive",
+    zhDesc: "飞书 / Lark、腾讯文档、WPS、钉钉文档等；完整平台与登录入口见下方「云文档来源」",
+    enDesc: "Feishu / Lark, Tencent Docs, WPS, DingTalk Docs, and more; see the Cloud-document sources list below for the full platform list and sign-in",
   },
 };
 

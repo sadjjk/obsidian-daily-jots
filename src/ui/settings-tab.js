@@ -688,7 +688,7 @@ class DiarySettingTab extends PluginSettingTab {
       google: this.tr("仅文档、表格、幻灯片和文件链接", "Only document, spreadsheet, presentation, and file links"),
       microsoft: this.tr("仅个人或站点内的文档链接", "Only personal or site document links"),
     };
-    const chinaDocIds = new Set(["feishu", "tencent", "wps"]);
+    const chinaDocIds = new Set(["feishu", "tencent", "wps", "dingtalk"]);
     const docGroups = {
       china: { title: this.tr("国内平台", "China"), entries: [] },
       international: { title: this.tr("国外平台", "International"), entries: [] },

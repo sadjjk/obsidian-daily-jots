@@ -68,6 +68,14 @@ const DOCUMENT_SERVICES = {
     ],
     authPattern: "sign in to (?:your )?microsoft|login.microsoftonline.com|work or school account|登录 microsoft|使用 microsoft 账户登录",
   },
+  dingtalk: {
+    name: "钉钉文档",
+    loginUrl: "https://alidocs.dingtalk.com/",
+    hosts: ["alidocs.dingtalk.com"],
+    paths: [],
+    contentSelectors: ["[contenteditable='true']", "main", "body"],
+    authPattern: "登录钉钉|login\\.dingtalk\\.com|钉钉扫码|sign in.*dingtalk",
+  },
 };
 
 const COMMON_REMOVE_SELECTORS = [
