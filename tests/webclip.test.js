@@ -332,6 +332,30 @@ test("Zhihu pages keep the browser-session fallback when HTTP extraction fails",
   assert.match(article.extractionMethod, /zhihu-rendered/);
 });
 
+test("Feishu rendered docs bridge session cookies for image localization", async () => {
+  const cookieCalls = [];
+  const rendered = {
+    html: `<!doctype html><html><body><div class="doc-title">AI 鹊桥</div><div class="doc-content"><p>${"飞书会话渲染出的文档正文,长度需要超过完整性阈值才能通过校验。".repeat(6)}</p><p><img src="https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/preview/SfM/?preview_type=16"></p></div></body></html>`,
+    url: "https://my.feishu.cn/wiki/CEFJwoogJiIRG7kUISbc6JctnJg",
+    title: "AI 鹊桥",
+    author: "",
+    text: "飞书会话渲染出的文档正文,长度需要超过完整性阈值才能通过校验。".repeat(6),
+  };
+  const clipper = new WebClipper({}, dingtalkTestSettings(), {
+    fetch: async () => ({ response: fakeHtmlResponse("", 403), finalUrl: rendered.url }),
+    sessionManager: {
+      collectCookies: async (service) => { cookieCalls.push(service); return "feishu_session=tok"; },
+      extract: async () => rendered,
+    },
+  });
+  const article = await clipper.extract("https://my.feishu.cn/wiki/CEFJwoogJiIRG7kUISbc6JctnJg");
+  assert.match(article.extractionMethod, /feishu-rendered/);
+  assert.equal(cookieCalls[0], "feishu");
+  // 渲染会话的登录 cookie 挂到 imageHeaders,供图片下载透传
+  assert.deepEqual(article.imageHeaders, { cookie: "feishu_session=tok" });
+  assert.equal(article.images.length, 1);
+});
+
 test("the session-cookie bridge passes the site-specific refresh parameters", async () => {
   const cookieOptions = [];
   const clipper = new WebClipper({}, zhihuTestSettings(), {

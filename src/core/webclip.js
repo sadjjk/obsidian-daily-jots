@@ -746,7 +746,15 @@ class WebClipper {
           plainText: rendered.text,
           extractionMethod: documentServiceForUrl(rendered.url) ? `${renderService}-rendered-document` : `${renderService}-rendered-community-comments`,
         });
-        if (article.extractionStatus === "complete") return { ...article, commentCount: Number(rendered.commentCount) || 0 };
+        if (article.extractionStatus === "complete") {
+          // 飞书正文图片是 internal-api-drive-stream 内部流,下载需登录 cookie(实测匿名失败):
+          // 复用渲染会话实例的内存 cookie 挂到 imageHeaders,供图片下载透传;离线时兜底留原链
+          if (renderService === "feishu") {
+            const cookie = await this.collectSessionCookies("feishu", "https://my.feishu.cn/");
+            if (cookie) article.imageHeaders = { cookie };
+          }
+          return { ...article, commentCount: Number(rendered.commentCount) || 0 };
+        }
         renderError = new Error(`${COMMUNITY_SERVICES[renderService]?.name || renderService} rendered content was too short to save safely`);
       } catch (error) {
         if (["DOCUMENT_LOGIN_REQUIRED", "DOCUMENT_CAPTURE_INCOMPLETE"].includes(error?.code)) throw error;
