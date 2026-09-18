@@ -74,6 +74,7 @@ function packageSample() {
       ["p", {}, ["span", { "data-type": "text" }, ["span", { "data-type": "leaf", "bold": true, "italic": true }, "粗斜体"]]],
       ["p", {}, ["img", { "src": "https://down.dingtalk.com/ddmedia/abc.png", "alt": "图" }]],
       ["p", {}, ["img", { "src": "/core/api/resources/img/5eecdaf48460cde5b35547b8056687dd6f438ca4bd5a4c8dc1b0aaf4285a4450cf9289de50d8305639e8703ac5556d0d" }]],
+      ["code", {}, ["span", { "data-type": "text" }, ["span", { "data-type": "leaf" }, "# doc engine\nDOC_ENGINE=elasticsearch\nSTACK_VERSION=8.11.3"]]],
       ["heading", { "level": 3 }, ["span", { "data-type": "text" }, ["span", { "data-type": "leaf" }, "三级标题"]]],
       ["table", {}, ["span", { "data-type": "text" }, ["span", { "data-type": "leaf" }, "表格兜底"]]],
     ] } } },
@@ -89,6 +90,8 @@ test("packageToHtml renders title, headings, bold+italic, images, links and unkn
   // 实测:文档内嵌图片是 /core/api/resources/img/<hash> 相对路径,必须拼成绝对 URL
   assert.ok(html.includes('<img src="https://alidocs.dingtalk.com/core/api/resources/img/5eecdaf48460cde5b35547b8056687dd6f438ca4bd5a4c8dc1b0aaf4285a4450cf9289de50d8305639e8703ac5556d0d"'));
   assert.ok(html.includes("<h3>三级标题</h3>"));
+  // 代码块保留换行输出为 pre/code,不得拍平成一行
+  assert.ok(html.includes("<pre><code># doc engine\nDOC_ENGINE=elasticsearch\nSTACK_VERSION=8.11.3</code></pre>"));
   assert.ok(html.includes("表格兜底"));
   assert.doesNotMatch(html, /\[object Object\]/); // props 不泄漏为正文
 });

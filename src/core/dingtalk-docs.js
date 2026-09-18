@@ -119,6 +119,9 @@ function slateNodeToHtml(node) {
     return `<h${level}>${inner}</h${level}>`;
   }
   if (type === "p") return inner.trim() ? `<p>${inner}</p>` : "";
+  // 代码块(实测):["code", {}, [span text [span leaf "多行\n文本"]]],leaf 文本自带 \n;
+  // 必须输出 pre/code,否则下游 markdown 转换把换行折叠成空格,代码被拍平
+  if (type === "code") return `<pre><code>${inner}</code></pre>`;
   if (type === "img") {
     let src = String((props && props.src) || "");
     if (!src) return "";

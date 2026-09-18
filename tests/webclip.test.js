@@ -364,6 +364,7 @@ function dingtalkPackageJson() {
       ["p", {}, ["span", { "data-type": "text" }, ["span", { "data-type": "leaf" }, "私有文档正文需要写足够长的内容以通过完整性校验,这里是钉钉文档 API 直取的正文样本。".repeat(3)]]],
       ["p", {}, ["img", { "src": "https://down.dingtalk.com/ddmedia/welcome.png", "alt": "欢迎图片" }]],
       ["p", {}, ["img", { "src": "/core/api/resources/img/5eecdaf48460cde5b35547b8056687dd6f438ca4bd5a4c8dc1b0aaf4285a4450cf9289de50d8305639e8703ac5556d0d" }]],
+      ["code", {}, ["span", { "data-type": "text" }, ["span", { "data-type": "leaf" }, "DOC_ENGINE=elasticsearch\nSTACK_VERSION=8.11.3"]]],
     ] } } },
   });
 }
@@ -389,6 +390,9 @@ test("DingTalk doc pages clip through the document/data API with session cookies
   assert.equal(article.title, "新人百宝箱");
   assert.equal(article.byline, "张三");
   assert.equal(article.publishedAt, "2023-11-14T22:13:20.000Z");
+  // 代码块经 pre/code → 围栏 markdown,换行保留不拍平
+  assert.ok(article.markdown.includes("```"));
+  assert.ok(article.markdown.includes("DOC_ENGINE=elasticsearch\nSTACK_VERSION=8.11.3"));
   assert.equal(article.canonicalUrl, "https://alidocs.dingtalk.com/i/nodes/gpG2NdyVX3mmZxQYHA1AGnXAWMwvDqPk?utm_scene=person_space");
   assert.equal(cookieCalls[0], "dingtalk");
   assert.ok(JSON.stringify(article).includes("欢迎标题"));
