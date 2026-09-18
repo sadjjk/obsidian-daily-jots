@@ -18,6 +18,9 @@ const requireLocal = createRequire(import.meta.url);
 const { sourceNameForUrl } = requireLocal(
   fileURLToPath(new URL("../src/core/source-names.js", import.meta.url)),
 );
+const { localDateParts } = requireLocal(
+  fileURLToPath(new URL("../src/core/util.js", import.meta.url)),
+);
 
 function parseArgs(argv) {
   const args = { apply: false, vault: "/Users/claw/Desktop/ObsidianProject" };
@@ -60,7 +63,7 @@ function main() {
   const attachmentRoot = join(args.vault, data.storage?.attachmentFolder || "Attachments", "Web");
   const diaryDir = join(args.vault, data.storage?.diaryFolder || "Omnichannel Diary/Daily");
   const vaultRel = (abs) => abs.slice(args.vault.length + 1);
-  const stats = { scanned: 0, moved: 0, platform: 0, renamed: 0, skipped: 0, links: 0 };
+  const stats = { scanned: 0, moved: 0, platform: 0, times: 0, renamed: 0, skipped: 0, links: 0 };
   const hashToNote = new Map();
   const attachmentOps = [];
 
@@ -68,6 +71,19 @@ function main() {
     const explicit = content.match(/^platform:\s*"?([^"\n]+)"?\s*$/m)?.[1];
     if (explicit) return explicit.trim();
     return sourceNameForUrl(yamlSourcePath(content), settings) || "普通网页";
+  }
+
+  // UTC(Z 结尾)时间字段 → 本地偏移 ISO;空值与非 Z 结尾跳过(幂等)。
+  function convertTimestamps(content) {
+    let changed = 0;
+    const convert = (whole, field, value) => {
+      if (!value.endsWith("Z")) return whole;
+      changed += 1;
+      return `${field}: "${localDateParts(new Date(value)).iso}"`;
+    };
+    content = content.replace(/^(clipped_at): "([^"]*)"/m, convert);
+    content = content.replace(/^(published_at): "([^"]*)"/m, (whole, field, value) => (value ? convert(whole, field, value) : whole));
+    return { content, changed };
   }
 
   // 阶段 1:md 日期分层 + platform 补齐;建立 hash → 新路径索引。
@@ -106,12 +122,18 @@ function main() {
         console.log(`${args.apply ? "补 platform" : "[dry-run] 将补 platform"}: ${family}/${name} -> ${label}`);
         content = platformResult.content;
       }
+      const timeResult = convertTimestamps(content);
+      if (timeResult.changed > 0) {
+        stats.times += timeResult.changed;
+        console.log(`${args.apply ? "转换时间" : "[dry-run] 将转换时间"}: ${family}/${name}(${timeResult.changed} 处)`);
+        content = timeResult.content;
+      }
       const moved = from !== to;
       if (moved) {
         stats.moved += 1;
         console.log(`${args.apply ? "移动" : "[dry-run] 将移动"}: ${family}/${name} -> ${date}/${name}`);
       }
-      if (args.apply && (moved || platformResult.changed)) {
+      if (args.apply && (moved || platformResult.changed || timeResult.changed > 0)) {
         if (moved) mkdirSync(targetDir, { recursive: true });
         writeFileSync(to, content);
         if (moved) renameSync(from, to);
@@ -141,24 +163,40 @@ function main() {
         continue;
       }
       const noteName = note.name.replace(/\.md$/, "");
-      if (sub === noteName) continue;
+      const subRename = sub !== noteName;
       const stem = noteName.match(FILENAME_RE)?.[2] || noteName;
       const newSubDir = join(dateDir, noteName);
       const files = readdirSync(subDir);
       const renamePairs = [];
       for (const file of files) {
-        const imageMatch = file.match(/^image-(\d+)\.(.+)$/);
-        if (!imageMatch) continue;
-        const next = `${stem}-${imageMatch[1]}.${imageMatch[2]}`;
+        let next = null;
+        const imageMatch = file.match(/^image-(\d+)(\..+)?$/);
+        if (imageMatch) {
+          next = `${stem}-img-${imageMatch[1]}${imageMatch[2] || ""}`;
+        } else {
+          // 增量:上一轮已改为 <stem>-XX 的存量图片补 -img- 段(幂等:已带 -img- 的跳过)。
+          const incrementMatch = file.match(/^(.+)-(\d+)(\..+)?$/);
+          if (incrementMatch && !incrementMatch[1].endsWith("-img")) {
+            next = `${incrementMatch[1]}-img-${incrementMatch[2]}${incrementMatch[3] || ""}`;
+          }
+        }
+        if (!next) continue;
         renamePairs.push([file, next]);
         const oldRel = vaultRel(join(subDir, file));
         const newRel = vaultRel(join(newSubDir, next));
         replacements.set(oldRel, newRel);
         replacements.set(encodeURI(oldRel), encodeURI(newRel));
       }
-      attachmentOps.push({ from: subDir, to: newSubDir, renamePairs, date, sub, noteName });
-      stats.renamed += 1;
-      console.log(`${args.apply ? "改名" : "[dry-run] 将改名"}: Web/${date}/${sub} -> ${noteName}(含图片 ${renamePairs.length})`);
+      if (subRename) {
+        attachmentOps.push({ from: subDir, to: newSubDir, renamePairs, inPlace: false });
+        stats.renamed += 1;
+        console.log(`${args.apply ? "改名" : "[dry-run] 将改名"}: Web/${date}/${sub} -> ${noteName}(含图片 ${renamePairs.length})`);
+      } else if (renamePairs.length > 0) {
+        // 子文件夹已与 md 对齐,仅其内图片需补 -img- 段。
+        attachmentOps.push({ from: subDir, to: subDir, renamePairs, inPlace: true });
+        stats.renamed += 1;
+        console.log(`${args.apply ? "图片改名" : "[dry-run] 将图片改名"}: Web/${date}/${sub}(${renamePairs.length} 个)`);
+      }
     }
   }
 
@@ -203,7 +241,14 @@ function main() {
   }
 
   if (args.apply) {
-    for (const { from, to, renamePairs } of attachmentOps) {
+    for (const { from, to, renamePairs, inPlace } of attachmentOps) {
+      if (inPlace) {
+        // 仅文件改名(子文件夹已对齐)。
+        for (const [file, next] of renamePairs) {
+          if (existsSync(join(from, file))) renameSync(join(from, file), join(from, next));
+        }
+        continue;
+      }
       if (existsSync(to)) {
         // 目标已存在(历史重复文件夹):逐文件合并(不覆盖),源空则删。
         for (const file of readdirSync(from)) {
@@ -220,7 +265,36 @@ function main() {
     }
   }
 
-  console.log(`\n扫描 ${stats.scanned} | 移动 ${stats.moved} | platform 补 ${stats.platform} | 附件文件夹改名 ${stats.renamed} | 跳过 ${stats.skipped} | 双链更新 ${stats.links}`);
+  // 收尾 pass:清理 Attachments/Web 下的空目录(仅子文件夹与日期两层,空才删)。
+  let emptyDirs = 0;
+  try {
+    for (const date of readdirSync(attachmentRoot)) {
+      const dateDir = join(attachmentRoot, date);
+      let subs;
+      try {
+        subs = readdirSync(dateDir);
+      } catch (_) {
+        continue;
+      }
+      for (const sub of subs) {
+        const subDir = join(dateDir, sub);
+        try {
+          if (readdirSync(subDir).length === 0) {
+            emptyDirs += 1;
+            console.log(`${args.apply ? "删空目录" : "[dry-run] 将删空目录"}: Web/${date}/${sub}`);
+            if (args.apply) rmdirSync(subDir);
+          }
+        } catch (_) {}
+      }
+      if (readdirSync(dateDir).length === 0) {
+        emptyDirs += 1;
+        console.log(`${args.apply ? "删空目录" : "[dry-run] 将删空目录"}: Web/${date}`);
+        if (args.apply) rmdirSync(dateDir);
+      }
+    }
+  } catch (_) {}
+
+  console.log(`\n扫描 ${stats.scanned} | 移动 ${stats.moved} | platform 补 ${stats.platform} | 时间转换 ${stats.times} | 附件文件夹改名 ${stats.renamed} | 跳过 ${stats.skipped} | 双链更新 ${stats.links} | 空目录 ${emptyDirs}`);
   if (!args.apply) console.log("以上为 dry-run 预览;确认无误后追加 --apply 执行。");
 }
 
