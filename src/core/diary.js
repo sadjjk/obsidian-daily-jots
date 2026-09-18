@@ -187,6 +187,7 @@ class DiaryService {
       savedAttachments: attachmentLines.length,
       attachmentFailures,
       clipFailures,
+      attachmentChatFolder: `${settings.storage.attachmentFolder}/Chat`,
       messageKey,
     };
   }

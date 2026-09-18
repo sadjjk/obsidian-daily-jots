@@ -903,7 +903,7 @@ class WebClipper {
     const content = `${frontmatter}# ${escapeWebText(title)}\n\n${markdown}${report}\n`;
     if (typeof this.writer.upsertText === "function") await this.writer.upsertText(notePath, content);
     else await this.writer.createText(notePath, content);
-    return { notePath, article: { ...article, title, identityUrl }, reused, savedImages, savedFiles, imageFailures: failures, imageSkipped: skippedImages, fileFailures };
+    return { notePath, article: { ...article, title, identityUrl }, sourceLabel, reused, savedImages, savedFiles, imageFailures: failures, imageSkipped: skippedImages, fileFailures };
   }
 }
 

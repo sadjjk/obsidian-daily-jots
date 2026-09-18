@@ -78,7 +78,14 @@ function formatCaptureReceipt(result, locale = "zh-CN", preview = null) {
   const diaryFallback = translate(locale, "日记", "Daily");
   const clippingFallback = translate(locale, "全渠道剪藏", "Clippings");
   const diaryFolder = displayFolder(result.diaryFolder || folderFromPath(result.diaryPath, diaryFallback), diaryFallback);
-  const clippingFolder = displayFolder(result.clippingFolder || folderFromPath(clips[0]?.notePath, clippingFallback), clippingFallback);
+  // 剪藏实际路径为 <分类>/<日期>/文件,显示到分类级(去掉文件名与日期段)
+  const clipPathParts = String(clips[0]?.notePath || "").replace(/\\/g, "/").split("/").filter(Boolean);
+  const clippingFolder = displayFolder(
+    (clipPathParts.length > 2 ? clipPathParts.slice(0, -2).join("/") : "")
+      || result.clippingFolder || folderFromPath(clips[0]?.notePath, clippingFallback),
+    clippingFallback,
+  );
+  const chatFolder = displayFolder(result.attachmentChatFolder, "Attachments");
   const lines = [];
 
   // 保存结果预览:与笔记同源的 markdown 正文,滤掉图片与视频链接,保留换行,截断补 …。
@@ -144,6 +151,9 @@ function formatCaptureReceipt(result, locale = "zh-CN", preview = null) {
     const extractedZh = commentCount ? `正文、${commentCount} 条评论和 ${savedImages} 张图片` : `正文和 ${savedImages} 张图片`;
     const partialZh = commentCount ? `正文片段、${commentCount} 条评论和 ${savedImages} 张图片` : `正文片段和 ${savedImages} 张图片`;
     const savedFileDetail = savedFiles ? (locale === "en" ? ` The original source file was also saved.` : `，并保留 ${savedFiles} 个原文件`) : "";
+    // 来源渠道标注(frontmatter platform 同源);普通网页无信息量,不标注
+    const sourceLabel = String(clip.sourceLabel || "").trim();
+    const sourceDetail = sourceLabel && sourceLabel !== "普通网页" ? (locale === "en" ? `, from ${sourceLabel}` : `，来自${sourceLabel}`) : "";
     const skippedDetail = skippedImages ? (locale === "en"
       ? `; ${skippedImages} more image${skippedImages === 1 ? "" : "s"} beyond the per-clipping limit kept their remote URLs`
       : `，另有 ${skippedImages} 张图片超出单篇上限已在正文保留原链`)
@@ -154,24 +164,24 @@ function formatCaptureReceipt(result, locale = "zh-CN", preview = null) {
         if (failedImages) failed.push(`${failedImages} additional image${failedImages === 1 ? "" : "s"}`);
         if (failedFiles) failed.push(`${failedFiles} original file${failedFiles === 1 ? "" : "s"}`);
         const failedDetail = failed.length ? `; ${failed.join(" and ")} failed to save` : "";
-        pushWithPreview(`⚠️ “${title}” was only partially extracted. ${partialEn[0].toUpperCase()}${partialEn.slice(1)} were saved to “${clippingFolder}”${failedDetail}${skippedDetail}.`, clip);
+        pushWithPreview(`⚠️ “${title}” was only partially extracted. ${partialEn[0].toUpperCase()}${partialEn.slice(1)} were saved to “${clippingFolder}”${sourceDetail}${failedDetail}${skippedDetail}.`, clip);
       } else if (failedImages || failedFiles) {
         const failed = [];
         if (failedImages) failed.push(`${failedImages} additional image${failedImages === 1 ? "" : "s"}`);
         if (failedFiles) failed.push(`${failedFiles} original file${failedFiles === 1 ? "" : "s"}`);
-        pushWithPreview(`⚠️ “${title}” was saved to “${clippingFolder}” with ${extractedEn}; ${failed.join(" and ")} failed to save${skippedDetail}.`, clip);
+        pushWithPreview(`⚠️ “${title}” was saved to “${clippingFolder}”${sourceDetail} with ${extractedEn}; ${failed.join(" and ")} failed to save${skippedDetail}.`, clip);
       } else {
-        pushWithPreview(`🔖 “${title}” was saved to “${clippingFolder}” with ${extractedEn}.${savedFileDetail}${skippedDetail}`, clip);
+        pushWithPreview(`🔖 “${title}” was saved to “${clippingFolder}”${sourceDetail} with ${extractedEn}.${savedFileDetail}${skippedDetail}`, clip);
       }
     } else {
       if (clip.article?.extractionStatus === "partial") {
         const failedDetail = `${failedImages ? `，另有 ${failedImages} 张图片保存失败` : ""}${failedFiles ? `，${failedFiles} 个原文件保存失败` : ""}`;
-        pushWithPreview(`⚠️ 《${title}》正文提取不完整，已保存${partialZh}到「${clippingFolder}」${failedDetail}${skippedDetail}`, clip);
+        pushWithPreview(`⚠️ 《${title}》正文提取不完整，已保存${partialZh}到「${clippingFolder}」${sourceDetail}${failedDetail}${skippedDetail}`, clip);
       } else if (failedImages || failedFiles) {
         const failedDetail = `${failedImages ? `，另有 ${failedImages} 张图片保存失败` : ""}${failedFiles ? `，${failedFiles} 个原文件保存失败` : ""}`;
-        pushWithPreview(`⚠️ 《${title}》已提取${extractedZh}并保存到「${clippingFolder}」${failedDetail}${skippedDetail}`, clip);
+        pushWithPreview(`⚠️ 《${title}》已提取${extractedZh}并保存到「${clippingFolder}」${sourceDetail}${failedDetail}${skippedDetail}`, clip);
       } else {
-        pushWithPreview(`🔖 《${title}》已提取${extractedZh}并保存到「${clippingFolder}」${savedFileDetail}${skippedDetail}`, clip);
+        pushWithPreview(`🔖 《${title}》已提取${extractedZh}并保存到「${clippingFolder}」${sourceDetail}${savedFileDetail}${skippedDetail}`, clip);
       }
     }
   }
@@ -179,7 +189,7 @@ function formatCaptureReceipt(result, locale = "zh-CN", preview = null) {
 
   if (locale === "en") {
     if (!clips.length && !clipFailures) lines.push(`✍️ Saved to today's note in “${diaryFolder}”.`);
-    if (savedAttachments) lines.push(`📎 Saved ${savedAttachments} attachment${savedAttachments === 1 ? "" : "s"} to today's note in “${diaryFolder}”.`);
+    if (savedAttachments) lines.push(`📎 Saved ${savedAttachments} attachment${savedAttachments === 1 ? "" : "s"} to “${chatFolder}”.`);
     if (clipFailures) {
       lines.push(`⚠️ ${clipFailures} web page${clipFailures === 1 ? "" : "s"} could not be extracted. The original link${clipFailures === 1 ? " was" : "s were"} kept in today's note in “${diaryFolder}”.`);
       for (const detail of clipFailureDetails) lines.push(`Reason: ${failureReason(detail)}`);
@@ -188,7 +198,7 @@ function formatCaptureReceipt(result, locale = "zh-CN", preview = null) {
     if (attachmentExtractionFailures) lines.push(`⚠️ Text could not be extracted from ${attachmentExtractionFailures} saved PDF attachment${attachmentExtractionFailures === 1 ? "" : "s"}. The original PDF${attachmentExtractionFailures === 1 ? " was" : "s were"} kept.`);
   } else {
     if (!clips.length && !clipFailures) lines.push(`✍️ 已保存到今天的「${diaryFolder}」`);
-    if (savedAttachments) lines.push(`📎 已保存 ${savedAttachments} 个附件到今天的「${diaryFolder}」`);
+    if (savedAttachments) lines.push(`📎 已保存 ${savedAttachments} 个附件到「${chatFolder}」`);
     if (clipFailures) {
       lines.push(`⚠️ ${clipFailures} 个网页未能提取正文，原始链接已保存在今天的「${diaryFolder}」`);
       for (const detail of clipFailureDetails) lines.push(`原因：${failureReason(detail)}`);

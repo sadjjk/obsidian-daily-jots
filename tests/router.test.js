@@ -281,8 +281,32 @@ test("chat PDF receipts report extracted pages and preserved attachments", () =>
     savedAttachments: 1,
     attachmentFailures: [],
     attachmentExtractionFailures: [],
+    attachmentChatFolder: "Omnichannel Diary/Attachments/Chat",
   });
   assert.match(text, /^🔖 《季度报告》已提取 12 页 PDF 正文并保存到「全渠道剪藏」/);
-  assert.match(text, /📎 已保存 1 个附件到今天的「日记」/);
+  assert.match(text, /📎 已保存 1 个附件到「Omnichannel Diary\/Attachments\/Chat」/);
+});
+
+test("clipping receipts show the family subfolder path and source channel", () => {
+  const text = formatCaptureReceipt({
+    diaryPath: "Omnichannel Diary/Daily/2026-09-18.md",
+    diaryFolder: "Omnichannel Diary/Daily",
+    clips: [{
+      notePath: "Omnichannel Diary/Clippings/Documents/2026-09-18/2026-09-18-钉钉文档-操作手册-abc123.md",
+      sourceLabel: "钉钉文档",
+      article: { title: "操作手册", extractionStatus: "complete" },
+      savedImages: 30, imageFailures: [], imageSkipped: [], fileFailures: [],
+    }],
+    clipFailures: [], attachmentFailures: [],
+  });
+  assert.match(text, /已提取正文和 30 张图片并保存到「Omnichannel Diary\/Clippings\/Documents」，来自钉钉文档/);
+  // 普通网页不加来源标注
+  const plain = formatCaptureReceipt({
+    diaryPath: "日记/today.md",
+    clips: [{ notePath: "全渠道剪藏/Articles/2026-09-18/x-abc.md", sourceLabel: "普通网页", article: { title: "x", extractionStatus: "complete" }, savedImages: 0, imageFailures: [], imageSkipped: [], fileFailures: [] }],
+    clipFailures: [], attachmentFailures: [],
+  });
+  assert.match(plain, /保存到「全渠道剪藏\/Articles」/);
+  assert.doesNotMatch(plain, /来自/);
 });
 
