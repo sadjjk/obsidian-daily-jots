@@ -67,10 +67,6 @@ test("new web clipping limits default to a bounded message budget", () => {
   assert.equal(settings.capture.webClipBudgetSeconds, 75);
 });
 
-test("new code-platform settings keep existing installs on extraction mode", () => {
-  const settings = normalizeSettings({ schemaVersion: 1, storage: { diaryFolder: "日记" } });
-});
-
 test("language choice is preserved and invalid values fall back to Obsidian auto detection", () => {
   assert.equal(normalizeSettings({ schemaVersion: 1, ui: { language: "en" } }).ui.language, "en");
   assert.equal(normalizeSettings({ schemaVersion: 1, ui: { language: "zh-cn" } }).ui.language, "zh-CN");
