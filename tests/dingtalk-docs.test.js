@@ -68,7 +68,7 @@ test("fetchDocumentData posts a-dentry-key plus jar cookies and validates isSucc
 
 function packageSample() {
   return JSON.stringify({
-    fileMetaInfo: { name: "测试文档" },
+    fileMetaInfo: { name: "测试文档", creator: { nick: "钉钉用户6073" }, gmtCreate: 1723528618000 },
     parts: { main: { data: { body: ["root", {},
       ["h1", {}, ["span", { "data-type": "text" }, ["span", { "data-type": "leaf" }, "标题一"]]],
       ["p", {}, ["span", { "data-type": "text" }, ["span", { "data-type": "leaf", "bold": true, "italic": true }, "粗斜体"]]],
@@ -141,6 +141,8 @@ test("extractDingtalkDoc injects session cookies into GET and POST and skips the
   } };
   const doc = await extractDingtalkDoc("https://alidocs.dingtalk.com/i/nodes/gpG2NdyVX3mmZxQYHA1AGnXAWMwvDqPk?utm_scene=person_space", { webSessionManager: manager, fetchImpl });
   assert.equal(doc.title, "测试文档");
+  assert.equal(doc.author, "钉钉用户6073");
+  assert.equal(doc.publishedAt, "2024-08-13T05:56:58.000Z");
   assert.ok(doc.html.includes("标题一"));
   assert.equal(doc.cookieHeader, "doc_atoken=tok; stayLogin=1");
   assert.equal(doc.imageHeaders.cookie, "doc_atoken=tok; stayLogin=1");

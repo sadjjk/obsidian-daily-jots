@@ -172,7 +172,15 @@ function packageToHtml(payload) {
   // 标题兜底:fileMetaInfo.name 缺失时,文件名在元数据 part 的 data.fileName(与正文 part 可能不同)
   const metaPart = values.find((part) => part && part.data && part.data.fileName);
   const html = slateNodeToHtml(body).replace(/\n{3,}/g, "\n\n").trim();
-  return { title: String(meta.name || (metaPart && metaPart.data && metaPart.data.fileName) || "钉钉文档"), html };
+  // 实测 fileMetaInfo:creator.nick 为作者昵称,gmtCreate 为文档创建时间(epoch 毫秒)
+  const author = String(meta.creator && meta.creator.nick || "");
+  const publishedAt = meta.gmtCreate ? new Date(meta.gmtCreate).toISOString() : "";
+  return {
+    title: String(meta.name || (metaPart && metaPart.data && metaPart.data.fileName) || "钉钉文档"),
+    html,
+    author,
+    publishedAt,
+  };
 }
 
 async function extractDingtalkDoc(url, { webSessionManager, fetchImpl = globalThis.fetch } = {}) {
@@ -195,10 +203,10 @@ async function extractDingtalkDoc(url, { webSessionManager, fetchImpl = globalTh
   }
   const dentryKey = await resolveDentryKey(url, jar, fetchImpl);
   const payload = await fetchDocumentData(dentryKey, jar, fetchImpl);
-  const { title, html } = packageToHtml(payload);
+  const { title, html, author, publishedAt } = packageToHtml(payload);
   const mergedCookie = jarHeader(jar);
   const imageHeaders = { cookie: mergedCookie || cookieHeader, "a-dentry-key": dentryKey };
-  return { title, html, cookieHeader, imageHeaders };
+  return { title, html, author, publishedAt, cookieHeader, imageHeaders };
 }
 
 module.exports = { resolveDentryKey, fetchDocumentData, packageToHtml, extractDingtalkDoc };

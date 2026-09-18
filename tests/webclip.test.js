@@ -358,7 +358,7 @@ function dingtalkTestSettings() {
 
 function dingtalkPackageJson() {
   return JSON.stringify({
-    fileMetaInfo: { name: "新人百宝箱" },
+    fileMetaInfo: { name: "新人百宝箱", creator: { nick: "张三" }, gmtCreate: 1700000000000 },
     parts: { main: { data: { body: ["root", {},
       ["h1", {}, ["span", { "data-type": "text" }, ["span", { "data-type": "leaf" }, "欢迎标题"]]],
       ["p", {}, ["span", { "data-type": "text" }, ["span", { "data-type": "leaf" }, "私有文档正文需要写足够长的内容以通过完整性校验,这里是钉钉文档 API 直取的正文样本。".repeat(3)]]],
@@ -387,6 +387,8 @@ test("DingTalk doc pages clip through the document/data API with session cookies
   const article = await clipper.extract("https://alidocs.dingtalk.com/i/nodes/gpG2NdyVX3mmZxQYHA1AGnXAWMwvDqPk?utm_scene=person_space");
   assert.equal(article.extractionMethod, "dingtalk-api");
   assert.equal(article.title, "新人百宝箱");
+  assert.equal(article.byline, "张三");
+  assert.equal(article.publishedAt, "2023-11-14T22:13:20.000Z");
   assert.equal(article.canonicalUrl, "https://alidocs.dingtalk.com/i/nodes/gpG2NdyVX3mmZxQYHA1AGnXAWMwvDqPk?utm_scene=person_space");
   assert.equal(cookieCalls[0], "dingtalk");
   assert.ok(JSON.stringify(article).includes("欢迎标题"));

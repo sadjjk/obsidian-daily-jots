@@ -433,7 +433,7 @@ function articleFromHtml(html, finalUrl, overrides = {}) {
     extractionMethod: article.extractionMethod || "rendered-page",
     extractionStatus: contentChars >= 120 ? "complete" : "partial",
     commentCount,
-    publishedAt: hostname.toLowerCase() === "mp.weixin.qq.com" ? publishedWechatTime(rawHtml) : "",
+    publishedAt: article.publishedAt || (hostname.toLowerCase() === "mp.weixin.qq.com" ? publishedWechatTime(rawHtml) : ""),
   };
 }
 
@@ -712,6 +712,8 @@ class WebClipper {
         siteName: DOCUMENT_SERVICES.dingtalk?.name || "钉钉文档",
         content: dingtalk.html,
         extractionMethod: "dingtalk-api",
+        byline: dingtalk.author,
+        publishedAt: dingtalk.publishedAt,
       });
       article.canonicalUrl = url;
       // 钉钉图片(站内 /core/api/resources/img 与 down.dingtalk.com)下载需要登录态
