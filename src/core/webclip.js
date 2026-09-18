@@ -8,6 +8,7 @@ const { localDateParts, safeFileName, shortHash, yamlString } = require("./util"
 const { extractPdf } = require("./pdfclip");
 const { extractRedditPost, parseRedditUrl } = require("./redditclip");
 const { COMMUNITY_SERVICES, DOCUMENT_SERVICES, communityServiceForUrl, documentServiceForUrl, googleDocumentKind, googleExportUrl, googleFileIdFromUrl, isLikelyPdfUrl, renderServiceForUrl } = require("./web-platforms");
+const { extractDingtalkDoc } = require("./dingtalk-docs");
 const { extractXStatus } = require("./xclip");
 const { extractBilibili, isBilibiliUrl, isBilibiliVideoUrl } = require("./biliclip");
 const { extractXiaohongshu, isXiaohongshuUrl, isXhsNoteUrl } = require("./xhsclip");
@@ -695,6 +696,17 @@ class WebClipper {
           return { ...article, commentCount: data.commentCount || 0, extractionStatus: data.extractionStatus || article.extractionStatus };
         }
       } catch (error) { communityError = error; }
+    }
+    if (documentServiceForUrl(url) === "dingtalk") {
+      const dingtalk = await extractDingtalkDoc(url, { webSessionManager: this.sessionManager });
+      const article = articleFromHtml(dingtalk.html, url, {
+        title: dingtalk.title,
+        siteName: DOCUMENT_SERVICES.dingtalk?.name || "钉钉文档",
+        content: dingtalk.html,
+        extractionMethod: "dingtalk-api",
+      });
+      article.canonicalUrl = url;
+      return article;
     }
     if (documentServiceForUrl(url) === "google") {
       try {
