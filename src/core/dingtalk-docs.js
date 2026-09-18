@@ -20,6 +20,31 @@ async function responseJson(response) {
   return JSON.parse(await responseText(response));
 }
 
+// 匿名访客 cookie jar:GET i/nodes 与 POST document/data 时服务端会 set-cookie,
+// 图片(resources/img)请求必须带上这些 cookie,否则返回「暂无权限访问」占位图(实测)。
+// 兼容两种响应形态:原生 fetch 的 headers.getSetCookie();safeFetch 的 get("set-cookie")(join 串,按「逗号+name=」启发式拆分)。
+function collectSetCookies(response) {
+  const headers = response.headers;
+  if (headers && typeof headers.getSetCookie === "function") {
+    return headers.getSetCookie().filter(Boolean);
+  }
+  const value = headers && typeof headers.get === "function" ? headers.get("set-cookie") : null;
+  if (!value) return [];
+  return value.split(/,\s*(?=[A-Za-z_][\w.-]*=)/);
+}
+
+function mergeCookieJar(jar, response) {
+  for (const line of collectSetCookies(response)) {
+    const pair = line.split(";")[0];
+    const idx = pair.indexOf("=");
+    if (idx > 0) jar.set(pair.slice(0, idx).trim(), pair.slice(idx + 1).trim());
+  }
+}
+
+function jarHeader(jar) {
+  return jar && jar.size ? [...jar.entries()].map(([k, v]) => `${k}=${v}`).join("; ") : "";
+}
+
 function dingtalkError(message, code) {
   const error = new Error(message);
   if (code) error.code = code;
@@ -42,13 +67,14 @@ function requestHeaders(cookieHeader) {
   return headers;
 }
 
-async function resolveDentryKey(url, cookieHeader = "", fetchImpl = globalThis.fetch) {
+async function resolveDentryKey(url, jar = new Map(), fetchImpl = globalThis.fetch) {
   const previewKey = new URL(url).searchParams.get("dentryKey");
   if (previewKey) return previewKey;
-  const response = await fetchImpl(url, { headers: requestHeaders(cookieHeader) });
+  const response = await fetchImpl(url, { headers: requestHeaders(jarHeader(jar)) });
   if (!response.ok) {
     throw dingtalkError(`钉钉文档页面返回 HTTP ${response.status}:${url}`, "DINGTALK_DOCS_UNREACHABLE");
   }
+  mergeCookieJar(jar, response);
   const html = await responseText(response);
   const match = html.match(DENTRY_KEY_PATTERN);
   if (!match) {
@@ -57,11 +83,11 @@ async function resolveDentryKey(url, cookieHeader = "", fetchImpl = globalThis.f
   return match[1];
 }
 
-async function fetchDocumentData(dentryKey, cookieHeader = "", fetchImpl = globalThis.fetch) {
+async function fetchDocumentData(dentryKey, jar = new Map(), fetchImpl = globalThis.fetch) {
   const response = await fetchImpl(`${DINGTALK_ORIGIN}/api/document/data`, {
     method: "POST",
     headers: {
-      ...requestHeaders(cookieHeader),
+      ...requestHeaders(jarHeader(jar)),
       "content-type": "application/json;charset=UTF-8",
       "a-dentry-key": dentryKey,
     },
@@ -70,6 +96,7 @@ async function fetchDocumentData(dentryKey, cookieHeader = "", fetchImpl = globa
   if (!response.ok) {
     throw dingtalkError(`钉钉 document/data 返回 HTTP ${response.status}`, "DINGTALK_DOCS_UNREACHABLE");
   }
+  mergeCookieJar(jar, response);
   const payload = await responseJson(response);
   if (payload && (payload.isSuccess === false || payload.success === false)) {
     throw dingtalkError("钉钉 document/data 报告 isSuccess=false(权限不足或链接失效)", "DINGTALK_DOCS_API_ERROR");
@@ -145,15 +172,23 @@ async function extractDingtalkDoc(url, { webSessionManager, fetchImpl = globalTh
   if (!/(^|\.)alidocs\.dingtalk\.com$/.test(hostname)) {
     throw dingtalkError(`非钉钉文档链接:${url}`, "DINGTALK_DOCS_URL_MISMATCH");
   }
+  // jar:登录 cookie(若有)+ 提取过程中服务端种的匿名访客 cookie;图片下载必须带后者
+  const jar = new Map();
   let cookieHeader = "";
   if (webSessionManager && typeof webSessionManager.collectCookies === "function") {
     cookieHeader = await webSessionManager.collectCookies("dingtalk", `${DINGTALK_ORIGIN}/`);
   }
-  const dentryKey = await resolveDentryKey(url, cookieHeader, fetchImpl);
-  const payload = await fetchDocumentData(dentryKey, cookieHeader, fetchImpl);
+  if (cookieHeader) {
+    for (const pair of cookieHeader.split("; ")) {
+      const idx = pair.indexOf("=");
+      if (idx > 0) jar.set(pair.slice(0, idx).trim(), pair.slice(idx + 1).trim());
+    }
+  }
+  const dentryKey = await resolveDentryKey(url, jar, fetchImpl);
+  const payload = await fetchDocumentData(dentryKey, jar, fetchImpl);
   const { title, html } = packageToHtml(payload);
-  // 图片下载上下文:登录 cookie + dentry key(resources/img 端点需要 dentry 上下文)
-  const imageHeaders = cookieHeader ? { cookie: cookieHeader, "a-dentry-key": dentryKey } : undefined;
+  const mergedCookie = jarHeader(jar);
+  const imageHeaders = { cookie: mergedCookie || cookieHeader, "a-dentry-key": dentryKey };
   return { title, html, cookieHeader, imageHeaders };
 }
 

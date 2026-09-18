@@ -12,34 +12,47 @@ test("resolveDentryKey takes the key straight from note/preview URL params", asy
 test("resolveDentryKey wide-matches the base62 dentryKey embedded in the page HTML", async () => {
   const html = '<script>window.__BOOT__={"dentryInfo":{"dentryKey":"nmbmj1wmconnN80l"}}</script>';
   const seen = [];
-  const key = await resolveDentryKey("https://alidocs.dingtalk.com/i/nodes/xxx", "doc_atoken=tok", async (url, options) => {
+  const jar = new Map([["doc_atoken", "tok"]]);
+  const key = await resolveDentryKey("https://alidocs.dingtalk.com/i/nodes/xxx", jar, async (url, options) => {
     seen.push({ url: String(url), headers: options.headers });
-    return { ok: true, status: 200, text: async () => html };
+    return { ok: true, status: 200, text: async () => html, headers: {} };
   });
   assert.equal(key, "nmbmj1wmconnN80l");
   assert.equal(seen[0].headers.cookie, "doc_atoken=tok");
   assert.equal(seen[0].headers.origin, "https://alidocs.dingtalk.com");
 });
 
+test("resolveDentryKey merges set-cookie from the page response into the jar", async () => {
+  const html = '{"dentryKey":"nmbmj1wmconnN80l"}';
+  const jar = new Map();
+  await resolveDentryKey("https://alidocs.dingtalk.com/i/nodes/xxx", jar, async () => ({
+    ok: true, status: 200, text: async () => html,
+    headers: { getSetCookie: () => ["XSRF-TOKEN=abc123; Path=/; Domain=.dingtalk.com", "cna=xyz; Expires=Wed, 21 Oct 2026 07:28:00 GMT"] },
+  }));
+  assert.equal(jar.get("XSRF-TOKEN"), "abc123");
+  assert.equal(jar.get("cna"), "xyz");
+});
+
 test("resolveDentryKey surfaces the login guidance error when the page has no dentryKey", async () => {
   await assert.rejects(
-    () => resolveDentryKey("https://alidocs.dingtalk.com/i/nodes/xxx", "", async () => ({ ok: true, status: 200, text: async () => "<html>login dingtalk</html>" })),
+    () => resolveDentryKey("https://alidocs.dingtalk.com/i/nodes/xxx", new Map(), async () => ({ ok: true, status: 200, text: async () => "<html>login dingtalk</html>", headers: {} })),
     (error) => error.code === "DINGTALK_DENTRY_KEY_NOT_FOUND" && /浏览器会话/.test(error.message),
   );
 });
 
 test("resolveDentryKey rejects non-2xx pages with a diagnostic code", async () => {
   await assert.rejects(
-    () => resolveDentryKey("https://alidocs.dingtalk.com/i/nodes/xxx", "", async () => ({ ok: false, status: 502, text: async () => "" })),
+    () => resolveDentryKey("https://alidocs.dingtalk.com/i/nodes/xxx", new Map(), async () => ({ ok: false, status: 502, text: async () => "", headers: {} })),
     (error) => error.code === "DINGTALK_DOCS_UNREACHABLE" && /502/.test(error.message),
   );
 });
 
-test("fetchDocumentData posts a-dentry-key plus cookies and validates isSuccess", async () => {
+test("fetchDocumentData posts a-dentry-key plus jar cookies and validates isSuccess", async () => {
   const seen = [];
-  const payload = await fetchDocumentData("nmbmj1wmconnN80l", "doc_atoken=tok; stayLogin=1", async (url, options) => {
+  const jar = new Map([["doc_atoken", "tok"], ["stayLogin", "1"]]);
+  const payload = await fetchDocumentData("nmbmj1wmconnN80l", jar, async (url, options) => {
     seen.push({ url: String(url), method: options.method, headers: options.headers, body: options.body });
-    return { ok: true, status: 200, json: async () => ({ status: 0, isSuccess: true, data: {} }) };
+    return { ok: true, status: 200, json: async () => ({ status: 0, isSuccess: true, data: {} }), headers: {} };
   });
   assert.equal(seen[0].method, "POST");
   assert.equal(seen[0].headers["a-dentry-key"], "nmbmj1wmconnN80l");
@@ -48,7 +61,7 @@ test("fetchDocumentData posts a-dentry-key plus cookies and validates isSuccess"
   assert.deepEqual(payload, { status: 0, isSuccess: true, data: {} });
 
   await assert.rejects(
-    () => fetchDocumentData("nmbmj1wmconnN80l", "", async () => ({ ok: true, status: 200, json: async () => ({ status: 1, isSuccess: false }) })),
+    () => fetchDocumentData("nmbmj1wmconnN80l", new Map(), async () => ({ ok: true, status: 200, json: async () => ({ status: 1, isSuccess: false }), headers: {} })),
     (error) => error.code === "DINGTALK_DOCS_API_ERROR",
   );
 });
@@ -107,6 +120,8 @@ test("extractDingtalkDoc injects session cookies into GET and POST and skips the
   assert.equal(doc.title, "测试文档");
   assert.ok(doc.html.includes("标题一"));
   assert.equal(doc.cookieHeader, "doc_atoken=tok; stayLogin=1");
+  assert.equal(doc.imageHeaders.cookie, "doc_atoken=tok; stayLogin=1");
+  assert.equal(doc.imageHeaders["a-dentry-key"], "nmbmj1wmconnN80l");
   assert.ok(seen.every((call) => call.headers.cookie === "doc_atoken=tok; stayLogin=1"));
   assert.ok(seen.some((call) => call.headers["a-dentry-key"] === "nmbmj1wmconnN80l"));
 });
@@ -123,12 +138,17 @@ test("extractDingtalkDoc rejects non-alidocs URLs without touching the session",
 
 // 回归:safeFetch 的 response 是 {status, ok, headers, body(async iterable)},没有 text/json 方法
 // (生产实测报错 "e.text is not a function")。模块必须双形态兼容。
-function safeFetchStyleResponse(bodyText) {
+function safeFetchStyleResponse(bodyText, setCookieValue) {
   const buffer = Buffer.from(bodyText, "utf8");
   return {
     status: 200,
     ok: true,
-    headers: { get: (name) => (String(name).toLowerCase() === "content-length" ? String(buffer.length) : null) },
+    headers: { get: (name) => {
+      const key = String(name).toLowerCase();
+      if (key === "content-length") return String(buffer.length);
+      if (key === "set-cookie") return setCookieValue || null;
+      return null;
+    } },
     body: (async function* () { yield buffer; })(),
   };
 }
@@ -140,13 +160,20 @@ test("responses without text/json (safeFetch shape) are read via the body stream
     if (String(url).includes("/api/document/data")) {
       return safeFetchStyleResponse(JSON.stringify({ status: 0, isSuccess: true, data: { documentContent: packageSample() } }));
     }
-    return safeFetchStyleResponse('{"dentryKey":"nmbmj1wmconnN80l"}');
+    // safeFetch 把多条 set-cookie join(", ")——验证「逗号+name=」启发式拆分与 jar 合并
+    return safeFetchStyleResponse('{"dentryKey":"nmbmj1wmconnN80l"}', "XSRF-TOKEN=abc; Path=/, cna=xyz; Expires=Wed, 21 Oct 2026 07:28:00 GMT, visitor=9; Domain=.dingtalk.com");
   };
   const doc = await extractDingtalkDoc("https://alidocs.dingtalk.com/i/nodes/gpG2NdyVX3mmZxQYHA1AGnXAWMwvDqPk", {
-    webSessionManager: { collectCookies: async () => "doc_atoken=tok" },
+    webSessionManager: { collectCookies: async () => "" },
     fetchImpl,
   });
   assert.equal(doc.title, "测试文档");
   assert.ok(doc.html.includes("标题一"));
   assert.equal(seen.length, 2);
+  // jar 合并了匿名访客 cookie:POST 与图片下载都带上
+  assert.ok(seen[1].includes("api/document/data"));
+  assert.match(doc.imageHeaders.cookie, /XSRF-TOKEN=abc/);
+  assert.match(doc.imageHeaders.cookie, /cna=xyz/);
+  assert.match(doc.imageHeaders.cookie, /visitor=9/);
+  assert.equal(doc.imageHeaders["a-dentry-key"], "nmbmj1wmconnN80l");
 });
