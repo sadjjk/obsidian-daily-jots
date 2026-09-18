@@ -6,9 +6,9 @@ const { isXiaohongshuUrl } = require("./xhsclip");
 const { isWeiboArticleUrl, isWeiboSearchUrl, isWeiboStatusUrl } = require("./weiboclip");
 const { isDouyinUrl } = require("./douyinclip");
 const { sourceNameForUrl } = require("./source-names");
-const { documentServiceForUrl, isLikelyPdfUrl } = require("./web-platforms");
+const { documentServiceForUrl } = require("./web-platforms");
 
-const CLIP_FAMILY_IDS = ["articles", "social", "documents", "pdfs"];
+const CLIP_FAMILY_IDS = ["articles", "social", "documents"];
 
 const CLIP_FAMILIES = {
   articles: {
@@ -34,14 +34,6 @@ const CLIP_FAMILIES = {
     defaultFolder: "Documents",
     zhDesc: "飞书 / Lark、腾讯文档、WPS、Google Docs / Sheets / Slides、Microsoft 365 / OneDrive",
     enDesc: "Feishu / Lark, Tencent Docs, WPS, Google Docs / Sheets / Slides, and Microsoft 365 / OneDrive",
-  },
-  pdfs: {
-    id: "pdfs",
-    zh: "PDF",
-    en: "PDFs",
-    defaultFolder: "PDFs",
-    zhDesc: "在线 PDF 和聊天里的 PDF 附件",
-    enDesc: "Online PDFs and PDF attachments from chat",
   },
 };
 
@@ -90,12 +82,6 @@ function isWeChatArticleUrl(value) {
 function classifyClipFamily(url, article = null, settings = null) {
   const raw = String(article?.url || url || "");
   const method = String(article?.extractionMethod || "");
-  if (
-    raw.startsWith("attachment:")
-    || method === "pdf-text"
-    || /pdf/i.test(method)
-    || isLikelyPdfUrl(raw)
-  ) return "pdfs";
   if (documentServiceForUrl(raw) || method.includes("rendered-document")) return "documents";
   if (parseXStatusUrl(raw) || isXiaohongshuUrl(raw) || isWeChatArticleUrl(raw) || isBilibiliUrl(raw)
     || isWeiboSearchUrl(raw) || isWeiboStatusUrl(raw) || isWeiboArticleUrl(raw) || isDouyinUrl(raw)
