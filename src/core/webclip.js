@@ -714,6 +714,8 @@ class WebClipper {
         extractionMethod: "dingtalk-api",
       });
       article.canonicalUrl = url;
+      // 钉钉图片(站内 /core/api/resources/img 与 down.dingtalk.com)下载需要登录态
+      if (dingtalk.imageHeaders) article.imageHeaders = dingtalk.imageHeaders;
       return article;
     }
     if (documentServiceForUrl(url) === "google") {
@@ -847,6 +849,7 @@ class WebClipper {
           if (remaining <= 0) throw new Error("skipped because the article time budget was exhausted");
           const downloaded = await this.download(imageUrl, {
             referrer: article.url,
+            ...(article.imageHeaders ? { headers: article.imageHeaders } : {}),
             maxBytes: Math.min((Number(this.settings.capture.maxFileMb) || 20) * 1024 * 1024, maxTotalBytes),
             timeoutMs: Math.min(10_000, remaining),
             requestAttempts: 2,

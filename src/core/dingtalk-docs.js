@@ -93,7 +93,10 @@ function slateNodeToHtml(node) {
   }
   if (type === "p") return inner.trim() ? `<p>${inner}</p>` : "";
   if (type === "img") {
-    const src = String((props && props.src) || "");
+    let src = String((props && props.src) || "");
+    if (!src) return "";
+    // 文档内嵌图片是站内相对路径(/core/api/resources/img/<hash>),媒体文件是 down.dingtalk.com 完整 URL
+    if (src.startsWith("/")) src = `${DINGTALK_ORIGIN}${src}`;
     if (!/^https?:/i.test(src)) return "";
     return `<p><img src="${escapeHtml(src)}" alt="${escapeHtml((props && props.alt) || "")}"></p>`;
   }
@@ -149,7 +152,9 @@ async function extractDingtalkDoc(url, { webSessionManager, fetchImpl = globalTh
   const dentryKey = await resolveDentryKey(url, cookieHeader, fetchImpl);
   const payload = await fetchDocumentData(dentryKey, cookieHeader, fetchImpl);
   const { title, html } = packageToHtml(payload);
-  return { title, html, cookieHeader };
+  // 图片下载上下文:登录 cookie + dentry key(resources/img 端点需要 dentry 上下文)
+  const imageHeaders = cookieHeader ? { cookie: cookieHeader, "a-dentry-key": dentryKey } : undefined;
+  return { title, html, cookieHeader, imageHeaders };
 }
 
 module.exports = { resolveDentryKey, fetchDocumentData, packageToHtml, extractDingtalkDoc };

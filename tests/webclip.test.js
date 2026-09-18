@@ -351,7 +351,7 @@ test("stealth evasions ship as a non-empty bundled script", () => {
 });
 
 function dingtalkTestSettings() {
-  return { storage: { clippingFolder: "Clippings", attachmentFolder: "Attachments" }, capture: { renderDynamicPages: true, webClipBudgetSeconds: 75, downloadWebImages: false } };
+  return { storage: { clippingFolder: "Clippings", attachmentFolder: "Attachments" }, capture: { renderDynamicPages: true, webClipBudgetSeconds: 75, downloadWebImages: true } };
 }
 
 function dingtalkPackageJson() {
@@ -360,6 +360,8 @@ function dingtalkPackageJson() {
     parts: { main: { data: { body: ["root", {},
       ["h1", {}, ["span", { "data-type": "text" }, ["span", { "data-type": "leaf" }, "欢迎标题"]]],
       ["p", {}, ["span", { "data-type": "text" }, ["span", { "data-type": "leaf" }, "私有文档正文需要写足够长的内容以通过完整性校验,这里是钉钉文档 API 直取的正文样本。".repeat(3)]]],
+      ["p", {}, ["img", { "src": "https://down.dingtalk.com/ddmedia/welcome.png", "alt": "欢迎图片" }]],
+      ["p", {}, ["img", { "src": "/core/api/resources/img/5eecdaf48460cde5b35547b8056687dd6f438ca4bd5a4c8dc1b0aaf4285a4450cf9289de50d8305639e8703ac5556d0d" }]],
     ] } } },
   });
 }
@@ -388,6 +390,11 @@ test("DingTalk doc pages clip through the document/data API with session cookies
   assert.ok(JSON.stringify(article).includes("欢迎标题"));
   assert.ok(seen.every((call) => call.headers.cookie === "doc_atoken=tok; stayLogin=1"));
   assert.ok(seen.some((call) => call.headers["a-dentry-key"] === "nmbmj1wmconnN80l"));
+  // 图片在 extract 层完成收集与绝对化(含 /core/api/resources/img 相对路径);
+  // 下载 headers 由 saveArticle 阶段从 article.imageHeaders 透传给 this.download
+  assert.equal(article.images.length, 2);
+  assert.ok(article.images.some((url) => url.startsWith("https://alidocs.dingtalk.com/core/api/resources/img/")));
+  assert.deepEqual(article.imageHeaders, { cookie: "doc_atoken=tok; stayLogin=1", "a-dentry-key": "nmbmj1wmconnN80l" });
 });
 
 test("DingTalk private docs surface the login guidance error without session cookies", async () => {
