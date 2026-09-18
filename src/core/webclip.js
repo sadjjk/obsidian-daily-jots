@@ -783,7 +783,10 @@ class WebClipper {
 
   async saveArticle(article, source = {}, options = {}) {
     const date = localDateParts(source.timestamp || new Date());
-    const sourceLabel = sourceNameForUrl(article.url, this.settings) || "普通网页";
+    const sourceLabel = sourceNameForUrl(article.url, this.settings)
+      || DOCUMENT_SERVICES[documentServiceForUrl(article.url)]?.name
+      || "普通网页";
+    const labelForPath = safeFileName(sourceLabel, "web");
     const title = compactTitle(article.title, new URL(article.url).hostname);
     const stem = safeFileName(title, new URL(article.url).hostname);
     const identityUrl = article.identityUrl || article.canonicalUrl || normalizedIdentityUrl(article.url);
@@ -793,14 +796,14 @@ class WebClipper {
     const existingPath = typeof this.writer.findTextBySuffix === "function"
       ? this.writer.findTextBySuffix(clipFolder, suffix)
       : "";
-    const notePath = existingPath || `${clipFolder}/${date.day}/${date.day}-${sourceLabel}-${stem}${suffix}`;
+    const notePath = existingPath || `${clipFolder}/${date.day}/${date.day}-${labelForPath}-${stem}${suffix}`;
     const reused = Boolean(existingPath);
     let markdown = article.markdown || article.excerpt || article.url;
     const failures = [];
     const fileFailures = [];
     let savedImages = 0;
     let savedFiles = 0;
-    const assetFolder = `${this.settings.storage.attachmentFolder}/Web/${date.day}/${date.day}-${sourceLabel}-${stem}-${shortHash(identityUrl)}`;
+    const assetFolder = `${this.settings.storage.attachmentFolder}/Web/${date.day}/${date.day}-${labelForPath}-${stem}-${shortHash(identityUrl)}`;
     for (const [index, file] of (article.binaryFiles || []).entries()) {
       try {
         const localPath = await this.writer.saveBinary(assetFolder, file.fileName || `source-${index + 1}`, file.buffer, file.mimeType);
