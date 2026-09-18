@@ -7,7 +7,7 @@ const { CLIP_FAMILIES, CLIP_FAMILY_IDS } = require("../core/clip-rules");
 const { REMOTE_EXPORT_FORMATS, remoteExportFormat } = require("../core/remote-search");
 const { codePlatformCoverage } = require("../core/code-platforms");
 const { COMMUNITY_SERVICES, DOCUMENT_SERVICES } = require("../core/web-platforms");
-const { BUILTIN_SOURCE_NAMES } = require("../core/source-names");
+const { BUILTIN_CHINA_SOURCE_NAMES, BUILTIN_SOURCE_NAMES } = require("../core/source-names");
 const { shortHash } = require("../core/util");
 
 const PROJECT_URL = "https://github.com/sadjjk/obsidian-omnichannel-diary";
@@ -655,7 +655,7 @@ class DiarySettingTab extends PluginSettingTab {
       international: { title: this.tr("国外来源", "International"), entries: [] },
     };
     for (const [name, hosts] of domainsByName) {
-      (isChineseName(name) ? groups.china : groups.international).entries.push([name, hosts]);
+      (isChineseName(name) || BUILTIN_CHINA_SOURCE_NAMES.has(name) ? groups.china : groups.international).entries.push([name, hosts]);
     }
     const coverageGrid = coverage.createDiv({ cls: "od-support-grid" });
     // 原生 title 在 Obsidian 里时灵时不灵,改用自绘 tooltip(fixed 定位,挂在 tag 内随其销毁)。

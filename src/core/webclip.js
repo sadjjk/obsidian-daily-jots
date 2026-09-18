@@ -832,7 +832,7 @@ class WebClipper {
             requestAttempts: 2,
             shouldRetry: (error) => error?.code === "ECONNRESET",
             httpAttempts: 1,
-            fileName: `${stem}-${String(index + 1).padStart(2, "0")}`,
+            fileName: `${stem}-img-${String(index + 1).padStart(2, "0")}`,
           });
           if (!downloaded.mimeType.startsWith("image/")) throw new Error(`not an image (${downloaded.mimeType})`);
           if (reservedBytes + downloaded.buffer.length > maxTotalBytes) throw new Error(`skipped because the article image budget is ${this.settings.capture.maxWebImageTotalMb || 50} MB`);

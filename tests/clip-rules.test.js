@@ -4,6 +4,13 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const { DiaryService } = require("../src/core/diary");
 const { WebClipper } = require("../src/core/webclip");
+const { localDateParts } = require("../src/core/util");
+
+test("localDateParts.iso uses local timezone offset", () => {
+  const iso = localDateParts(new Date("2026-09-17T08:44:38.910Z")).iso;
+  assert.match(iso, /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}[+-]\d{2}:\d{2}$/);
+  assert.equal(new Date(iso).getTime(), new Date("2026-09-17T08:44:38.910Z").getTime());
+});
 const {
   classifyClipFamily,
   defaultClipRules,
@@ -118,7 +125,7 @@ test("mapped source lands in Social with source label in filename and platform",
   assert.match(saved.notePath, /^Clippings\/Social\/2026-09-02\/2026-09-02-IT之家-IT之家新闻-/);
   assert.match(writes[0].content, /platform: "IT之家"/);
   assert.equal(binaries.length, 1);
-  assert.match(binaries[0].name, /^IT之家新闻-01$/);
+  assert.match(binaries[0].name, /^IT之家新闻-img-01$/);
   assert.match(binaries[0].folder, /^Attachments\/Web\/2026-09-02\/2026-09-02-IT之家-IT之家新闻-[0-9a-f]+$/);
   assert.ok(writes[0].content.includes(encodeURI(binaries[0].folder + "/" + binaries[0].name + ".png")));
 });

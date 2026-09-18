@@ -26,11 +26,15 @@ function shortHash(value) {
 
 function localDateParts(input = new Date()) {
   const date = input instanceof Date ? input : new Date(input);
-  const pad = (part) => String(part).padStart(2, "0");
+  const pad = (part, size = 2) => String(part).padStart(size, "0");
+  const offset = -date.getTimezoneOffset();
+  const offsetSign = offset >= 0 ? "+" : "-";
+  const offsetAbs = Math.abs(offset);
+  const offsetText = `${offsetSign}${pad(Math.floor(offsetAbs / 60))}:${pad(offsetAbs % 60)}`;
   return {
     day: `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`,
     time: `${pad(date.getHours())}:${pad(date.getMinutes())}`,
-    iso: date.toISOString(),
+    iso: `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}.${pad(date.getMilliseconds(), 3)}${offsetText}`,
   };
 }
 

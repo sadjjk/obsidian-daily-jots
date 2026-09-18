@@ -99,4 +99,19 @@ function sourceNameForUrl(url, settings) {
   return best;
 }
 
-module.exports = { BUILTIN_SOURCE_NAMES, normalizeSourceOverrides, sourceNameForUrl };
+// 名称不含中文但实际属于国内站点的来源,用于设置面板「国内/国外」分组展示。
+const BUILTIN_CHINA_SOURCE_NAMES = new Set([
+  "AcFun",
+  "NGA",
+  "CSDN",
+  "3DM",
+  "17173",
+  "InfoQ",
+  "Solidot",
+  "ZAKER",
+  "DoNews",
+  "AIBase",
+  "TapTap",
+]);
+
+module.exports = { BUILTIN_CHINA_SOURCE_NAMES, BUILTIN_SOURCE_NAMES, normalizeSourceOverrides, sourceNameForUrl };
