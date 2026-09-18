@@ -432,7 +432,85 @@ class WebSessionManager {
     const config = RENDER_SERVICES[service];
     if (!config) throw new Error(`Unsupported browser service: ${service}`);
     const entry = await this.start(service, { ...options, headless: false, initialUrl: config.loginUrl });
+    this.scheduleLoginCookieCapture(service);
     return { service, name: config.name, profilePath: this.profilePath(service), alreadyOpen: !entry.owned };
+  }
+
+  sessionCookiesFile(service) {
+    return path.join(this.rootPath, service, "omni-session-cookies.json");
+  }
+
+  // 登录 cookie 持久化:Chrome 对这类 profile 的 Cookies 数据库不保证及时落盘
+  // (实测用户关闭登录窗口后磁盘 0 行),因此把活跃实例内存里的 cookie 抓成插件自己的文件,
+  // 登录窗口关闭后剪藏仍可使用,直到平台使 cookie 失效。
+  persistCookiesFile(service, cookieHeader) {
+    try {
+      const file = this.sessionCookiesFile(service);
+      fs.mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
+      fs.writeFileSync(file, JSON.stringify({ capturedAt: Date.now(), cookieHeader }), { mode: 0o600 });
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  readPersistedCookies(service) {
+    try {
+      const parsed = JSON.parse(fs.readFileSync(this.sessionCookiesFile(service), "utf8"));
+      return String(parsed.cookieHeader || "");
+    } catch (_) {
+      return "";
+    }
+  }
+
+  // 从活跃实例的 CDP 抓 cookie;suffix 非空时按域名过滤,否则存全量(独立 profile 内只有本服务站点)
+  async captureActiveCookies(service, suffix = "") {
+    const entry = this.active.get(service);
+    if (!entry || entry.child.exitCode !== null) return "";
+    let client;
+    try {
+      client = await CdpClient.connect(entry.browserWebSocketDebuggerUrl, 2_000);
+      const result = await client.send("Storage.getCookies", {}, 8_000).catch(() => ({ cookies: [] }));
+      const cookies = (result.cookies || []).filter((cookie) => {
+        if (!suffix) return true;
+        return cookie.domain === suffix || cookie.domain === `.${suffix}` || cookie.domain.endsWith(`.${suffix}`);
+      });
+      if (!cookies.length) return "";
+      const header = cookies.map((cookie) => `${cookie.name}=${cookie.value}`).join("; ");
+      this.persistCookiesFile(service, header);
+      return header;
+    } catch (_) {
+      return "";
+    } finally {
+      if (client) client.close();
+    }
+  }
+
+  // 登录窗口打开后轮询抓取:用户完成登录的时机未知,cookie 一旦种上即持久化,
+  // 抓到即停;每 15s 一次,10 分钟上限。用户随后关闭窗口不影响已持久化的会话。
+  scheduleLoginCookieCapture(service) {
+    if (!this.loginCaptureTimers) this.loginCaptureTimers = new Map();
+    const previous = this.loginCaptureTimers.get(service);
+    if (previous) clearInterval(previous);
+    const timer = setInterval(() => {
+      const entry = this.active.get(service);
+      if (!entry || entry.child.exitCode !== null) {
+        clearInterval(timer);
+        this.loginCaptureTimers.delete(service);
+        return;
+      }
+      void this.captureActiveCookies(service).then((header) => {
+        if (header) {
+          clearInterval(timer);
+          this.loginCaptureTimers.delete(service);
+        }
+      });
+    }, 15_000);
+    setTimeout(() => {
+      clearInterval(timer);
+      this.loginCaptureTimers.delete(service);
+    }, 600_000);
+    this.loginCaptureTimers.set(service, timer);
   }
 
   async createPage(entry) {
@@ -546,6 +624,8 @@ class WebSessionManager {
   async close(service) {
     const entry = this.active.get(service);
     if (!entry) return;
+    // 优雅关闭前先抓一次内存 cookie(尽量持久化,失败不影响关闭流程)
+    await this.captureActiveCookies(service).catch(() => {});
     this.active.delete(service);
     try {
       const client = await CdpClient.connect(entry.browserWebSocketDebuggerUrl, 2_000);
@@ -580,6 +660,14 @@ class WebSessionManager {
    *    yield `options.requiredCookie`.
    */
   async collectCookies(service, warmupUrl, options = {}) {
+    // 三级获取:1) 登录窗口活着→抓内存 cookie(最准,顺手持久化);
+    // 2) 之前抓取过的持久化文件(窗口已关的兜底);3) 新起 headless 读 Chrome 磁盘数据库
+    let suffix = "";
+    try { suffix = new URL(warmupUrl).hostname.toLowerCase().split(".").slice(-2).join("."); } catch (_) { return ""; }
+    const activeCookies = await this.captureActiveCookies(service, suffix).catch(() => "");
+    if (activeCookies) return activeCookies;
+    const savedCookies = this.readPersistedCookies(service);
+    if (savedCookies) return savedCookies;
     const entry = await this.start(service, { browserExecutable: options.browserExecutable, headless: true });
     let client;
     try {
@@ -587,8 +675,6 @@ class WebSessionManager {
       await client.send("Page.enable");
       await client.send("Runtime.enable");
       await this.configurePage(client);
-      let suffix = "";
-      try { suffix = new URL(warmupUrl).hostname.toLowerCase().split(".").slice(-2).join("."); } catch (_) { return ""; }
       const readCookies = async () => {
         const result = await client.send("Storage.getCookies", {}, 10_000).catch(() => ({ cookies: [] }));
         return (result.cookies || [])

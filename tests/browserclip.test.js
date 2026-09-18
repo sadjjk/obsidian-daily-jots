@@ -140,3 +140,18 @@ test("public Google documents use the official export endpoint before rendering"
   assert.equal(article.identityUrl, "https://docs.google.com/document/d/abc123xyz");
   assert.deepEqual(calls, ["https://docs.google.com/document/d/abc123xyz/export?format=txt"]);
 });
+
+test("session cookie persistence writes, reads and survives corrupt files", () => {
+  const os = require("node:os");
+  const path = require("node:path");
+  const fs = require("node:fs");
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "omni-cookies-"));
+  const manager = new WebSessionManager(root);
+  assert.equal(manager.readPersistedCookies("dingtalk"), "");
+  assert.equal(manager.persistCookiesFile("dingtalk", "doc_atoken=tok; stayLogin=1"), true);
+  assert.equal(manager.readPersistedCookies("dingtalk"), "doc_atoken=tok; stayLogin=1");
+  assert.ok(fs.existsSync(path.join(root, "dingtalk", "omni-session-cookies.json")));
+  // 文件损坏时静默返回空,不阻塞剪藏
+  fs.writeFileSync(path.join(root, "dingtalk", "omni-session-cookies.json"), "{broken");
+  assert.equal(manager.readPersistedCookies("dingtalk"), "");
+});
