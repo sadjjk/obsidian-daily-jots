@@ -349,3 +349,54 @@ test("stealth evasions ship as a non-empty bundled script", () => {
   assert.ok(stealthScript.length > 10_000);
   assert.doesNotMatch(stealthScript, /HeadlessChrome/);
 });
+
+function dingtalkTestSettings() {
+  return { storage: { clippingFolder: "Clippings", attachmentFolder: "Attachments" }, capture: { renderDynamicPages: true, webClipBudgetSeconds: 75, downloadWebImages: false } };
+}
+
+function dingtalkPackageJson() {
+  return JSON.stringify({
+    fileMetaInfo: { name: "新人百宝箱" },
+    parts: { main: { data: { body: ["root", {},
+      ["h1", {}, ["span", { "data-type": "text" }, ["span", { "data-type": "leaf" }, "欢迎标题"]]],
+      ["p", {}, ["span", { "data-type": "text" }, ["span", { "data-type": "leaf" }, "私有文档正文需要写足够长的内容以通过完整性校验,这里是钉钉文档 API 直取的正文样本。".repeat(3)]]],
+    ] } } },
+  });
+}
+
+test("DingTalk doc pages clip through the document/data API with session cookies", async () => {
+  const cookieCalls = [];
+  const seen = [];
+  const clipper = new WebClipper({}, dingtalkTestSettings(), {
+    fetch: async (url, options = {}) => {
+      seen.push({ url: String(url), headers: options.headers || {} });
+      if (String(url).includes("/api/document/data")) {
+        return { response: { ok: true, status: 200, json: async () => ({ status: 0, isSuccess: true, data: { documentContent: dingtalkPackageJson() } }) } };
+      }
+      return { response: { ok: true, status: 200, text: async () => '{"dentryKey":"nmbmj1wmconnN80l"}' } };
+    },
+    sessionManager: {
+      collectCookies: async (service) => { cookieCalls.push(service); return "doc_atoken=tok; stayLogin=1"; },
+      extract: async () => { throw new Error("rendered path should not be used for dingtalk docs"); },
+    },
+  });
+  const article = await clipper.extract("https://alidocs.dingtalk.com/i/nodes/gpG2NdyVX3mmZxQYHA1AGnXAWMwvDqPk?utm_scene=person_space");
+  assert.equal(article.extractionMethod, "dingtalk-api");
+  assert.equal(article.title, "新人百宝箱");
+  assert.equal(article.canonicalUrl, "https://alidocs.dingtalk.com/i/nodes/gpG2NdyVX3mmZxQYHA1AGnXAWMwvDqPk?utm_scene=person_space");
+  assert.equal(cookieCalls[0], "dingtalk");
+  assert.ok(JSON.stringify(article).includes("欢迎标题"));
+  assert.ok(seen.every((call) => call.headers.cookie === "doc_atoken=tok; stayLogin=1"));
+  assert.ok(seen.some((call) => call.headers["a-dentry-key"] === "nmbmj1wmconnN80l"));
+});
+
+test("DingTalk private docs surface the login guidance error without session cookies", async () => {
+  const clipper = new WebClipper({}, dingtalkTestSettings(), {
+    fetch: async () => ({ response: { ok: true, status: 200, text: async () => "<html>redirect to login</html>" } }),
+    sessionManager: { collectCookies: async () => "" },
+  });
+  await assert.rejects(
+    clipper.extract("https://alidocs.dingtalk.com/i/nodes/gpG2NdyVX3mmZxQYHA1AGnXAWMwvDqPk"),
+    (error) => error.code === "DINGTALK_DENTRY_KEY_NOT_FOUND" && /浏览器会话/.test(error.message),
+  );
+});

@@ -1,0 +1,119 @@
+"use strict";
+
+const test = require("node:test");
+const assert = require("node:assert/strict");
+const { resolveDentryKey, fetchDocumentData, packageToHtml, extractDingtalkDoc } = require("../src/core/dingtalk-docs");
+
+test("resolveDentryKey takes the key straight from note/preview URL params", async () => {
+  const key = await resolveDentryKey("https://alidocs.dingtalk.com/note/preview?dentryKey=abc123def456&other=1");
+  assert.equal(key, "abc123def456");
+});
+
+test("resolveDentryKey wide-matches the base62 dentryKey embedded in the page HTML", async () => {
+  const html = '<script>window.__BOOT__={"dentryInfo":{"dentryKey":"nmbmj1wmconnN80l"}}</script>';
+  const seen = [];
+  const key = await resolveDentryKey("https://alidocs.dingtalk.com/i/nodes/xxx", "doc_atoken=tok", async (url, options) => {
+    seen.push({ url: String(url), headers: options.headers });
+    return { ok: true, status: 200, text: async () => html };
+  });
+  assert.equal(key, "nmbmj1wmconnN80l");
+  assert.equal(seen[0].headers.cookie, "doc_atoken=tok");
+  assert.equal(seen[0].headers.origin, "https://alidocs.dingtalk.com");
+});
+
+test("resolveDentryKey surfaces the login guidance error when the page has no dentryKey", async () => {
+  await assert.rejects(
+    () => resolveDentryKey("https://alidocs.dingtalk.com/i/nodes/xxx", "", async () => ({ ok: true, status: 200, text: async () => "<html>login dingtalk</html>" })),
+    (error) => error.code === "DINGTALK_DENTRY_KEY_NOT_FOUND" && /浏览器会话/.test(error.message),
+  );
+});
+
+test("resolveDentryKey rejects non-2xx pages with a diagnostic code", async () => {
+  await assert.rejects(
+    () => resolveDentryKey("https://alidocs.dingtalk.com/i/nodes/xxx", "", async () => ({ ok: false, status: 502, text: async () => "" })),
+    (error) => error.code === "DINGTALK_DOCS_UNREACHABLE" && /502/.test(error.message),
+  );
+});
+
+test("fetchDocumentData posts a-dentry-key plus cookies and validates isSuccess", async () => {
+  const seen = [];
+  const payload = await fetchDocumentData("nmbmj1wmconnN80l", "doc_atoken=tok; stayLogin=1", async (url, options) => {
+    seen.push({ url: String(url), method: options.method, headers: options.headers, body: options.body });
+    return { ok: true, status: 200, json: async () => ({ status: 0, isSuccess: true, data: {} }) };
+  });
+  assert.equal(seen[0].method, "POST");
+  assert.equal(seen[0].headers["a-dentry-key"], "nmbmj1wmconnN80l");
+  assert.equal(seen[0].headers.cookie, "doc_atoken=tok; stayLogin=1");
+  assert.deepEqual(JSON.parse(seen[0].body), { fetchBody: true });
+  assert.deepEqual(payload, { status: 0, isSuccess: true, data: {} });
+
+  await assert.rejects(
+    () => fetchDocumentData("nmbmj1wmconnN80l", "", async () => ({ ok: true, status: 200, json: async () => ({ status: 1, isSuccess: false }) })),
+    (error) => error.code === "DINGTALK_DOCS_API_ERROR",
+  );
+});
+
+function packageSample() {
+  return JSON.stringify({
+    fileMetaInfo: { name: "测试文档" },
+    parts: { main: { data: { body: ["root", {},
+      ["h1", {}, ["span", { "data-type": "text" }, ["span", { "data-type": "leaf" }, "标题一"]]],
+      ["p", {}, ["span", { "data-type": "text" }, ["span", { "data-type": "leaf", "bold": true, "italic": true }, "粗斜体"]]],
+      ["p", {}, ["img", { "src": "https://down.dingtalk.com/ddmedia/abc.png", "alt": "图" }]],
+      ["heading", { "level": 3 }, ["span", { "data-type": "text" }, ["span", { "data-type": "leaf" }, "三级标题"]]],
+      ["table", {}, ["span", { "data-type": "text" }, ["span", { "data-type": "leaf" }, "表格兜底"]]],
+    ] } } },
+  });
+}
+
+test("packageToHtml renders title, headings, bold+italic, images and unknown-node fallback", () => {
+  const { title, html } = packageToHtml({ data: { documentContent: packageSample() } });
+  assert.equal(title, "测试文档");
+  assert.ok(html.includes("<h1>标题一</h1>"));
+  assert.ok(/<strong><em>粗斜体<\/em><\/strong>|<em><strong>粗斜体<\/strong><\/em>/.test(html));
+  assert.ok(html.includes('<img src="https://down.dingtalk.com/ddmedia/abc.png" alt="图">'));
+  assert.ok(html.includes("<h3>三级标题</h3>"));
+  assert.ok(html.includes("表格兜底"));
+  assert.doesNotMatch(html, /\[object Object\]/); // props 不泄漏为正文
+});
+
+test("packageToHtml unwraps resultValue and checkpoint layers (observed response shapes)", () => {
+  const sample = JSON.parse(packageSample());
+  assert.equal(packageToHtml({ data: { documentContent: packageSample() } }).title, "测试文档");
+  assert.equal(packageToHtml({ resultValue: { documentContent: packageSample() } }).title, "测试文档");
+  assert.equal(packageToHtml({ data: { documentContent: JSON.stringify({ checkpoint: { content: packageSample() } }) } }).title, "测试文档");
+  assert.throws(() => packageToHtml({ data: {} }), (error) => error.code === "DINGTALK_PACKAGE_MALFORMED");
+  void sample;
+});
+
+test("extractDingtalkDoc injects session cookies into GET and POST and skips the rendered path", async () => {
+  const seen = [];
+  const fetchImpl = async (url, options = {}) => {
+    seen.push({ url: String(url), headers: options.headers || {} });
+    if (String(url).includes("/api/document/data")) {
+      return { ok: true, status: 200, json: async () => ({ status: 0, isSuccess: true, data: { documentContent: packageSample() } }) };
+    }
+    return { ok: true, status: 200, text: async () => '{"dentryKey":"nmbmj1wmconnN80l"}' };
+  };
+  const manager = { collectCookies: async (service, warmupUrl) => {
+    assert.equal(service, "dingtalk");
+    assert.equal(warmupUrl, "https://alidocs.dingtalk.com/");
+    return "doc_atoken=tok; stayLogin=1";
+  } };
+  const doc = await extractDingtalkDoc("https://alidocs.dingtalk.com/i/nodes/gpG2NdyVX3mmZxQYHA1AGnXAWMwvDqPk?utm_scene=person_space", { webSessionManager: manager, fetchImpl });
+  assert.equal(doc.title, "测试文档");
+  assert.ok(doc.html.includes("标题一"));
+  assert.equal(doc.cookieHeader, "doc_atoken=tok; stayLogin=1");
+  assert.ok(seen.every((call) => call.headers.cookie === "doc_atoken=tok; stayLogin=1"));
+  assert.ok(seen.some((call) => call.headers["a-dentry-key"] === "nmbmj1wmconnN80l"));
+});
+
+test("extractDingtalkDoc rejects non-alidocs URLs without touching the session", async () => {
+  let touched = false;
+  const manager = { collectCookies: async () => { touched = true; return ""; } };
+  await assert.rejects(
+    () => extractDingtalkDoc("https://example.com/i/nodes/xxx", { webSessionManager: manager }),
+    (error) => error.code === "DINGTALK_DOCS_URL_MISMATCH",
+  );
+  assert.equal(touched, false);
+});
