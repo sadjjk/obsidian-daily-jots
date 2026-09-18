@@ -525,7 +525,6 @@ class WebClipper {
     const required = service === "weibo" ? "SUB" : service === "zhihu" ? "__zse_ck" : undefined;
     const fallback = service === "weibo" || service === "weixin" ? undefined : "https://www.zhihu.com/explore";
     return this.sessionManager.collectCookies(service, warmupUrl, {
-      browserExecutable: this.settings.capture.browserExecutable,
       requiredCookie: required,
       fallbackUrl: fallback,
     }).catch(() => "");
@@ -712,7 +711,6 @@ class WebClipper {
         const captureTimeoutMs = Math.max(30_000, Math.min(60_000,
           (Math.max(10, Number(this.settings.capture.webClipBudgetSeconds) || 75) * 1000) - 12_000));
         const rendered = await this.sessionManager.extract(url, renderService, {
-          browserExecutable: this.settings.capture.browserExecutable,
           captureTimeoutMs,
         });
         const article = articleFromHtml(rendered.html, rendered.url, {
@@ -736,7 +734,7 @@ class WebClipper {
     if (!response.ok) {
       // 知乎对无 cookie 的裸 HTTP 一律 403:报出可操作的真实原因,而不是裸的 "Page returned HTTP 403"。
       if (isZhihuNoteUrl(url) && response.status === 403) {
-        throw new Error(`Zhihu returned HTTP 403 (cookie-gated); open its isolated session in plugin settings once to refresh cookies${zhihuError ? `, HTTP extraction also failed: ${zhihuError.message}` : ""}`);
+        throw new Error(`Zhihu returned HTTP 403 (risk-controlled); retry later${zhihuError ? `, HTTP extraction also failed: ${zhihuError.message}` : ""}`);
       }
       throw new Error(`Page returned HTTP ${response.status}`);
     }
@@ -750,7 +748,6 @@ class WebClipper {
     if (!renderService && this.settings.capture.renderDynamicPages !== false && this.sessionManager && detectCommunityPage(html, finalUrl)) {
       try {
         const rendered = await this.sessionManager.extract(finalUrl, "community-generic", {
-          browserExecutable: this.settings.capture.browserExecutable,
         });
         const renderedArticle = articleFromHtml(rendered.html, rendered.url, {
           title: rendered.title,

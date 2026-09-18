@@ -64,7 +64,7 @@ test("WebClipper uses an injected persistent renderer for dynamic documents", as
   } };
   const settings = {
     storage: { clippingFolder: "Clips", attachmentFolder: "Assets" },
-    capture: { renderDynamicPages: true, browserExecutable: "", downloadWebImages: false, maxFileMb: 20 },
+    capture: { renderDynamicPages: true, downloadWebImages: false, maxFileMb: 20 },
   };
   const clipper = new WebClipper({}, settings, { sessionManager });
   const article = await clipper.extract("https://docs.qq.com/doc/example");
@@ -83,7 +83,7 @@ test("WebClipper never falls back to a short static page after virtual document 
   } };
   const settings = {
     storage: { clippingFolder: "Clips", attachmentFolder: "Assets" },
-    capture: { renderDynamicPages: true, browserExecutable: "", downloadWebImages: false, maxFileMb: 20 },
+    capture: { renderDynamicPages: true, downloadWebImages: false, maxFileMb: 20 },
   };
   const clipper = new WebClipper({}, settings, { sessionManager });
   await assert.rejects(
@@ -117,7 +117,7 @@ test("public Google documents use the official export endpoint before rendering"
   const body = Buffer.from("Public Google document body. ".repeat(20));
   const clipper = new WebClipper({}, {
     storage: { clippingFolder: "Clips", attachmentFolder: "Assets" },
-    capture: { renderDynamicPages: true, browserExecutable: "", downloadWebImages: false, maxFileMb: 20 },
+    capture: { renderDynamicPages: true, downloadWebImages: false, maxFileMb: 20 },
   }, {
     sessionManager: { extract: async () => { throw new Error("must not render when export works"); } },
     fetch: async (url) => {

@@ -37,7 +37,7 @@ test("saved values are merged, folders normalized, and unknown inherited keys dr
   assert.equal(settings.remoteSearch.exportFormat, "md");
   assert.equal(settings.ui.language, "auto");
   assert.equal(settings.capture.renderDynamicPages, true);
-  assert.equal(settings.capture.browserExecutable, "");
+  assert.equal(settings.capture.browserExecutable, undefined);
   assert.equal(settings.capture.clipRules.articles.enabled, true);
   assert.equal(settings.capture.clipRules.social.folder, "Social");
   assert.equal(settings.capture.includeGroupMessages, undefined);

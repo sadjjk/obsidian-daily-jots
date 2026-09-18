@@ -58,7 +58,6 @@ const DEFAULT_SETTINGS = {
     codePlatformAdditionalHosts: "",
     downloadWebImages: true,
     renderDynamicPages: true,
-    browserExecutable: "",
     downloadChatAttachments: true,
     maxFileMb: 20,
     maxWebImages: 30,
@@ -118,7 +117,6 @@ function normalizeSettings(saved) {
   value.capture.webClipBudgetSeconds = Math.min(180, Math.max(15, Number(value.capture.webClipBudgetSeconds) || 75));
   value.capture.receiptPreview = value.capture.receiptPreview !== false;
   value.capture.receiptPreviewChars = Math.min(1000, Math.max(20, Number(value.capture.receiptPreviewChars) || 200));
-  value.capture.browserExecutable = String(value.capture.browserExecutable || "").trim();
   value.capture.clipRules = normalizeClipRules(value.capture.clipRules);
   // deepMerge 以 defaults 的键为基准,空对象默认值会吞掉用户数据——从原始输入直取。
   value.capture.sourceNameOverrides = normalizeSourceOverrides(source.capture?.sourceNameOverrides);
@@ -156,7 +154,6 @@ function migrateLegacySettings(saved) {
       codePlatformAdditionalHosts: "",
       downloadWebImages: legacySettings.webClipSaveImages !== false,
       renderDynamicPages: true,
-      browserExecutable: "",
       downloadChatAttachments: legacySettings.saveVoiceAudio !== false,
       maxFileMb: Number(legacySettings.webClipMaxTotalImageMb) || DEFAULT_SETTINGS.capture.maxFileMb,
       maxWebImages: Number(legacySettings.webClipMaxImages) || DEFAULT_SETTINGS.capture.maxWebImages,

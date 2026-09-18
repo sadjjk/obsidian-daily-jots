@@ -6,7 +6,7 @@ const { CHANNEL_IDS, clearChannelCredentials, getChannelMeta } = require("../cor
 const { CLIP_FAMILIES, CLIP_FAMILY_IDS } = require("../core/clip-rules");
 const { REMOTE_EXPORT_FORMATS, remoteExportFormat } = require("../core/remote-search");
 const { codePlatformCoverage } = require("../core/code-platforms");
-const { COMMUNITY_SERVICES, DOCUMENT_SERVICES } = require("../core/web-platforms");
+const { DOCUMENT_SERVICES } = require("../core/web-platforms");
 const { BUILTIN_CHINA_SOURCE_NAMES, BUILTIN_SOURCE_NAMES } = require("../core/source-names");
 const { shortHash } = require("../core/util");
 
@@ -748,36 +748,6 @@ class DiarySettingTab extends PluginSettingTab {
         }
       }, "is-primary");
     }
-    sessions.createEl("h4", { text: this.tr("社区媒体浏览器会话", "Community-media browser sessions") });
-    sessions.createEl("p", { text: this.tr(
-      "部分社区触发登录或真人验证时，可在对应隔离窗口完成一次验证；插件不会读取你现有浏览器的 Cookie。其他已支持社区默认直接公开提取。",
-      "When a community requires sign-in or human verification, complete it once in its isolated window. The plugin never reads existing browser cookies. Other supported communities use public extraction by default.",
-    ) });
-    for (const [id, service] of Object.entries(COMMUNITY_SERVICES).filter(([, item]) => item.session)) {
-      const row = sessions.createDiv({ cls: "od-session-row" });
-      const copy = row.createDiv({ cls: "od-session-copy" });
-      copy.createEl("strong", { text: service.name });
-      copy.createSpan({ text: this.plugin.webSessionManager.hasSessionData(id)
-        ? this.tr("已存在本地会话（仍需由平台确认是否有效）", "Local session data exists (the service still decides whether it remains valid)")
-        : this.tr("公开提取受限时再建立会话", "Create a session only if public extraction is challenged") });
-      iconButton(row, this.tr("打开验证窗口", "Open verification window"), "shield-check", async () => {
-        try {
-          const result = await this.plugin.webSessionManager.openLogin(id, { browserExecutable: this.plugin.settings.capture.browserExecutable });
-          new Notice(result.alreadyOpen
-            ? this.tr("{name} 窗口已打开", "The {name} window is already open", { name: service.name })
-            : this.tr("请在新窗口完成 {name} 登录或验证，完成后关闭窗口", "Complete {name} sign-in or verification in the new window, then close it", { name: service.name }), 9000);
-        } catch (error) {
-          new Notice(this.tr("无法打开验证窗口：{error}", "Could not open the verification window: {error}", { error: error?.message || error }), 9000);
-        }
-      }, "is-primary");
-    }
-    new Setting(sessions).setName(this.tr("浏览器程序路径（可选）", "Browser executable (optional)")).setDesc(this.tr(
-      "默认自动查找 Chrome、Edge、Brave 或 Chromium；只有未找到时才需要填写完整路径。",
-      "Chrome, Edge, Brave, or Chromium is detected automatically. Enter a full path only when detection fails.",
-    )).addText((input) => input.setPlaceholder(this.locale() === "en" ? "/path/to/chrome" : "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome").setValue(this.plugin.settings.capture.browserExecutable).onChange(async (value) => {
-      this.plugin.settings.capture.browserExecutable = value.trim();
-      await this.plugin.saveSettings();
-    }));
   }
 
   addToggle(parent, name, desc, key) {

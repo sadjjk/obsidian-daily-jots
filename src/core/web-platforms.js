@@ -79,13 +79,13 @@ const COMMON_REMOVE_SELECTORS = [
 // data-only: declare hosts, detail paths, content roots, and comment roots.
 const COMMUNITY_SERVICES = {
   reddit: {
-    name: "Reddit", region: "international", api: "reddit", session: true,
+    name: "Reddit", region: "international", api: "reddit",
     loginUrl: "https://www.reddit.com/login/", hosts: ["reddit.com", "redd.it"], paths: [/\/comments\//i, /^\/[a-z0-9]+\/?$/i],
     contentSelectors: ["main", "shreddit-post", "body"], commentSelectors: ["shreddit-comment", "[data-testid='comment']"],
     authPattern: "blocked by network security|log in to your reddit account|登录.*reddit",
   },
   producthunt: {
-    name: "Product Hunt", region: "international", session: true,
+    name: "Product Hunt", region: "international",
     loginUrl: "https://www.producthunt.com/", hosts: ["producthunt.com"], paths: [/\/(?:posts|products|p|daily)\//i],
     contentSelectors: ["main", "[role='main']", "body"], commentSelectors: ["[data-test*='comment' i]", "[class*='comment' i]"],
     authPattern: "安全验证|security verification|verify you are human|sign in.*product hunt",
@@ -120,7 +120,7 @@ const COMMUNITY_SERVICES = {
     ], paths: [/\/t\//i], contentSelectors: ["#main-outlet", "#topic", "main", "body"], commentSelectors: [".topic-post", ".cooked"],
   },
   medium: {
-    name: "Medium", region: "international", session: true,
+    name: "Medium", region: "international",
     loginUrl: "https://medium.com/", hosts: ["medium.com"], paths: [/\/@?[^/]+\//i, /^\/[^/]+\/[a-z0-9-]+-[a-f0-9]+/i],
     contentSelectors: ["article", "main", "body"], commentSelectors: ["[aria-label*='response' i]", "[data-testid*='response' i]"],
     authPattern: "sign in.*medium|member-only story|create an account to read",
@@ -157,7 +157,7 @@ const COMMUNITY_SERVICES = {
     hosts: ["v2ex.com"], paths: [/\/t\/\d+/i], contentSelectors: ["#Main", "main", "body"], commentSelectors: [".cell[id^='r_']"],
   },
   juejin: {
-    name: "掘金", region: "china", session: true, loginUrl: "https://juejin.cn/",
+    name: "掘金", region: "china", loginUrl: "https://juejin.cn/",
     hosts: ["juejin.cn"], paths: [/\/(?:post|pin)\/\d+/i], contentSelectors: [".article", "article", "main", "body"],
     commentSelectors: [".comment-list .comment-item", "[class*='comment-item' i]"], authPattern: "登录后继续|扫码登录|sign in.*juejin",
   },
@@ -179,12 +179,12 @@ const COMMUNITY_SERVICES = {
     hosts: ["oschina.net"], paths: [/\/(?:news|p|question|translate)\//i], contentSelectors: [".article-detail", "article", "main", "body"], commentSelectors: [".comment-list", "[class*='comment' i]"],
   },
   zhihu: {
-    name: "知乎", region: "china", session: true, loginUrl: "https://www.zhihu.com/signin",
+    name: "知乎", region: "china", loginUrl: "https://www.zhihu.com/signin",
     hosts: ["zhihu.com"], paths: [/\/(?:question\/\d+\/answer\/\d+|p\/\d+)/i, /\/question\/\d+\/?$/i], contentSelectors: [".Post-RichTextContainer", ".QuestionAnswer-content", "article", "main", "body"],
     commentSelectors: [".Comments-container", ".CommentItem"], authPattern: "登录知乎|扫码登录|sign in.*zhihu",
   },
   weibo: {
-    name: "微博", region: "china", api: "container-json", session: true,
+    name: "微博", region: "china", api: "container-json",
     loginUrl: "https://m.weibo.cn/", hosts: ["weibo.com", "weibo.cn"],
     paths: [/\/search\/?$/i],
     contentSelectors: [".weibo-search", "main", "body"],
@@ -198,7 +198,7 @@ const COMMUNITY_SERVICES = {
     commentSelectors: [],
   },
   xiaohongshu: {
-    name: "小红书 / REDnote", region: "china", api: "initial-state", session: true,
+    name: "小红书 / REDnote", region: "china", api: "initial-state",
     loginUrl: "https://www.xiaohongshu.com/", hosts: ["xiaohongshu.com", "xhslink.com", "xhslink.cn"],
     paths: [/\/(?:explore|discovery\/item)\/[a-z0-9]+/i, /\/[a-z]\/[a-z0-9_-]+/i],
     contentSelectors: ["#noteContainer", ".note-container", ".note-detail-mask", "main", "body"],
