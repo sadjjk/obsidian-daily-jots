@@ -117,3 +117,33 @@ test("extractDingtalkDoc rejects non-alidocs URLs without touching the session",
   );
   assert.equal(touched, false);
 });
+
+// 回归:safeFetch 的 response 是 {status, ok, headers, body(async iterable)},没有 text/json 方法
+// (生产实测报错 "e.text is not a function")。模块必须双形态兼容。
+function safeFetchStyleResponse(bodyText) {
+  const buffer = Buffer.from(bodyText, "utf8");
+  return {
+    status: 200,
+    ok: true,
+    headers: { get: (name) => (String(name).toLowerCase() === "content-length" ? String(buffer.length) : null) },
+    body: (async function* () { yield buffer; })(),
+  };
+}
+
+test("responses without text/json (safeFetch shape) are read via the body stream", async () => {
+  const seen = [];
+  const fetchImpl = async (url, options = {}) => {
+    seen.push(String(url));
+    if (String(url).includes("/api/document/data")) {
+      return safeFetchStyleResponse(JSON.stringify({ status: 0, isSuccess: true, data: { documentContent: packageSample() } }));
+    }
+    return safeFetchStyleResponse('{"dentryKey":"nmbmj1wmconnN80l"}');
+  };
+  const doc = await extractDingtalkDoc("https://alidocs.dingtalk.com/i/nodes/gpG2NdyVX3mmZxQYHA1AGnXAWMwvDqPk", {
+    webSessionManager: { collectCookies: async () => "doc_atoken=tok" },
+    fetchImpl,
+  });
+  assert.equal(doc.title, "测试文档");
+  assert.ok(doc.html.includes("标题一"));
+  assert.equal(seen.length, 2);
+});

@@ -5,6 +5,20 @@
 const DINGTALK_ORIGIN = "https://alidocs.dingtalk.com";
 const DENTRY_KEY_PATTERN = /"dentryKey"\s*:\s*"([^"]{8,64})"/i;
 const UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36 Edg/132";
+const { readLimitedBody } = require("./network");
+
+// 双形态兼容:原生 fetch Response 有 text/json;safeFetch 的自定义 response 只有
+// body(async iterable,IncomingMessage),webclip 体系一律用 readLimitedBody 读取。
+async function responseText(response, maxBytes = 8 * 1024 * 1024) {
+  if (typeof response.text === "function") return response.text();
+  const buffer = await readLimitedBody(response, maxBytes);
+  return buffer.toString("utf8");
+}
+
+async function responseJson(response) {
+  if (typeof response.json === "function") return response.json();
+  return JSON.parse(await responseText(response));
+}
 
 function dingtalkError(message, code) {
   const error = new Error(message);
@@ -35,7 +49,7 @@ async function resolveDentryKey(url, cookieHeader = "", fetchImpl = globalThis.f
   if (!response.ok) {
     throw dingtalkError(`钉钉文档页面返回 HTTP ${response.status}:${url}`, "DINGTALK_DOCS_UNREACHABLE");
   }
-  const html = await response.text();
+  const html = await responseText(response);
   const match = html.match(DENTRY_KEY_PATTERN);
   if (!match) {
     throw dingtalkError(`无法从页面提取 dentryKey(私有文档需先在「浏览器会话」面板登录钉钉):${url}`, "DINGTALK_DENTRY_KEY_NOT_FOUND");
@@ -56,7 +70,7 @@ async function fetchDocumentData(dentryKey, cookieHeader = "", fetchImpl = globa
   if (!response.ok) {
     throw dingtalkError(`钉钉 document/data 返回 HTTP ${response.status}`, "DINGTALK_DOCS_UNREACHABLE");
   }
-  const payload = await response.json();
+  const payload = await responseJson(response);
   if (payload && (payload.isSuccess === false || payload.success === false)) {
     throw dingtalkError("钉钉 document/data 报告 isSuccess=false(权限不足或链接失效)", "DINGTALK_DOCS_API_ERROR");
   }
