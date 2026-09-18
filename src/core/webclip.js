@@ -698,7 +698,15 @@ class WebClipper {
       } catch (error) { communityError = error; }
     }
     if (documentServiceForUrl(url) === "dingtalk") {
-      const dingtalk = await extractDingtalkDoc(url, { webSessionManager: this.sessionManager });
+      const dingtalk = await extractDingtalkDoc(url, {
+        webSessionManager: this.sessionManager,
+        // this.fetch(默认 safeFetch)返回 { response, finalUrl } 包装;解包出 response,
+        // 既保留 SSRF/重定向防护,也让测试注入的 mock fetch 生效。
+        fetchImpl: async (target, init) => {
+          const result = await this.fetch(target, init);
+          return result && result.response !== undefined ? result.response : result;
+        },
+      });
       const article = articleFromHtml(dingtalk.html, url, {
         title: dingtalk.title,
         siteName: DOCUMENT_SERVICES.dingtalk?.name || "钉钉文档",
