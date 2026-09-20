@@ -5,10 +5,11 @@ const net = require("node:net");
 
 function safeFileName(value, fallback = "item") {
   const cleaned = String(value || "").normalize("NFKC")
-    // Zero-width chars (SHY/ZWSP/ZWNJ/ZWJ/LRM/RLM/WJ/FEFF) are invisible in
-    // file names and break Obsidian search; drop them outright. The script
-    // allowlist below would otherwise keep U+200B-U+2060 (General Punctuation).
-    .replace(/[\u00AD\u200B-\u200F\u2060\uFEFF]/gu, "")
+    // Zero-width & invisible directional chars (SHY/ZWSP/ZWNJ/ZWJ/LRM/RLM/
+    // LRE-RLE-PDF-LRO-RLO/WJ/invisible operators/isolates/FEFF) are invisible
+    // in file names and break Obsidian search; drop them outright. The script
+    // allowlist below would otherwise keep U+200B-U+2069 (General Punctuation).
+    .replace(/[\u00AD\u200B-\u200F\u202A-\u202E\u2060-\u2064\u2066-\u2069\uFEFF]/gu, "")
     // Strip replacement chars and lone surrogates (u flag keeps paired emoji
     // intact) so note file names can never trip the OS with EILSEQ on open.
     .replace(/[\uFFFD\uD800-\uDFFF]/gu, "")

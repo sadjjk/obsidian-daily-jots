@@ -6,9 +6,13 @@ const { localIso } = require("../../core/util");
 // 解析为本地时区 localIso 与其他平台统一(无时刻部分取当天 00:00),解析失败保留原文兜底。
 function normalizeFeishuPublishedTime(value) {
   const raw = String(value || "").trim();
-  const match = raw.match(/(\d{4})[年./-](\d{1,2})[月./-](\d{1,2})日?(?:\s+(\d{1,2}):(\d{2}))?/);
-  if (!match) return raw;
-  const [, year, month, day, hour = "0", minute = "0"] = match;
+  const full = raw.match(/(\d{4})[年./-](\d{1,2})[月./-](\d{1,2})日?(?:\s+(\d{1,2}):(\d{2}))?/);
+  // 飞书对当年日期省略年份("5月19日修改"),按当前年补齐;往年才显示完整年份
+  const short = full ? null : raw.match(/(\d{1,2})月(\d{1,2})日(?:\s+(\d{1,2}):(\d{2}))?/);
+  if (!full && !short) return raw;
+  const [year, month, day, hour = "0", minute = "0"] = full
+    ? full.slice(1)
+    : [String(new Date().getFullYear()), ...short.slice(1)];
   const date = new Date(Number(year), Number(month) - 1, Number(day), Number(hour), Number(minute));
   return Number.isNaN(date.getTime()) ? raw : localIso(date);
 }

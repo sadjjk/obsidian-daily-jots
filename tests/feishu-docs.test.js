@@ -39,5 +39,10 @@ test("normalizeFeishuPublishedTime falls back to the raw copy when no date is pr
   assert.equal(normalizeFeishuPublishedTime("刚刚更新"), "刚刚更新");
   assert.equal(normalizeFeishuPublishedTime("编辑于 2023年11月3日"), localIso(new Date(2023, 10, 3)));
   assert.equal(normalizeFeishuPublishedTime("2023-11-03 14:30"), localIso(new Date(2023, 10, 3, 14, 30)));
+  // 飞书当年日期省略年份:"5月19日修改" → 当前年 5 月 19 日
+  assert.equal(
+    normalizeFeishuPublishedTime("5月19日修改"),
+    localIso(new Date(new Date().getFullYear(), 4, 19)),
+  );
   assert.equal(normalizeFeishuPublishedTime(""), "");
 });

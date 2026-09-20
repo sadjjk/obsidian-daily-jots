@@ -24,6 +24,8 @@ test("file names cannot escape the vault folder", () => {
 test("file names drop zero-width characters and whitespace entirely", () => {
   assert.equal(safeFileName("​‌‍​⁠​‌​​⁠​AI 鹊桥"), "AI鹊桥");
   assert.equal(safeFileName("a\u00ADb\u200Bc\u200Dd\u2060e\uFEFFf"), "abcdef");
+  // U+202A-LRE 等方向控制符在飞书标题里出现,同样不可见须删除
+  assert.equal(safeFileName("‬‬‬‬‬‬‬‬AgentUndoHook重构设计‬‬‬‬‬‬‬‬"), "AgentUndoHook重构设计");
   assert.equal(safeFileName("AI 鹊桥 - 飞书云文档"), "AI鹊桥-飞书云文档");
 });
 
