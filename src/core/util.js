@@ -20,7 +20,8 @@ function safeFileName(value, fallback = "item") {
     .replace(/\.{2,}/g, "-")
     .replace(/-+/g, "-")
     .replace(/[\u0000-\u001f]/g, "")
-    .replace(/\s+/g, " ").replace(/^\.+|\.+$/g, "").trim().slice(0, 120);
+    // File names carry no whitespace at all (user preference): "AI 鹊桥 - 飞书云文档" → "AI鹊桥-飞书云文档".
+    .replace(/\s+/g, "").replace(/^\.+|\.+$/g, "").trim().slice(0, 120);
   return cleaned || fallback;
 }
 

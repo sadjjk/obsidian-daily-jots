@@ -29,8 +29,8 @@ test("safe file names strip replacement chars and lone surrogates but keep emoji
   const cleaned = safeFileName("bad\uFFFD\uFFFDtitle \uD800lonely");
   assert.doesNotMatch(cleaned, /[\uFFFD]/);
   assert.doesNotMatch(cleaned, /[\uD800-\uDFFF]/);
-  assert.match(cleaned, /badtitle lonely/);
-  assert.match(safeFileName("apple 🍏 pie"), /apple 🍏 pie/);
+  assert.equal(cleaned, "badtitlelonely");
+  assert.equal(safeFileName("apple 🍏 pie"), "apple🍏pie");
 });
 
 test("safe file names drop code points macOS APFS refuses (U+07BE and friends)", () => {
