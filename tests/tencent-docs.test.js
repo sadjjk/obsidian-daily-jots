@@ -87,9 +87,10 @@ test("tencent mutations convert to markdown with heading, bold, image, and table
     { ty: "mp", bi: 0, ei: 4, pr: { run: { sz: { val: 480 } } } },
     { ty: "mp", bi: 5, ei: 9, pr: { run: { b: { val: true } } } },
     { ty: "mp", bi: 16, ei: 17, pr: { drawing: { inlineKeyword: { graphic: { graphicData: { pic } } } } } },
-  ];  const { title, author, markdown } = parseTencentDocPayload(docPayload(mutations));
+  ];  const { title, author, markdown, images } = parseTencentDocPayload(docPayload(mutations));
   assert.equal(title, "测试文档");
   assert.equal(author, "张三");
+  assert.deepEqual(images, ["https://docs.gtimg.com/img.png?w=800&h=600"]);
   assert.match(markdown, /# 一级标题/);
   assert.match(markdown, /\*\*粗体正文\*\*/);
   assert.match(markdown, /\| 名称 \| 数量 \|/);

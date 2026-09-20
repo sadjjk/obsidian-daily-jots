@@ -741,7 +741,7 @@ class WebClipper {
             excerpt: doc.markdown.replace(/\s+/g, " ").slice(0, 200),
             siteName: "腾讯文档",
             markdown: doc.markdown,
-            images: [],
+            images: doc.images || [],
             contentChars: doc.markdown.length,
             extractionMethod: "tencent-opendoc",
             extractionStatus: "complete",

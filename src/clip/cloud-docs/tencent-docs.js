@@ -109,6 +109,8 @@ function parseTencentDocPayload(payload) {
     title: String(clientVars.title || "").trim(),
     author: String(clientVars.userName || "").trim(),
     markdown: tencentDocToMarkdown(rawText, formatMap, imageMap, String(clientVars.title || "").trim()),
+    // 图片 URL 喂给既有 downloadWebImages 管线;markdown 里的 URL 与之逐字一致,下载后自动替换成本地路径
+    images: [...new Set(Object.values(imageMap).map((img) => img.url).filter(Boolean))],
   };
 }
 
