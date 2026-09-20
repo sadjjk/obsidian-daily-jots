@@ -110,6 +110,17 @@ test("tencent markdown converter keeps code lines in a fence and lists as list i
   assert.match(markdown, /^1\. 第一步$/m);
 });
 
+test("tencent TOC field codes and anchor entries are stripped, bold title line is skipped", () => {
+  const text = "测试\r**目录**\rTOC \\o \"1-1\" \\h \\z \\u [\"section-1\"](\\l)\r[\"section-2\"](\\l)\r## **一、正文标题**\r正文段\r";
+  const formatMap = {};
+  const markdown = tencentDocToMarkdown(text, formatMap, {}, "测试");
+  assert.doesNotMatch(markdown, /TOC \\o/);
+  assert.doesNotMatch(markdown, /\["section-\d"\]/);
+  assert.match(markdown, /## \*\*一、正文标题\*\*/);
+  assert.match(markdown, /\*\*目录\*\*/);
+  assert.doesNotMatch(markdown, /^# 测试$/m);
+});
+
 test("tencent extract fetches opendoc with session cookie and parses the body-only response", async () => {
   const text = "正文一段\r";
   const payload = docPayload([{ s: text }]);

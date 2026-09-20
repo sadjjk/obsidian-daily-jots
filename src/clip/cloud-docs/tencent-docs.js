@@ -202,7 +202,8 @@ function tencentDocToMarkdown(rawText, formatMap = {}, imageMap = {}, title = ""
       });
     }
     if (!inline || isImageUrlOnly(inline)) continue;
-    if (!skippedTitle && title && inline.trim() === String(title).trim()) { skippedTitle = true; continue; }
+    // 文档首行常与标题重复(可能带粗体 run):剥掉 markdown 标记后再比较
+    if (!skippedTitle && title && (inline.trim() === String(title).trim() || plain.trim() === String(title).trim())) { skippedTitle = true; continue; }
 
     const heading = Math.max(...Array.from({ length: line.length }, (_, i) => charFormat(lineStart + i).heading || 0), 0);
     if (heading) { parts.push("", "#".repeat(heading) + " " + inline, ""); continue; }
@@ -216,7 +217,11 @@ function tencentDocToMarkdown(rawText, formatMap = {}, imageMap = {}, title = ""
     const img = imageEntries[imageIndex++][1];
     parts.push("", `![${(img.descr || "image").replace(/[[\]]/g, "")}](${img.url})`, "");
   }
-  return parts.join("\n").replace(/\n{3,}/g, "\n\n").trim() + "\n";
+  // TOC 域还原不出有意义文本:首行是域指令(TOC \o "1-1" \h \z \u),条目是内部锚 id 链接,整块剥除
+  const cleaned = parts.join("\n").split("\n")
+    .filter((line) => !/^TOC\s+\\/.test(line.trim()) && !/^\["[^"]+"\]\(\\l\)$/.test(line.trim()))
+    .join("\n");
+  return cleaned.replace(/\n{3,}/g, "\n\n").trim() + "\n";
 }
 
 function fencedCode(code) {
