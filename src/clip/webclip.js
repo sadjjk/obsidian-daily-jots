@@ -151,9 +151,18 @@ function nodeToMarkdown(node, context = {}) {
   if (blockType === "code") {
     // 飞书代码块:容器内逐行收集,textContent 原样保留缩进与换行,不过空白压缩
     const lineNodes = [...node.querySelectorAll('[data-block-type="code_line"], .code-line')];
-    const body = (lineNodes.length ? lineNodes.map((line) => line.textContent || "").join("\n") : node.textContent || "")
-      .replace(/\r\n?/g, "\n");
-    return fencedCode(body);
+    let body = lineNodes.length
+      ? lineNodes.map((line) => line.textContent || "").join("\n")
+      : String(node.textContent || "");
+    body = body.replace(/\r\n?/g, "\n");
+    if (!lineNodes.length) {
+      // 飞书实际渲染无行元素:工具栏文案("代码块{语言}自动换行复制")混在文本里,
+      // 且行间以 U+200B 零宽字符分隔——剥文案、按零宽还原行
+      body = body.replace(/代码块\u200B?[^\n]*?自动换行复制/g, "");
+      body = body.split("\u200B").map((line) => line.replace(/[ \t]+$/g, "")).join("\n");
+    }
+    body = body.replace(/^\n+|\n+$/g, "");
+    return body.trim() ? fencedCode(body) : "";
   }
   if (blockType === "code_line") return ""; // 由 code 容器统一收集,避免行内容重复
   const feishuHeading = blockType.match(/^heading([1-6])$/);

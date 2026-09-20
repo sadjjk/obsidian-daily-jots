@@ -99,6 +99,15 @@ test("Feishu virtual document block types retain headings, lists, quotes, code, 
   assert.match(markdown, /```(?:\w*)\nconst ready = true;\n  if \(ready\) \{\n    run\(\);\n  \}\n```/);
 });
 
+test("Feishu code blocks rendered without line elements split on zero-width separators", () => {
+  const { document } = parseHTML(`<!doctype html><html><body><div data-block-type="code"><div>代码块\u200BPlain Text 自动换行复制before_tool_call(event, ctx):\u200B  ├─ au 未安装 → return\u200B  └─ done</div></div></body></html>`);
+  const markdown = cleanMarkdown(nodeToMarkdown(document.body));
+  // fencedCode 最少输出四反引号围栏(与钉钉产物一致)
+  assert.match(markdown, /````\nbefore_tool_call\(event, ctx\):\n  ├─ au 未安装 → return\n  └─ done\n````/);
+  assert.doesNotMatch(markdown, /自动换行复制/);
+  assert.doesNotMatch(markdown, /代码块/);
+});
+
 test("web text cannot become Obsidian embeds, comments, HTML, or executable fenced blocks", () => {
   const { document } = parseHTML('<!doctype html><html><body><p>![[Private note]] [[Wiki]] %% hidden %% &lt;iframe src="bad"&gt;</p><p>```dataviewjs</p><p>dv.pages()</p></body></html>');
   const markdown = cleanMarkdown(nodeToMarkdown(document.body));
