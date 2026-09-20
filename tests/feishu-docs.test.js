@@ -11,7 +11,7 @@ test("extractFeishuDoc bridges the rendered session cookie into imageHeaders", a
     url: "https://my.feishu.cn/wiki/x",
     title: "t",
     author: "Alice",
-    publishedTime: "2026-09-18 10:00",
+    publishedTime: "2023年11月3日创建",
   };
   const result = await extractFeishuDoc("https://my.feishu.cn/wiki/x", {
     webSessionManager: { extract: async (...args) => { calls.push(args); return rendered; } },
@@ -22,7 +22,7 @@ test("extractFeishuDoc bridges the rendered session cookie into imageHeaders", a
   assert.deepEqual(calls[1], ["feishu", "https://my.feishu.cn/"]);
   assert.deepEqual(result.imageHeaders, { cookie: "feishu_session=tok" });
   assert.equal(result.author, "Alice");
-  assert.equal(result.publishedTime, "2026-09-18 10:00");
+  assert.equal(result.publishedTime, "2023年11月3日");
 });
 
 test("extractFeishuDoc keeps imageHeaders unset when no session cookie exists", async () => {
