@@ -9,6 +9,7 @@ const { extractRedditPost, parseRedditUrl } = require("./social-media/redditclip
 const { COMMUNITY_SERVICES, DOCUMENT_SERVICES, communityServiceForUrl, documentServiceForUrl, isLikelyPdfUrl, renderServiceForUrl } = require("./lib/web-platforms");
 const { extractDingtalkDoc } = require("./cloud-docs/dingtalk-docs");
 const { extractFeishuDoc, extractFeishuFile, isFeishuFileUrl } = require("./cloud-docs/feishu-docs");
+const { stripTencentChrome } = require("./cloud-docs/tencent-docs");
 const { extractXStatus } = require("./social-media/xclip");
 const { extractBilibili, isBilibiliUrl, isBilibiliVideoUrl } = require("./social-media/biliclip");
 const { extractXiaohongshu, isXiaohongshuUrl, isXhsNoteUrl } = require("./social-media/xhsclip");
@@ -129,6 +130,8 @@ function listToMarkdown(node, context = {}) {
 
 function isLikelyContentImage(image) {
   const src = image.getAttribute("src") || "";
+  // data URI SVG 是界面图标(面包屑/箭头等),不是文章内容图
+  if (/^data:image\/svg/i.test(src)) return false;
   const width = Number(image.getAttribute("width") || 0);
   const height = Number(image.getAttribute("height") || 0);
   if (width > 0 && height > 0 && width <= 80 && height <= 80) return false;
@@ -765,6 +768,7 @@ class WebClipper {
           extractionMethod: documentServiceForUrl(rendered.url) ? `${renderService}-rendered-document` : `${renderService}-rendered-community-comments`,
         });
         if (article.extractionStatus === "complete") {
+          if (renderService === "tencent") article.markdown = stripTencentChrome(article.markdown);
           // 飞书正文图片是 internal-api-drive-stream 内部流,下载需登录 cookie(实测匿名失败):
           // cookie 桥接在 extractFeishuDoc 内完成,imageHeaders 仅在拿到会话 cookie 时存在
           if (rendered.imageHeaders) article.imageHeaders = rendered.imageHeaders;
