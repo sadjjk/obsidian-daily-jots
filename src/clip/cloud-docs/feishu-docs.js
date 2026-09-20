@@ -53,8 +53,38 @@ function feishuFileDownloadHeaders(cookie) {
   };
 }
 
-// 先按无 version 直试(飞书对最新版本可能放行);被拒时抛错提示,待元信息接口补 version。
-async function extractFeishuFile(url, { collectSessionCookies } = {}) {
+// meta 接口响应结构未逐字段核对:深度优先按常见字段名宽匹配,取不到退回 token 兜底
+function pickFeishuMetaValue(payload, keyPattern) {
+  const re = keyPattern;
+  const walk = (node) => {
+    if (!node || typeof node !== "object") return undefined;
+    if (Array.isArray(node)) {
+      for (const item of node) { const hit = walk(item); if (hit !== undefined) return hit; }
+      return undefined;
+    }
+    for (const [key, value] of Object.entries(node)) {
+      if (re.test(key) && (typeof value === "string" || typeof value === "number")) return value;
+    }
+    for (const value of Object.values(node)) {
+      if (value && typeof value === "object") { const hit = walk(value); if (hit !== undefined) return hit; }
+    }
+    return undefined;
+  };
+  return walk(payload);
+}
+
+function parseFeishuFileMeta(payload, token) {
+  const name = String(pickFeishuMetaValue(payload, /^(name|file_?name|title)$/i) || token);
+  const version = pickFeishuMetaValue(payload, /^(version|latest_?version|obj_?version)$/i);
+  const created = pickFeishuMetaValue(payload, /(create_?time|created_?at|gmt_?create)$/i);
+  let publishedAt = "";
+  const value = Number(created);
+  if (Number.isFinite(value) && value > 0) publishedAt = localIso(new Date(value > 1e12 ? value : value * 1000));
+  return { name, version: version === undefined ? "" : String(version), publishedAt };
+}
+
+// 先取元信息(真实文件名/version/创建时间),下载流带上 version;元信息失败不阻塞,退回无 version + token 兜底
+async function extractFeishuFile(url, { collectSessionCookies, fetchImpl } = {}) {
   const token = (String(url || "").match(/\/file\/([A-Za-z0-9]+)/) || [])[1];
   if (!token) throw new Error("无法从链接解析飞书文件 token");
   const cookie = collectSessionCookies ? await collectSessionCookies("feishu", "https://my.feishu.cn/") : "";
@@ -63,8 +93,18 @@ async function extractFeishuFile(url, { collectSessionCookies } = {}) {
     error.code = "DOCUMENT_LOGIN_REQUIRED";
     throw error;
   }
-  const streamUrl = `https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/preview/${token}?mount_point=explorer&preview_type=16`;
-  return { streamUrl, headers: { ...feishuFileDownloadHeaders(cookie), cookie }, fallbackName: token };
+  let meta = { name: token, version: "", publishedAt: "" };
+  try {
+    const metaUrl = `https://my.feishu.cn/space/api/meta/?token=${token}&type=12&need_extra_fields=3`;
+    const response = await fetchImpl(metaUrl, {
+      headers: { accept: "application/json, text/plain, */*", cookie, referer: "https://my.feishu.cn/" },
+    });
+    const raw = typeof response.json === "function" ? await response.json() : JSON.parse(await response.text());
+    meta = parseFeishuFileMeta(raw, token);
+  } catch (_) { /* 元信息拿不到就按无 version + token 继续 */ }
+  const version = meta.version ? `&version=${encodeURIComponent(meta.version)}` : "";
+  const streamUrl = `https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/preview/${token}?mount_point=explorer&preview_type=16${version}`;
+  return { streamUrl, headers: { ...feishuFileDownloadHeaders(cookie), cookie }, fallbackName: meta.name, publishedAt: meta.publishedAt };
 }
 
 module.exports = { extractFeishuDoc, normalizeFeishuPublishedTime, isFeishuFileUrl, extractFeishuFile };

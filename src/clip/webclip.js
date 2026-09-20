@@ -673,8 +673,14 @@ class WebClipper {
       } catch (error) { communityError = error; }
     }
     if (isFeishuFileUrl(url)) {
-      // 飞书云盘文件:不做正文提取,带会话头下载原文件,交给 binaryFiles 附件机制落盘
-      const file = await extractFeishuFile(url, { collectSessionCookies: this.collectSessionCookies.bind(this) });
+      // 飞书云盘文件:元信息拿真实文件名/version/创建时间,带会话头下载原文件,交给 binaryFiles 附件机制落盘
+      const file = await extractFeishuFile(url, {
+        collectSessionCookies: this.collectSessionCookies.bind(this),
+        fetchImpl: async (target, init) => {
+          const result = await this.fetch(target, init);
+          return result && result.response !== undefined ? result.response : result;
+        },
+      });
       const downloaded = await this.download(file.streamUrl, {
         headers: file.headers,
         accept: "application/json, text/plain, */*",
@@ -697,7 +703,7 @@ class WebClipper {
         contentChars: 0,
         extractionMethod: "feishu-file-attachment",
         extractionStatus: "complete",
-        publishedAt: "",
+        publishedAt: file.publishedAt || "",
         binaryFiles: [{ buffer: downloaded.buffer, fileName, mimeType: downloaded.mimeType }],
       };
     }

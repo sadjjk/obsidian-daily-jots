@@ -65,3 +65,30 @@ test("feishu file links resolve a version-less stream URL with session headers",
     (error) => error.code === "DOCUMENT_LOGIN_REQUIRED",
   );
 });
+
+test("feishu file meta enriches the stream URL with version, real name, and created time", async () => {
+  const cookie = "session=tok; _csrf_token=csrf-value-123";
+  const metaCalls = [];
+  const file = await extractFeishuFile("https://my.feishu.cn/file/NOU6bPeNfoKwPbxZDPlcQ0InnL4", {
+    collectSessionCookies: async () => cookie,
+    fetchImpl: async (target, init) => {
+      metaCalls.push({ target, headers: init.headers });
+      return { json: async () => ({ data: { fileMeta: { name: "prompt_builder.py", version: "7639013533866314704", createTime: 1789996800000 } } }) };
+    },
+  });
+  assert.equal(metaCalls[0].target, "https://my.feishu.cn/space/api/meta/?token=NOU6bPeNfoKwPbxZDPlcQ0InnL4&type=12&need_extra_fields=3");
+  assert.equal(metaCalls[0].headers.cookie, cookie);
+  assert.equal(file.streamUrl.includes("&version=7639013533866314704"), true);
+  assert.equal(file.fallbackName, "prompt_builder.py");
+  assert.equal(file.publishedAt, localIso(new Date(1789996800000)));
+});
+
+test("feishu file meta failure degrades to the version-less token fallback", async () => {
+  const file = await extractFeishuFile("https://my.feishu.cn/file/NOU6bPeNfoKwPbxZDPlcQ0InnL4", {
+    collectSessionCookies: async () => "session=tok",
+    fetchImpl: async () => { throw new Error("meta down"); },
+  });
+  assert.equal(file.streamUrl.includes("version="), false);
+  assert.equal(file.fallbackName, "NOU6bPeNfoKwPbxZDPlcQ0InnL4");
+  assert.equal(file.publishedAt, "");
+});
