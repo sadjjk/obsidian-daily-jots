@@ -15,6 +15,9 @@ const DOCUMENT_SERVICES = {
       maxSteps: 2_400,
       maxHtmlChars: 16 * 1024 * 1024,
     },
+    // 作者/发布时间候选选择器:以真实页面结构实测后校准;匹配不到时置空兜底,不阻塞剪藏
+    authorSelectors: [".docx-title-extra", "[data-testid='doc-owner']", ".creator-name", ".doc-meta .author"],
+    publishedTimeSelectors: ["[data-testid='doc-create-time']", ".doc-create-time", ".docx-meta-time", ".docx-title-extra time"],
   },
   tencent: {
     name: "腾讯文档",

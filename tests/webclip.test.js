@@ -356,6 +356,28 @@ test("Feishu rendered docs bridge session cookies for image localization", async
   assert.equal(article.images.length, 1);
 });
 
+test("feishu rendered payload forwards author and publishedTime into the article", async () => {
+  const rendered = {
+    html: `<!doctype html><html><body><div class="doc-content"><p>${"飞书会话渲染出的文档正文,长度需要超过完整性阈值才能通过校验。".repeat(6)}</p></div></body></html>`,
+    url: "https://my.feishu.cn/wiki/CEFJwoogJiIRG7kUISbc6JctnJg",
+    title: "AI 鹊桥",
+    author: "张三",
+    publishedTime: "2026-09-18 10:00",
+    text: "飞书会话渲染出的文档正文,长度需要超过完整性阈值才能通过校验。".repeat(6),
+  };
+  const clipper = new WebClipper({}, dingtalkTestSettings(), {
+    fetch: async () => ({ response: fakeHtmlResponse("", 403), finalUrl: rendered.url }),
+    sessionManager: {
+      collectCookies: async () => "feishu_session=tok",
+      extract: async () => rendered,
+    },
+  });
+  const article = await clipper.extract("https://my.feishu.cn/wiki/CEFJwoogJiIRG7kUISbc6JctnJg");
+  assert.equal(article.byline, "张三");
+  assert.equal(article.publishedAt, "2026-09-18 10:00");
+  assert.deepEqual(article.imageHeaders, { cookie: "feishu_session=tok" });
+});
+
 test("the session-cookie bridge passes the site-specific refresh parameters", async () => {
   const cookieOptions = [];
   const clipper = new WebClipper({}, zhihuTestSettings(), {

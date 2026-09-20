@@ -8,6 +8,7 @@ const { localDateParts, localIso, safeFileName, shortHash, yamlString } = requir
 const { extractRedditPost, parseRedditUrl } = require("./social-media/redditclip");
 const { COMMUNITY_SERVICES, DOCUMENT_SERVICES, communityServiceForUrl, documentServiceForUrl, isLikelyPdfUrl, renderServiceForUrl } = require("./lib/web-platforms");
 const { extractDingtalkDoc } = require("./cloud-docs/dingtalk-docs");
+const { extractFeishuDoc } = require("./cloud-docs/feishu-docs");
 const { extractXStatus } = require("./social-media/xclip");
 const { extractBilibili, isBilibiliUrl, isBilibiliVideoUrl } = require("./social-media/biliclip");
 const { extractXiaohongshu, isXiaohongshuUrl, isXhsNoteUrl } = require("./social-media/xhsclip");
@@ -683,9 +684,14 @@ class WebClipper {
       try {
         const captureTimeoutMs = Math.max(30_000, Math.min(60_000,
           (Math.max(10, Number(this.settings.capture.webClipBudgetSeconds) || 75) * 1000) - 12_000));
-        const rendered = await this.sessionManager.extract(url, renderService, {
-          captureTimeoutMs,
-        });
+        // 飞书:渲染提取 + 会话 cookie 桥接收敛到专用提取器;其余平台仍走通用渲染
+        const rendered = renderService === "feishu"
+          ? await extractFeishuDoc(url, {
+              webSessionManager: this.sessionManager,
+              collectSessionCookies: this.collectSessionCookies.bind(this),
+              captureTimeoutMs,
+            })
+          : await this.sessionManager.extract(url, renderService, { captureTimeoutMs });
         const article = articleFromHtml(rendered.html, rendered.url, {
           title: rendered.title,
           byline: rendered.author,
@@ -693,15 +699,13 @@ class WebClipper {
           siteName: COMMUNITY_SERVICES[renderService]?.name || DOCUMENT_SERVICES[renderService]?.name || new URL(rendered.url).hostname,
           content: rendered.html,
           plainText: rendered.text,
+          publishedAt: rendered.publishedTime,
           extractionMethod: documentServiceForUrl(rendered.url) ? `${renderService}-rendered-document` : `${renderService}-rendered-community-comments`,
         });
         if (article.extractionStatus === "complete") {
           // 飞书正文图片是 internal-api-drive-stream 内部流,下载需登录 cookie(实测匿名失败):
-          // 复用渲染会话实例的内存 cookie 挂到 imageHeaders,供图片下载透传;离线时兜底留原链
-          if (renderService === "feishu") {
-            const cookie = await this.collectSessionCookies("feishu", "https://my.feishu.cn/");
-            if (cookie) article.imageHeaders = { cookie };
-          }
+          // cookie 桥接在 extractFeishuDoc 内完成,imageHeaders 仅在拿到会话 cookie 时存在
+          if (rendered.imageHeaders) article.imageHeaders = rendered.imageHeaders;
           return { ...article, commentCount: Number(rendered.commentCount) || 0 };
         }
         renderError = new Error(`${COMMUNITY_SERVICES[renderService]?.name || renderService} rendered content was too short to save safely`);

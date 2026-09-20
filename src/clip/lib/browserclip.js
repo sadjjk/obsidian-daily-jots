@@ -200,6 +200,8 @@ function renderedPayloadExpression(service, options = {}) {
     commentSelectors: commentSelectorsForService(service),
     removeSelectors: RENDER_SERVICES[service]?.removeSelectors || ["script", "style", "noscript", "template"],
     virtualDocument: RENDER_SERVICES[service]?.virtualDocument || null,
+    authorSelectors: RENDER_SERVICES[service]?.authorSelectors || [],
+    publishedTimeSelectors: RENDER_SERVICES[service]?.publishedTimeSelectors || [],
     maxVirtualCaptureMs: Math.max(5_000, Math.min(45_000, Number(options.maxVirtualCaptureMs) || 45_000)),
   });
   return `(async () => {
@@ -233,9 +235,20 @@ function renderedPayloadExpression(service, options = {}) {
         container.appendChild(section);
       }
       const title = (document.querySelector('meta[property="og:title"]') || {}).content || document.title || location.hostname;
-      const author = (document.querySelector('meta[name="author"]') || {}).content || '';
+      const textFrom = (selectors) => {
+        for (const selector of selectors) {
+          try {
+            const node = document.querySelector(selector);
+            const value = (node?.innerText || node?.textContent || '').trim();
+            if (value) return value;
+          } catch (_) {}
+        }
+        return '';
+      };
+      const author = textFrom(config.authorSelectors) || (document.querySelector('meta[name="author"]') || {}).content || '';
+      const publishedTime = textFrom(config.publishedTimeSelectors);
       const description = (document.querySelector('meta[property="og:description"]') || document.querySelector('meta[name="description"]') || {}).content || '';
-      return { title, author, description, url: location.href, html: container.innerHTML, text: container.innerText, commentCount: comments.length };
+      return { title, author, description, publishedTime, url: location.href, html: container.innerHTML, text: container.innerText, commentCount: comments.length };
     };
 
     const virtual = config.virtualDocument;
