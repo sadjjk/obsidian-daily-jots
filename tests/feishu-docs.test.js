@@ -92,3 +92,18 @@ test("feishu file meta failure degrades to the version-less token fallback", asy
   assert.equal(file.fallbackName, "NOU6bPeNfoKwPbxZDPlcQ0InnL4");
   assert.equal(file.publishedAt, "");
 });
+
+test("feishu file meta parses the safeFetch body-only response shape", async () => {
+  const payload = JSON.stringify({ data: { fileMeta: { name: "报告.md", version: "42", createTime: 1789996800000 } } });
+  const file = await extractFeishuFile("https://my.feishu.cn/file/NOU6bPeNfoKwPbxZDPlcQ0InnL4", {
+    collectSessionCookies: async () => "session=tok",
+    fetchImpl: async () => ({
+      // safeFetch 形态:无 text/json,仅 body async generator
+      headers: { get: () => "application/json" },
+      body: (async function* () { yield Buffer.from(payload); })(),
+    }),
+  });
+  assert.equal(file.fallbackName, "报告.md");
+  assert.equal(file.streamUrl.includes("&version=42"), true);
+  assert.equal(file.publishedAt, localIso(new Date(1789996800000)));
+});

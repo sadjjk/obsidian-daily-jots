@@ -1,6 +1,7 @@
 const crypto = require("node:crypto");
 
 const { localIso } = require("../../core/util");
+const { readLimitedBody } = require("../../core/network");
 
 // 飞书文档专用提取:收敛 webclip 内飞书特有处理(渲染提取 + 会话 cookie 桥接)。
 // 提取仍走浏览器会话渲染(不直连接口);正文图片下载依赖会话 cookie(imageHeaders 透传)。
@@ -99,8 +100,15 @@ async function extractFeishuFile(url, { collectSessionCookies, fetchImpl } = {})
     const response = await fetchImpl(metaUrl, {
       headers: { accept: "application/json, text/plain, */*", cookie, referer: "https://my.feishu.cn/" },
     });
-    const raw = typeof response.json === "function" ? await response.json() : JSON.parse(await response.text());
-    meta = parseFeishuFileMeta(raw, token);
+    // 三形态兼容:原生 Response 有 json/text;safeFetch 的自定义 response 只有 body(async iterable)
+    const parseBody = async () => {
+      if (typeof response.json === "function") return response.json();
+      const text = typeof response.text === "function"
+        ? await response.text()
+        : (await readLimitedBody(response, 1024 * 1024)).toString("utf8");
+      return JSON.parse(text);
+    };
+    meta = parseFeishuFileMeta(await parseBody(), token);
   } catch (_) { /* 元信息拿不到就按无 version + token 继续 */ }
   const version = meta.version ? `&version=${encodeURIComponent(meta.version)}` : "";
   const streamUrl = `https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/preview/${token}?mount_point=explorer&preview_type=16${version}`;
