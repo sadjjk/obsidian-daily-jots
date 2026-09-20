@@ -684,32 +684,14 @@ class DiarySettingTab extends PluginSettingTab {
       "Public documents need no login. For private documents, sign in through the isolated browser below. Its session stays in this Vault's .channel-data and never reads existing Chrome cookies. Close the browser window when finished.",
     ) });
     sessions.createEl("h4", { text: this.tr("支持的平台", "Supported platforms") });
-    const docPathHints = {
-      google: this.tr("仅文档、表格、幻灯片和文件链接", "Only document, spreadsheet, presentation, and file links"),
-      microsoft: this.tr("仅个人或站点内的文档链接", "Only personal or site document links"),
-    };
-    const chinaDocIds = new Set(["feishu", "tencent", "wps", "dingtalk"]);
-    const docGroups = {
-      china: { title: this.tr("国内平台", "China"), entries: [] },
-      international: { title: this.tr("国外平台", "International"), entries: [] },
-    };
-    for (const [id, service] of Object.entries(DOCUMENT_SERVICES)) {
-      (chinaDocIds.has(id) ? docGroups.china : docGroups.international).entries.push([id, service]);
-    }
     const docGrid = sessions.createDiv({ cls: "od-support-grid" });
-    for (const group of Object.values(docGroups)) {
-      const box = docGrid.createDiv({ cls: "od-support-group" });
-      box.createEl("h4", { text: group.title });
-      const tagWall = box.createDiv({ cls: "od-support-tags" });
-      for (const [id, service] of group.entries) {
-        const hint = docPathHints[id];
-        const tip = hint
-          ? `${this.tr("匹配域名: ", "Hosts: ")}${service.hosts.join(", ")}；${hint}`
-          : `${this.tr("匹配域名: ", "Hosts: ")}${service.hosts.join(", ")}`;
-        const tag = tagWall.createSpan({ cls: "od-support-tag is-api", text: service.name });
-        tag.addEventListener("mouseenter", () => showHoverTip(tag, tip));
-        tag.addEventListener("mouseleave", hideHoverTip);
-      }
+    const box = docGrid.createDiv({ cls: "od-support-group" });
+    const tagWall = box.createDiv({ cls: "od-support-tags" });
+    for (const [id, service] of Object.entries(DOCUMENT_SERVICES)) {
+      const tip = `${this.tr("匹配域名: ", "Hosts: ")}${service.hosts.join(", ")}`;
+      const tag = tagWall.createSpan({ cls: "od-support-tag is-api", text: service.name });
+      tag.addEventListener("mouseenter", () => showHoverTip(tag, tip));
+      tag.addEventListener("mouseleave", hideHoverTip);
     }
     for (const [id, service] of Object.entries(DOCUMENT_SERVICES)) {
       const row = sessions.createDiv({ cls: "od-session-row" });

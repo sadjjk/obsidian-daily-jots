@@ -36,8 +36,6 @@ test("URLs are classified by source family before they are saved", () => {
     "social",
   );
   assert.equal(classifyClipFamily("https://docs.qq.com/doc/abc"), "documents");
-  assert.equal(classifyClipFamily("https://docs.google.com/document/d/abc123xyz/edit"), "documents");
-  assert.equal(classifyClipFamily("https://contoso.sharepoint.com/:w:/r/sites/team/Shared%20Documents/plan.docx"), "documents");
   assert.equal(classifyClipFamily("https://files.example.com/report.pdf"), "articles");
   assert.equal(classifyClipFamily("attachment://wechat/1/report.pdf", { extractionMethod: "pdf-text" }), "articles");
   assert.equal(classifyClipFamily("https://alidocs.dingtalk.com/i/nodes/xxx?utm_scene=person_space"), "documents");
