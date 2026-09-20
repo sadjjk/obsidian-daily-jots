@@ -2,7 +2,7 @@
 
 const assert = require("node:assert/strict");
 const test = require("node:test");
-const { normalizeSourceOverrides, sourceNameForUrl } = require("../src/core/source-names");
+const { normalizeSourceOverrides, sourceNameForUrl } = require("../src/clip/lib/source-names");
 
 test("builtin exact-host matching", () => {
   assert.equal(sourceNameForUrl("https://view.inews.qq.com/a/20260915A07B1600"), "腾讯新闻");

@@ -5,8 +5,8 @@
 const DINGTALK_ORIGIN = "https://alidocs.dingtalk.com";
 const DENTRY_KEY_PATTERN = /"dentryKey"\s*:\s*"([^"]{8,64})"/i;
 const UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36 Edg/132";
-const { readLimitedBody } = require("./network");
-const { localIso } = require("./util");
+const { readLimitedBody } = require("../../core/network");
+const { localIso } = require("../../core/util");
 
 // 双形态兼容:原生 fetch Response 有 text/json;safeFetch 的自定义 response 只有
 // body(async iterable,IncomingMessage),webclip 体系一律用 readLimitedBody 读取。

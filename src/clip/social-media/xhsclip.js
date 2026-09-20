@@ -1,8 +1,8 @@
 "use strict";
 
 const { parseHTML } = require("linkedom");
-const { readLimitedBody, safeFetch } = require("./network");
-const { localIso } = require("./util");
+const { readLimitedBody, safeFetch } = require("../../core/network");
+const { localIso } = require("../../core/util");
 
 const XHS_HTML_LIMIT = 5 * 1024 * 1024;
 

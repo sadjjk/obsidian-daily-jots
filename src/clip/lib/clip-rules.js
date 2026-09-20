@@ -1,10 +1,10 @@
 "use strict";
 
-const { parseXStatusUrl } = require("./xclip");
-const { isBilibiliUrl } = require("./biliclip");
-const { isXiaohongshuUrl } = require("./xhsclip");
-const { isWeiboArticleUrl, isWeiboSearchUrl, isWeiboStatusUrl } = require("./weiboclip");
-const { isDouyinUrl } = require("./douyinclip");
+const { parseXStatusUrl } = require("../social-media/xclip");
+const { isBilibiliUrl } = require("../social-media/biliclip");
+const { isXiaohongshuUrl } = require("../social-media/xhsclip");
+const { isWeiboArticleUrl, isWeiboSearchUrl, isWeiboStatusUrl } = require("../social-media/weiboclip");
+const { isDouyinUrl } = require("../social-media/douyinclip");
 const { sourceNameForUrl } = require("./source-names");
 const { documentServiceForUrl } = require("./web-platforms");
 

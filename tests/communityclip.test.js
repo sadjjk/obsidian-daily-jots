@@ -9,8 +9,8 @@ const {
   hackerNewsArticleData,
   stackExchangeArticleData,
   v2exArticleData,
-} = require("../src/core/communityclip");
-const { communityCoverage, communityServiceForUrl } = require("../src/core/web-platforms");
+} = require("../src/clip/social-media/communityclip");
+const { communityCoverage, communityServiceForUrl } = require("../src/clip/lib/web-platforms");
 
 test("community registry covers major international and Chinese detail pages", () => {
   const cases = {

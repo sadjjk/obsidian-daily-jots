@@ -1,8 +1,8 @@
 "use strict";
 
 const { parseHTML } = require("linkedom");
-const { readLimitedBody, safeFetch } = require("./network");
-const { communityServiceForUrl } = require("./web-platforms");
+const { readLimitedBody, safeFetch } = require("../../core/network");
+const { communityServiceForUrl } = require("../lib/web-platforms");
 
 const JSON_LIMIT = 12 * 1024 * 1024;
 const COMMENT_LIMIT = 300;

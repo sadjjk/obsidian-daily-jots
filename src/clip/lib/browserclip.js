@@ -6,7 +6,7 @@ const http = require("node:http");
 const net = require("node:net");
 const path = require("node:path");
 const WebSocket = require("ws");
-const { validateResolvedHost } = require("./network");
+const { validateResolvedHost } = require("../../core/network");
 const { COMMUNITY_SERVICES, RENDER_SERVICES } = require("./web-platforms");
 const stealthScript = require("./stealth-script");
 

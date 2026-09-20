@@ -2,7 +2,7 @@
 
 const assert = require("node:assert/strict");
 const test = require("node:test");
-const { douyinTitle, extractDouyin, isDouyinUrl, parseItem } = require("../src/core/douyinclip");
+const { douyinTitle, extractDouyin, isDouyinUrl, parseItem } = require("../src/clip/social-media/douyinclip");
 
 const VIDEO_URL = "https://www.douyin.com/video/7685345478182997248";
 const SHARE_URL = "https://www.iesdouyin.com/share/video/7685345478182997248/";

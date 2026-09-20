@@ -2,7 +2,7 @@
 
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { resolveDentryKey, fetchDocumentData, packageToHtml, extractDingtalkDoc } = require("../src/core/dingtalk-docs");
+const { resolveDentryKey, fetchDocumentData, packageToHtml, extractDingtalkDoc } = require("../src/clip/cloud-docs/dingtalk-docs");
 const { localIso } = require("../src/core/util");
 
 test("resolveDentryKey takes the key straight from note/preview URL params", async () => {

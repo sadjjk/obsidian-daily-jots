@@ -2,9 +2,9 @@
 
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { WebSessionManager, commentSelectorsForService, isSupportedBrowserExecutablePath, looksLikeAuthentication, looksLikeBlockedPage, renderedPayloadExpression, selectorsForService } = require("../src/core/browserclip");
-const { communityServiceForUrl, documentServiceForUrl, isLikelyPdfUrl, isProductHuntUrl, renderServiceForUrl } = require("../src/core/web-platforms");
-const { WebClipper } = require("../src/core/webclip");
+const { WebSessionManager, commentSelectorsForService, isSupportedBrowserExecutablePath, looksLikeAuthentication, looksLikeBlockedPage, renderedPayloadExpression, selectorsForService } = require("../src/clip/lib/browserclip");
+const { communityServiceForUrl, documentServiceForUrl, isLikelyPdfUrl, isProductHuntUrl, renderServiceForUrl } = require("../src/clip/lib/web-platforms");
+const { WebClipper } = require("../src/clip/webclip");
 
 test("cloud documents and Product Hunt route to their rendered adapters", () => {
   assert.equal(documentServiceForUrl("https://example.feishu.cn/docx/abc"), "feishu");

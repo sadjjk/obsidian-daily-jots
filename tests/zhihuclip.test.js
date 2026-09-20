@@ -8,7 +8,7 @@ const {
   isZhihuUrl,
   parseInitialData,
   zhihuDataFromHtml,
-} = require("../src/core/zhihuclip");
+} = require("../src/clip/social-media/zhihuclip");
 const { localIso } = require("../src/core/util");
 
 const ANSWER_URL = "https://www.zhihu.com/question/1951716962645288920/answer/2035816979085390373?share_code=KoQvmVk9iNoq";

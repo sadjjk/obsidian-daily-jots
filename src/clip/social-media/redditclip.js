@@ -1,6 +1,6 @@
 "use strict";
 
-const { readLimitedBody, safeFetch } = require("./network");
+const { readLimitedBody, safeFetch } = require("../../core/network");
 
 function parseRedditUrl(value) {
   let url;

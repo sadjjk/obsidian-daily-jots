@@ -2,7 +2,7 @@
 
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { flattenComments, parseRedditUrl, redditArticleFromPayload } = require("../src/core/redditclip");
+const { flattenComments, parseRedditUrl, redditArticleFromPayload } = require("../src/clip/social-media/redditclip");
 
 function listing(children) {
   return { data: { children } };

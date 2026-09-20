@@ -2,7 +2,7 @@
 
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { articleFromPayload, draftBlocksToMarkdown, parseXStatusUrl } = require("../src/core/xclip");
+const { articleFromPayload, draftBlocksToMarkdown, parseXStatusUrl } = require("../src/clip/social-media/xclip");
 
 test("X status URLs are recognized without retaining tracking parameters", () => {
   assert.deepEqual(parseXStatusUrl("https://x.com/Author/status/2093502767776366755?s=46"), {

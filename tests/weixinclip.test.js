@@ -2,7 +2,7 @@
 
 const assert = require("node:assert/strict");
 const test = require("node:test");
-const { extractWeixinArticle, isWeixinArticleUrl } = require("../src/core/weixinclip");
+const { extractWeixinArticle, isWeixinArticleUrl } = require("../src/clip/social-media/weixinclip");
 
 const ARTICLE_URL = "https://mp.weixin.qq.com/s/CKiM2G2CrqaBsR3qD0NKHw";
 

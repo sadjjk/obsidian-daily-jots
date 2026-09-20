@@ -6,7 +6,7 @@ const { parseHTML } = require("linkedom");
 const {
   WebClipper, articleFromHtml, bestSrcset, cleanMarkdown, detectCommunityPage, escapeWebText,
   isLikelyContentImage, nodeToMarkdown, prepareDocument, selectArticle, wechatArticleIdentityUrl,
-} = require("../src/core/webclip");
+} = require("../src/clip/webclip");
 const { decodeHtmlBuffer } = require("../src/core/network");
 const { localIso, safeFileName } = require("../src/core/util");
 
@@ -370,7 +370,7 @@ test("the session-cookie bridge passes the site-specific refresh parameters", as
 });
 
 test("stealth evasions ship as a non-empty bundled script", () => {
-  const stealthScript = require("../src/core/stealth-script");
+  const stealthScript = require("../src/clip/lib/stealth-script");
   assert.equal(typeof stealthScript, "string");
   assert.ok(stealthScript.length > 10_000);
   assert.doesNotMatch(stealthScript, /HeadlessChrome/);

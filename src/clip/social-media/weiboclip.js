@@ -6,7 +6,7 @@
 // Cookie 里的 SUB(访客票据,无头会话可自动种出);SUBP/_T_WM/XSRF-TOKEN/
 // referer/x-xsrf-token 等全部非必须,缺 SUB 时任何请求头都拿不到数据(432)。
 
-const { readLimitedBody } = require("./network");
+const { readLimitedBody } = require("../../core/network");
 const { parseHTML } = require("linkedom");
 
 const TTARTICLE_UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36";

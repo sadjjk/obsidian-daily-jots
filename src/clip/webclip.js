@@ -2,21 +2,21 @@
 
 const { Readability } = require("@mozilla/readability");
 const { parseHTML } = require("linkedom");
-const { extractCommunityPost } = require("./communityclip");
-const { decodeHtmlBuffer, downloadRemoteFile, readLimitedBody, safeFetch } = require("./network");
-const { localDateParts, localIso, safeFileName, shortHash, yamlString } = require("./util");
-const { extractRedditPost, parseRedditUrl } = require("./redditclip");
-const { COMMUNITY_SERVICES, DOCUMENT_SERVICES, communityServiceForUrl, documentServiceForUrl, isLikelyPdfUrl, renderServiceForUrl } = require("./web-platforms");
-const { extractDingtalkDoc } = require("./dingtalk-docs");
-const { extractXStatus } = require("./xclip");
-const { extractBilibili, isBilibiliUrl, isBilibiliVideoUrl } = require("./biliclip");
-const { extractXiaohongshu, isXiaohongshuUrl, isXhsNoteUrl } = require("./xhsclip");
-const { extractZhihu, isZhihuNoteUrl, isZhihuUrl } = require("./zhihuclip");
-const { extractWeibo, isWeiboArticleUrl, isWeiboSearchUrl, isWeiboStatusUrl } = require("./weiboclip");
-const { extractWeixinArticle, isWeixinArticleUrl } = require("./weixinclip");
-const { extractDouyin, isDouyinUrl } = require("./douyinclip");
-const { sourceNameForUrl } = require("./source-names");
-const { classifyClipFamily, isClipFamilyEnabled, resolveClipFolder } = require("./clip-rules");
+const { extractCommunityPost } = require("./social-media/communityclip");
+const { decodeHtmlBuffer, downloadRemoteFile, readLimitedBody, safeFetch } = require("../core/network");
+const { localDateParts, localIso, safeFileName, shortHash, yamlString } = require("../core/util");
+const { extractRedditPost, parseRedditUrl } = require("./social-media/redditclip");
+const { COMMUNITY_SERVICES, DOCUMENT_SERVICES, communityServiceForUrl, documentServiceForUrl, isLikelyPdfUrl, renderServiceForUrl } = require("./lib/web-platforms");
+const { extractDingtalkDoc } = require("./cloud-docs/dingtalk-docs");
+const { extractXStatus } = require("./social-media/xclip");
+const { extractBilibili, isBilibiliUrl, isBilibiliVideoUrl } = require("./social-media/biliclip");
+const { extractXiaohongshu, isXiaohongshuUrl, isXhsNoteUrl } = require("./social-media/xhsclip");
+const { extractZhihu, isZhihuNoteUrl, isZhihuUrl } = require("./social-media/zhihuclip");
+const { extractWeibo, isWeiboArticleUrl, isWeiboSearchUrl, isWeiboStatusUrl } = require("./social-media/weiboclip");
+const { extractWeixinArticle, isWeixinArticleUrl } = require("./social-media/weixinclip");
+const { extractDouyin, isDouyinUrl } = require("./social-media/douyinclip");
+const { sourceNameForUrl } = require("./lib/source-names");
+const { classifyClipFamily, isClipFamilyEnabled, resolveClipFolder } = require("./lib/clip-rules");
 
 const WECHAT_NOISE_SELECTORS = [
   "#js_pc_qr_code", "#js_article_bottom_bar", "#js_bottom_ad_area", "#js_sponsor_ad_area",

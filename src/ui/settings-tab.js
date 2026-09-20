@@ -3,10 +3,10 @@
 const QRCode = require("qrcode");
 const { Modal, Notice, PluginSettingTab, Setting, setIcon } = require("obsidian");
 const { CHANNEL_IDS, clearChannelCredentials, getChannelMeta } = require("../core/settings");
-const { CLIP_FAMILIES, CLIP_FAMILY_IDS } = require("../core/clip-rules");
+const { CLIP_FAMILIES, CLIP_FAMILY_IDS } = require("../clip/lib/clip-rules");
 const { REMOTE_EXPORT_FORMATS, remoteExportFormat } = require("../core/remote-search");
-const { DOCUMENT_SERVICES } = require("../core/web-platforms");
-const { BUILTIN_CHINA_SOURCE_NAMES, BUILTIN_SOURCE_NAMES } = require("../core/source-names");
+const { DOCUMENT_SERVICES } = require("../clip/lib/web-platforms");
+const { BUILTIN_CHINA_SOURCE_NAMES, BUILTIN_SOURCE_NAMES } = require("../clip/lib/source-names");
 const { shortHash } = require("../core/util");
 
 const PROJECT_URL = "https://github.com/sadjjk/obsidian-omnichannel-diary";

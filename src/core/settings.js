@@ -1,8 +1,8 @@
 "use strict";
 
 const { normalizeLanguagePreference } = require("./i18n");
-const { defaultClipRules, normalizeClipRules } = require("./clip-rules");
-const { normalizeSourceOverrides } = require("./source-names");
+const { defaultClipRules, normalizeClipRules } = require("../clip/lib/clip-rules");
+const { normalizeSourceOverrides } = require("../clip/lib/source-names");
 const { normalizeRemoteSearchSettings } = require("./remote-search");
 
 const CHANNEL_IDS = ["wechat", "feishu", "dingtalk", "wecom", "qq", "slack", "telegram", "discord", "whatsapp"];

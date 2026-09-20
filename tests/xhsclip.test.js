@@ -10,7 +10,7 @@ const {
   parseInitialState,
   replaceBareUndefined,
   xiaohongshuDataFromHtml,
-} = require("../src/core/xhsclip");
+} = require("../src/clip/social-media/xhsclip");
 
 const SOURCE_URL = "https://www.xiaohongshu.com/explore/note123?xsec_token=temporary";
 

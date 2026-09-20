@@ -1,7 +1,7 @@
 "use strict";
 
 const { parseHTML } = require("linkedom");
-const { readLimitedBody, safeFetch } = require("./network");
+const { readLimitedBody, safeFetch } = require("../../core/network");
 
 // This is X's public web-client bearer value, not a user credential.
 const X_WEB_BEARER = "AAAAAAAAAAAAAAAAAAAAANRILgAAAAAAnNwIzUejRCOuH5E6I8xnZz4puTs%3D1Zv7ttfk8LF81IUq16cHjhLTvJu4FA33AGWWjCpTnA";

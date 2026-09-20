@@ -7,8 +7,8 @@
 // site serves its probabilistic challenge shell instead, we retry and surface a
 // real error rather than saving an empty note.
 
-const { decodeHtmlBuffer, readLimitedBody, safeFetch } = require("./network");
-const { localIso } = require("./util");
+const { decodeHtmlBuffer, readLimitedBody, safeFetch } = require("../../core/network");
+const { localIso } = require("../../core/util");
 
 const STATE_MARKER = "window.__INITIAL_STATE__=";
 const HTML_LIMIT = 5 * 1024 * 1024;

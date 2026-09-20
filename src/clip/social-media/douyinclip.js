@@ -7,7 +7,7 @@
 // loaderData['video_(id)/page'].videoInfoRes.item_list[0]。
 // 视频本体不下载,只留播放链接;话题按微博先例降噪为纯文本。
 
-const { readLimitedBody } = require("./network");
+const { readLimitedBody } = require("../../core/network");
 
 const DOUYIN_UA = "Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.5 Mobile/15E148 Safari/604.1";
 

@@ -1,8 +1,8 @@
 "use strict";
 
 const { parseHTML } = require("linkedom");
-const { readLimitedBody, safeFetch } = require("./network");
-const { localIso } = require("./util");
+const { readLimitedBody, safeFetch } = require("../../core/network");
+const { localIso } = require("../../core/util");
 
 const ZHIHU_HTML_LIMIT = 5 * 1024 * 1024;
 const ZHIHU_CHALLENGE_PATTERN = /安全验证|系统监测到您的网络环境|请完成身份验证|verify you are human/i;

@@ -1,9 +1,9 @@
 "use strict";
 
 const { downloadRemoteFile, decodeDataUrl } = require("./network");
-const { WebClipper } = require("./webclip");
+const { WebClipper } = require("../clip/webclip");
 const { extractUrls, localDateParts, markdownEscape, safeFileName, shortHash } = require("./util");
-const { classifyClipFamily, isClipFamilyEnabled } = require("./clip-rules");
+const { classifyClipFamily, isClipFamilyEnabled } = require("../clip/lib/clip-rules");
 
 function normalizeDiaryMessage(value) {
   return String(value || "")

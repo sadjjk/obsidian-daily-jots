@@ -3,7 +3,7 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const { DiaryService } = require("../src/core/diary");
-const { WebClipper } = require("../src/core/webclip");
+const { WebClipper } = require("../src/clip/webclip");
 const { localDateParts } = require("../src/core/util");
 
 test("localDateParts.iso uses local timezone offset", () => {
@@ -17,7 +17,7 @@ const {
   isClipFamilyEnabled,
   normalizeClipRules,
   resolveClipFolder,
-} = require("../src/core/clip-rules");
+} = require("../src/clip/lib/clip-rules");
 const { normalizeSettings } = require("../src/core/settings");
 
 test("URLs are classified by source family before they are saved", () => {

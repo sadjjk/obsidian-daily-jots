@@ -8,7 +8,7 @@
 //    "被风控"和"结构变化",不留假成功。
 // 图床 mmbiz.qpic.cn 对带正常 referer 的请求放行,无需特殊处理。
 
-const { readLimitedBody } = require("./network");
+const { readLimitedBody } = require("../../core/network");
 const { parseHTML } = require("linkedom");
 
 const WEIXIN_UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36";

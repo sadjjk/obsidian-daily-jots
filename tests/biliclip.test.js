@@ -2,7 +2,7 @@
 
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { extractBilibili, formatCount, isBilibiliUrl, isBilibiliVideoUrl, jsonAssignmentFromHtml } = require("../src/core/biliclip");
+const { extractBilibili, formatCount, isBilibiliUrl, isBilibiliVideoUrl, jsonAssignmentFromHtml } = require("../src/clip/social-media/biliclip");
 const { localIso } = require("../src/core/util");
 
 const stateHtml = (videoDataJson) => `<!doctype html><html><head><title>x</title></head><body>
