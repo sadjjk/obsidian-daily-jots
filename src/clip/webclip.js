@@ -705,7 +705,7 @@ class WebClipper {
         canonicalUrl: url,
         identityUrl: url,
         title: fileName,
-        byline: "",
+        byline: file.author || "",
         excerpt: "飞书云盘文件,已作为附件保存",
         siteName: "飞书文档",
         markdown: "",

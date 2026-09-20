@@ -98,7 +98,23 @@ function parseFeishuFileMeta(payload, token) {
   let publishedAt = "";
   const value = Number(created);
   if (Number.isFinite(value) && value > 0) publishedAt = localIso(new Date(value > 1e12 ? value : value * 1000));
-  return { name, version, publishedAt };
+  // 作者:owner/creator 可能是字符串名字,也可能是嵌套对象({name/userName});纯 ID 拿不到名字时置空
+  let author = "";
+  const ownerNode = pickFeishuMetaValue(payload, (key, value) => /^(owner|creator|author)$/i.test(key) && value !== "" && value != null);
+  if (typeof ownerNode === "string") {
+    author = ownerNode.trim();
+  } else if (ownerNode && typeof ownerNode === "object") {
+    const ownerName = pickFeishuMetaValue(ownerNode, (key, value) =>
+      /^(name|user_?name|nick_?name|nickname)$/i.test(key) && typeof value === "string" && value.trim());
+    author = ownerName ? String(ownerName).trim() : "";
+  }
+  if (!author) {
+    const hit = pickFeishuMetaValue(payload, (key, value) =>
+      typeof value === "string" && /(owner_?name|creator_?name|author|user_?name|nick_?name)$/i.test(key)
+      && !/(^id$|_?id$|key|token)$/i.test(key) && value.trim());
+    author = hit ? String(hit).trim() : "";
+  }
+  return { name, version, publishedAt, author };
 }
 
 // 先取元信息(真实文件名/version/创建时间),下载流带上 version;元信息失败不阻塞,退回无 version + token 兜底
@@ -136,6 +152,7 @@ async function extractFeishuFile(url, { collectSessionCookies, fetchImpl } = {})
     headers: { ...feishuFileDownloadHeaders(cookie), cookie },
     fallbackName: meta.name,
     publishedAt: meta.publishedAt,
+    author: meta.author,
   };
 }
 

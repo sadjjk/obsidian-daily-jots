@@ -73,7 +73,7 @@ test("feishu file meta enriches the stream URL with version, real name, and crea
     collectSessionCookies: async () => cookie,
     fetchImpl: async (target, init) => {
       metaCalls.push({ target, headers: init.headers });
-      return { json: async () => ({ data: { fileMeta: { name: "prompt_builder.py", version: "7639013533866314704", createTime: 1789996800000 } } }) };
+      return { json: async () => ({ data: { fileMeta: { name: "prompt_builder.py", version: "7639013533866314704", createTime: 1789996800000, owner: { name: "张三", userId: "ou_123" } } } }) };
     },
   });
   assert.equal(metaCalls[0].target, "https://my.feishu.cn/space/api/meta/?token=NOU6bPeNfoKwPbxZDPlcQ0InnL4&type=12&need_extra_fields=3");
@@ -81,6 +81,16 @@ test("feishu file meta enriches the stream URL with version, real name, and crea
   assert.equal(file.streamUrl.includes("&version=7639013533866314704"), true);
   assert.equal(file.fallbackName, "prompt_builder.py");
   assert.equal(file.publishedAt, localIso(new Date(1789996800000)));
+  assert.equal(file.author, "张三");
+});
+
+test("feishu file meta author falls back to flat owner name fields and skips ids", async () => {
+  const payload = { data: { ownerId: "ou_abc", ownerName: "李四" } };
+  const file = await extractFeishuFile("https://my.feishu.cn/file/NOU6bPeNfoKwPbxZDPlcQ0InnL4", {
+    collectSessionCookies: async () => "session=tok",
+    fetchImpl: async () => ({ json: async () => payload }),
+  });
+  assert.equal(file.author, "李四");
 });
 
 test("feishu file meta failure degrades to the version-less token fallback", async () => {
