@@ -808,6 +808,13 @@ class WebClipper {
           if (rendered.imageHeaders) article.imageHeaders = rendered.imageHeaders;
           return { ...article, commentCount: Number(rendered.commentCount) || 0 };
         }
+        if (tencentHostForUrl(url)) {
+          // 腾讯文档渲染拿不到正文(登录墙/私有文档/melo canvas 无文本):不回落 HTTP 空壳,
+          // 像钉钉/飞书一样明确提示用户先登录浏览器会话
+          const error = new Error("腾讯文档页面需要登录:请先在「浏览器会话」面板打开「腾讯文档」登录窗口完成登录,再重新剪藏");
+          error.code = "DOCUMENT_LOGIN_REQUIRED";
+          throw error;
+        }
         renderError = new Error(`${COMMUNITY_SERVICES[renderService]?.name || renderService} rendered content was too short to save safely`);
       } catch (error) {
         if (["DOCUMENT_LOGIN_REQUIRED", "DOCUMENT_CAPTURE_INCOMPLETE"].includes(error?.code)) throw error;

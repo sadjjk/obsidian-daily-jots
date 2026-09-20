@@ -57,7 +57,7 @@ test("WebClipper uses an injected persistent renderer for dynamic documents", as
     storage: { clippingFolder: "Clips", attachmentFolder: "Assets" },
     capture: { renderDynamicPages: true, downloadWebImages: false, maxFileMb: 20 },
   };
-  const clipper = new WebClipper({}, settings, { sessionManager });
+  const clipper = new WebClipper({}, settings, { sessionManager, fetch: async () => { throw new Error("offline"); } });
   const article = await clipper.extract("https://docs.qq.com/doc/example");
   assert.deepEqual(calls, [{ url: "https://docs.qq.com/doc/example", service: "tencent" }]);
   assert.equal(article.extractionMethod, "tencent-rendered-document");
@@ -80,6 +80,24 @@ test("WebClipper never falls back to a short static page after virtual document 
   await assert.rejects(
     clipper.extract("https://example.feishu.cn/docx/example"),
     (error) => error.code === "DOCUMENT_CAPTURE_INCOMPLETE",
+  );
+});
+
+test("tencent documents that render without content ask the user to log in", async () => {
+  const sessionManager = { extract: async (url) => ({
+    url,
+    title: "腾讯文档",
+    html: "<main>登录后查看文档</main>",
+    text: "登录后查看文档",
+  }) };
+  const settings = {
+    storage: { clippingFolder: "Clips", attachmentFolder: "Assets" },
+    capture: { renderDynamicPages: true, downloadWebImages: false, maxFileMb: 20 },
+  };
+  const clipper = new WebClipper({}, settings, { sessionManager, fetch: async () => { throw new Error("offline"); } });
+  await assert.rejects(
+    clipper.extract("https://docs.qq.com/doc/private-doc"),
+    (error) => error.code === "DOCUMENT_LOGIN_REQUIRED" && /腾讯文档/.test(error.message),
   );
 });
 
