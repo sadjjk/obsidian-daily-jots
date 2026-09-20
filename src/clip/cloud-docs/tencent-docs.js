@@ -246,7 +246,7 @@ async function extractTencentDoc(url, { collectSessionCookies, fetchImpl } = {})
   try { payload = JSON.parse(text); } catch (_) {
     payload = JSON.parse(text.replace(/^[^(]*\(/, "").replace(/\)\s*;?\s*$/, ""));
   }
-  return parseTencentDocPayload(payload);
+  return { ...parseTencentDocPayload(payload), imageHeaders: { cookie } };
 }
 
 module.exports = { extractTencentDoc, parseTencentDocPayload, stripTencentChrome, tencentDocApiUrl, tencentDocToMarkdown, tencentHostForUrl };

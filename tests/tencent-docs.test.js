@@ -128,6 +128,7 @@ test("tencent extract fetches opendoc with session cookie and parses the body-on
   assert.equal(article.markdown.trim(), "正文一段");
   assert.equal(article.title, "测试文档");
   assert.equal(article.author, "张三");
+  assert.deepEqual(article.imageHeaders, { cookie: "SID=tok" });
 });
 
 test("tencent extract requires a session and rejects non-doc links", async () => {

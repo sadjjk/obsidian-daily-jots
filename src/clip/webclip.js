@@ -742,6 +742,8 @@ class WebClipper {
             siteName: "腾讯文档",
             markdown: doc.markdown,
             images: doc.images || [],
+            // 图片 CDN 直连可能要求会话;cookie 从腾讯会话带来,downloadWebImages 下载时自动携带
+            ...(doc.imageHeaders ? { imageHeaders: doc.imageHeaders } : {}),
             contentChars: doc.markdown.length,
             extractionMethod: "tencent-opendoc",
             extractionStatus: "complete",
