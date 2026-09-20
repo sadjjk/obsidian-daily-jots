@@ -143,8 +143,12 @@ function xiaohongshuDataFromHtml(html, finalUrl) {
   if (!isXiaohongshuUrl(finalUrl)) return null;
   const state = parseInitialState(html);
   const note = selectedNote(state, finalUrl);
-  if (!note?.noteId || (!note.desc && !note.title)) return null;
-  const title = String(note.title || note.desc || "小红书笔记").replace(/\s+/g, " ").trim().slice(0, 160);
+  if (!note?.noteId) return null;
+  // 纯图笔记 title/desc 都为空是合法状态(作者未写文字),不能判为提取失败;
+  // 标题退化为 "昵称 的图片笔记"。该笔记的全部内容即图片,提取齐图即视为完整。
+  const byline = String(note.user?.nickname || "").trim();
+  const title = String(note.title || note.desc || (byline ? `${byline} 的图片笔记` : "小红书笔记"))
+    .replace(/\s+/g, " ").trim().slice(0, 160);
   const description = String(note.desc || "").trim();
   const images = noteImages(note);
   const body = escapeHtml(description).replace(/\r?\n/g, "<br>");
@@ -155,7 +159,7 @@ function xiaohongshuDataFromHtml(html, finalUrl) {
     canonicalUrl,
     identityUrl: canonicalUrl,
     title,
-    byline: String(note.user?.nickname || "").trim(),
+    byline,
     excerpt: description.slice(0, 240),
     siteName: "小红书 / REDnote",
     contentHtml: `<article class="xiaohongshu-note"><h1>${escapeHtml(title)}</h1><p>${body}</p>${figures}</article>`,
@@ -163,6 +167,8 @@ function xiaohongshuDataFromHtml(html, finalUrl) {
     images,
     publishedAt: publishedAt(note.time),
     extractionMethod: "xiaohongshu-initial-state",
+    // 作者未写任何文字(纯图笔记),收据文案据此省略"正文"字样
+    textless: !String(note.title || "").trim() && !description,
     extractionStatus: description.length >= 60 || images.length > 0 ? "complete" : "partial",
   };
 }

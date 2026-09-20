@@ -432,6 +432,8 @@ function articleFromHtml(html, finalUrl, overrides = {}) {
     contentChars,
     extractionMethod: article.extractionMethod || "rendered-page",
     extractionStatus: contentChars >= 120 ? "complete" : "partial",
+    // 数据侧显式声明"本来就没有正文文字"(如小红书纯图笔记),收据文案据此省略"正文"
+    textless: Boolean(article.textless),
     commentCount,
     publishedAt: article.publishedAt || (hostname.toLowerCase() === "mp.weixin.qq.com" ? publishedWechatTime(rawHtml) : ""),
   };

@@ -142,14 +142,31 @@ function formatCaptureReceipt(result, locale = "zh-CN", preview = null) {
       }
       continue;
     }
-    const extractedEn = commentCount
-      ? `the full text, ${commentCount} comment${commentCount === 1 ? "" : "s"}, and ${savedImages} image${savedImages === 1 ? "" : "s"}`
-      : `the full text and ${savedImages} image${savedImages === 1 ? "" : "s"}`;
-    const partialEn = commentCount
-      ? `the available text, ${commentCount} comment${commentCount === 1 ? "" : "s"}, and ${savedImages} image${savedImages === 1 ? "" : "s"}`
-      : `the available text and ${savedImages} image${savedImages === 1 ? "" : "s"}`;
-    const extractedZh = commentCount ? `正文、${commentCount} 条评论和 ${savedImages} 张图片` : `正文和 ${savedImages} 张图片`;
-    const partialZh = commentCount ? `正文片段、${commentCount} 条评论和 ${savedImages} 张图片` : `正文片段和 ${savedImages} 张图片`;
+    // 正文有无以 textless 显式标志为准:小红书纯图笔记本来就无文字
+    // (excerpt 经 articleFromHtml 会 fallback 成标题,各平台语义不一,不可作判据)
+    const hasBody = !clip.article?.textless;
+    const enList = (textContent) => {
+      const items = [];
+      if (hasBody) items.push(textContent);
+      if (commentCount) items.push(`${commentCount} comment${commentCount === 1 ? "" : "s"}`);
+      items.push(`${savedImages} image${savedImages === 1 ? "" : "s"}`);
+      if (items.length === 1) return items[0];
+      if (items.length === 2) return `${items[0]} and ${items[1]}`;
+      return `${items.slice(0, -1).join(", ")}, and ${items[items.length - 1]}`;
+    };
+    const zhList = (textContent) => {
+      const items = [];
+      if (hasBody) items.push(textContent);
+      if (commentCount) items.push(`${commentCount} 条评论`);
+      items.push(`${savedImages} 张图片`);
+      const last = items.pop();
+      // 纯图片时带前导空格:与 "已提取/已保存" 拼出 "已提取 8 张图片"
+      return items.length ? `${items.join("、")}和 ${last}` : ` ${last}`;
+    };
+    const extractedEn = enList("the full text");
+    const partialEn = enList("the available text");
+    const extractedZh = zhList("正文");
+    const partialZh = zhList("正文片段");
     const savedFileDetail = savedFiles ? (locale === "en" ? ` The original source file was also saved.` : `，并保留 ${savedFiles} 个原文件`) : "";
     // 来源渠道标注(frontmatter platform 同源);普通网页无信息量,不标注
     const sourceLabel = String(clip.sourceLabel || "").trim();

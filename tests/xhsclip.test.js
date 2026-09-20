@@ -104,3 +104,21 @@ test("non-note Xiaohongshu pages keep returning null when no note data exists", 
   }));
   assert.equal(data, null);
 });
+
+function textlessHtml() {
+  const state = `{"note":{"currentNoteId":"note999","noteDetailMap":{"note999":{"note":{"noteId":"note999","title":"","desc":"","time":1788253336000,"user":{"nickname":"Alice"},"imageList":[{"urlDefault":"https:\\u002F\\u002Fsns-webpic-qc.xhscdn.com\\u002Fone"},{"urlDefault":"https:\\u002F\\u002Fsns-webpic-hw.xhscdn.com\\u002Ftwo"}]}}}}}`;
+  return `<!doctype html><html><body><script>window.__INITIAL_STATE__=${state}</script></body></html>`;
+}
+
+test("textless photo-only notes still extract with a fallback title and partial status", () => {
+  const data = xiaohongshuDataFromHtml(textlessHtml(), "https://www.xiaohongshu.com/discovery/item/note999?xsec_token=temporary");
+  assert.equal(data.title, "Alice 的图片笔记");
+  assert.equal(data.byline, "Alice");
+  assert.equal(data.extractionStatus, "complete");
+  assert.equal(data.textless, true);
+  assert.deepEqual(data.images, [
+    "https://sns-webpic-qc.xhscdn.com/one",
+    "https://sns-webpic-hw.xhscdn.com/two",
+  ]);
+  assert.match(data.contentHtml, /小红书图片 1/);
+});

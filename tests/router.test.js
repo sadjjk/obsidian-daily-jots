@@ -310,3 +310,13 @@ test("clipping receipts show the family subfolder path and source channel", () =
   assert.doesNotMatch(plain, /来自/);
 });
 
+test("textless photo-only articles omit body wording from receipts", () => {
+  const clip = { article: { title: "潘卓 的图片笔记", extractionStatus: "complete", textless: true }, savedImages: 8, imageFailures: [] };
+  const zh = formatCaptureReceipt({ diaryPath: "日记/today.md", clips: [clip] });
+  assert.match(zh, /^🔖 《潘卓 的图片笔记》已提取 8 张图片并保存到「全渠道剪藏」/);
+  assert.doesNotMatch(zh, /正文/);
+  const en = formatCaptureReceipt({ diaryPath: "Daily/today.md", clippingFolder: "Clippings", clips: [clip] }, "en");
+  assert.match(en, /was saved to “Clippings” with 8 images\./);
+  assert.doesNotMatch(en, /full text|available text/);
+});
+
