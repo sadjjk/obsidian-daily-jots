@@ -76,12 +76,14 @@ function pickFeishuMetaValue(payload, keyPattern) {
 
 function parseFeishuFileMeta(payload, token) {
   const name = String(pickFeishuMetaValue(payload, /^(name|file_?name|title)$/i) || token);
-  const version = pickFeishuMetaValue(payload, /^(version|latest_?version|obj_?version)$/i);
+  // 真实流 version 是长数字雪花 ID(如 7639013533866314704);短数字是无关字段,误拼会 404
+  const rawVersion = pickFeishuMetaValue(payload, /^(version|latest_?version|obj_?version)$/i);
+  const version = /^\d{10,}$/.test(String(rawVersion)) ? String(rawVersion) : "";
   const created = pickFeishuMetaValue(payload, /(create_?time|created_?at|gmt_?create)$/i);
   let publishedAt = "";
   const value = Number(created);
   if (Number.isFinite(value) && value > 0) publishedAt = localIso(new Date(value > 1e12 ? value : value * 1000));
-  return { name, version: version === undefined ? "" : String(version), publishedAt };
+  return { name, version, publishedAt };
 }
 
 // 先取元信息(真实文件名/version/创建时间),下载流带上 version;元信息失败不阻塞,退回无 version + token 兜底
@@ -112,7 +114,14 @@ async function extractFeishuFile(url, { collectSessionCookies, fetchImpl } = {})
   } catch (_) { /* 元信息拿不到就按无 version + token 继续 */ }
   const version = meta.version ? `&version=${encodeURIComponent(meta.version)}` : "";
   const streamUrl = `https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/preview/${token}?mount_point=explorer&preview_type=16${version}`;
-  return { streamUrl, headers: { ...feishuFileDownloadHeaders(cookie), cookie }, fallbackName: meta.name, publishedAt: meta.publishedAt };
+  return {
+    streamUrl,
+    // version 拼错时飞书返回 404;无 version 的直试已被实测验证可行,留作回退
+    fallbackStreamUrl: version ? `https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/preview/${token}?mount_point=explorer&preview_type=16` : "",
+    headers: { ...feishuFileDownloadHeaders(cookie), cookie },
+    fallbackName: meta.name,
+    publishedAt: meta.publishedAt,
+  };
 }
 
 module.exports = { extractFeishuDoc, normalizeFeishuPublishedTime, isFeishuFileUrl, extractFeishuFile };

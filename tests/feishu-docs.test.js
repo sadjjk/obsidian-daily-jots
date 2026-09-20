@@ -103,7 +103,19 @@ test("feishu file meta parses the safeFetch body-only response shape", async () 
       body: (async function* () { yield Buffer.from(payload); })(),
     }),
   });
+  // 短数字 version(42)不是流雪花 ID,不采纳 → 走无 version 直试
   assert.equal(file.fallbackName, "报告.md");
-  assert.equal(file.streamUrl.includes("&version=42"), true);
+  assert.equal(file.streamUrl.includes("version="), false);
   assert.equal(file.publishedAt, localIso(new Date(1789996800000)));
+});
+
+test("feishu file meta keeps long snowflake versions and exposes a version-less fallback URL", async () => {
+  const payload = JSON.stringify({ data: { fileMeta: { name: "设计稿.pdf", version: "7639013533866314704" } } });
+  const file = await extractFeishuFile("https://my.feishu.cn/file/NOU6bPeNfoKwPbxZDPlcQ0InnL4", {
+    collectSessionCookies: async () => "session=tok",
+    fetchImpl: async () => ({ json: async () => JSON.parse(payload) }),
+  });
+  assert.equal(file.streamUrl.includes("&version=7639013533866314704"), true);
+  assert.equal(file.fallbackStreamUrl.includes("version="), false);
+  assert.equal(file.fallbackName, "设计稿.pdf");
 });

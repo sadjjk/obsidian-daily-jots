@@ -681,14 +681,22 @@ class WebClipper {
           return result && result.response !== undefined ? result.response : result;
         },
       });
-      const downloaded = await this.download(file.streamUrl, {
+      const downloadOnce = (streamUrl, fallbackName) => this.download(streamUrl, {
         headers: file.headers,
         accept: "application/json, text/plain, */*",
         maxBytes: Math.max(1, Number(this.settings.capture.maxFileMb) || 20) * 1024 * 1024,
         timeoutMs: 60_000,
         requestAttempts: 1,
-        fileName: file.fallbackName,
+        fileName: fallbackName,
       });
+      let downloaded;
+      try {
+        downloaded = await downloadOnce(file.streamUrl, file.fallbackName);
+      } catch (error) {
+        // version 不被接受(404)时回退无 version 直试(实测可行)
+        if (!file.fallbackStreamUrl || !/404/.test(error?.message || "")) throw error;
+        downloaded = await downloadOnce(file.fallbackStreamUrl, url.match(/\/file\/([A-Za-z0-9]+)/)[1]);
+      }
       const fileName = downloaded.fileName || file.fallbackName;
       return {
         url,
