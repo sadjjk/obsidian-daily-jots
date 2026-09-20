@@ -75,13 +75,19 @@ test("markdown conversion preserves headings, links, lists, and images", () => {
   assert.match(markdown, /!\[A\]\(<https:\/\/example.com\/a.png>\)/);
 });
 
-test("Feishu virtual document block types retain headings, lists, quotes, and dividers", () => {
+test("Feishu virtual document block types retain headings, lists, quotes, code, and dividers", () => {
   const { document } = parseHTML(`<!doctype html><html><body>
     <div data-block-type="heading2"><div>Section</div></div>
     <div data-block-type="bullet"><div>Bullet item</div></div>
     <div data-block-type="ordered"><div>2. Ordered item</div></div>
     <div data-block-type="quote_container"><div>Quoted text</div></div>
     <div data-block-type="divider"></div>
+    <div data-block-type="code">
+      <div data-block-type="code_line"><span>const ready = true;</span></div>
+      <div data-block-type="code_line"><span>  if (ready) {</span></div>
+      <div data-block-type="code_line"><span>    run();</span></div>
+      <div data-block-type="code_line"><span>  }</span></div>
+    </div>
   </body></html>`);
   const markdown = cleanMarkdown(nodeToMarkdown(document.body));
   assert.match(markdown, /^### Section$/m);
@@ -89,6 +95,8 @@ test("Feishu virtual document block types retain headings, lists, quotes, and di
   assert.match(markdown, /^1\. Ordered item$/m);
   assert.match(markdown, /^> Quoted text$/m);
   assert.match(markdown, /^---$/m);
+  // 代码块保留围栏与行内缩进,行不被拍平成段落
+  assert.match(markdown, /```(?:\w*)\nconst ready = true;\n  if \(ready\) \{\n    run\(\);\n  \}\n```/);
 });
 
 test("web text cannot become Obsidian embeds, comments, HTML, or executable fenced blocks", () => {
