@@ -10,6 +10,7 @@ const { COMMUNITY_SERVICES, DOCUMENT_SERVICES, communityServiceForUrl, documentS
 const { extractDingtalkDoc } = require("./cloud-docs/dingtalk-docs");
 const { extractFeishuDoc, extractFeishuFile, isFeishuFileUrl } = require("./cloud-docs/feishu-docs");
 const { extractTencentDoc, stripTencentChrome, tencentHostForUrl, tencentSiteNameForUrl } = require("./cloud-docs/tencent-docs");
+const { extractWecomDoc } = require("./cloud-docs/wecom-docs");
 const { extractXStatus } = require("./social-media/xclip");
 const { extractBilibili, isBilibiliUrl, isBilibiliVideoUrl } = require("./social-media/biliclip");
 const { extractXiaohongshu, isXiaohongshuUrl, isXhsNoteUrl } = require("./social-media/xhsclip");
@@ -721,10 +722,12 @@ class WebClipper {
       };
     }
     if (tencentHostForUrl(url)) {
-      // 腾讯文档:优先 opendoc 接口拿全量正文(文本/格式/图片 URL,会话 cookie);
+      // 腾讯文档/企微文档:优先 opendoc 接口拿全量正文(文本/格式/图片 URL,会话 cookie);
       // 新版 melo 内核把正文画在 canvas 上,渲染提取拿不到文本,接口路线是唯一文本来源。
+      // 入口按 host 分流:企微文档走独立会话(wecomdoc profile,cookie 与腾讯文档互不共享)
       try {
-        const doc = await extractTencentDoc(url, {
+        const extractor = tencentHostForUrl(url) === "doc.weixin.qq.com" ? extractWecomDoc : extractTencentDoc;
+        const doc = await extractor(url, {
           collectSessionCookies: this.collectSessionCookies.bind(this),
           fetchImpl: async (target, init) => {
             const result = await this.fetch(target, init);
