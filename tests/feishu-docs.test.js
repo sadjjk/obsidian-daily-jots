@@ -119,3 +119,15 @@ test("feishu file meta keeps long snowflake versions and exposes a version-less 
   assert.equal(file.fallbackStreamUrl.includes("version="), false);
   assert.equal(file.fallbackName, "设计稿.pdf");
 });
+
+test("feishu file meta name matching degrades when the field is not exactly named", async () => {
+  // 文件名字段叫 objName(不在精确清单)且无 version/createTime:name 降级命中,其余兜底
+  const payload = JSON.stringify({ data: { objName: "prompt_builder.py", size: 1208, type: 12 } });
+  const file = await extractFeishuFile("https://my.feishu.cn/file/NOU6bPeNfoKwPbxZDPlcQ0InnL4", {
+    collectSessionCookies: async () => "session=tok",
+    fetchImpl: async () => ({ json: async () => JSON.parse(payload) }),
+  });
+  assert.equal(file.fallbackName, "prompt_builder.py");
+  assert.equal(file.streamUrl.includes("version="), false);
+  assert.equal(file.publishedAt, "");
+});

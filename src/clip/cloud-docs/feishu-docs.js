@@ -54,9 +54,8 @@ function feishuFileDownloadHeaders(cookie) {
   };
 }
 
-// meta 接口响应结构未逐字段核对:深度优先按常见字段名宽匹配,取不到退回 token 兜底
-function pickFeishuMetaValue(payload, keyPattern) {
-  const re = keyPattern;
+// meta 接口响应结构未逐字段核对:深度优先按谓词宽匹配,取不到退回 token 兜底
+function pickFeishuMetaValue(payload, match) {
   const walk = (node) => {
     if (!node || typeof node !== "object") return undefined;
     if (Array.isArray(node)) {
@@ -64,7 +63,7 @@ function pickFeishuMetaValue(payload, keyPattern) {
       return undefined;
     }
     for (const [key, value] of Object.entries(node)) {
-      if (re.test(key) && (typeof value === "string" || typeof value === "number")) return value;
+      if (match(key, value)) return value;
     }
     for (const value of Object.values(node)) {
       if (value && typeof value === "object") { const hit = walk(value); if (hit !== undefined) return hit; }
@@ -74,12 +73,28 @@ function pickFeishuMetaValue(payload, keyPattern) {
   return walk(payload);
 }
 
+const FEISHU_NAME_FALLBACKS = [
+  /^(name|file_?name|obj_?name|doc_?name|title)$/i,
+  /name$/i,
+  /(name|title)/i,
+];
+
 function parseFeishuFileMeta(payload, token) {
-  const name = String(pickFeishuMetaValue(payload, /^(name|file_?name|title)$/i) || token);
+  // 文件名:精确 → 前缀降级 → 宽匹配,排除 id/key/token/url 等陷阱字段
+  let name = "";
+  for (const re of FEISHU_NAME_FALLBACKS) {
+    const hit = pickFeishuMetaValue(payload, (key, value) =>
+      typeof value === "string" && re.test(key) && !/(id|key|token|hash|url|link|time|version)$/i.test(key)
+      && value.trim() && value.trim().toLowerCase() !== token.toLowerCase());
+    if (hit) { name = String(hit).trim(); break; }
+  }
+  name = name || token;
   // 真实流 version 是长数字雪花 ID(如 7639013533866314704);短数字是无关字段,误拼会 404
-  const rawVersion = pickFeishuMetaValue(payload, /^(version|latest_?version|obj_?version)$/i);
-  const version = /^\d{10,}$/.test(String(rawVersion)) ? String(rawVersion) : "";
-  const created = pickFeishuMetaValue(payload, /(create_?time|created_?at|gmt_?create)$/i);
+  const rawVersion = pickFeishuMetaValue(payload, (key, value) =>
+    /^(version|latest_?version|obj_?version)$/i.test(key) && /^\d{10,}$/.test(String(value)));
+  const version = rawVersion === undefined ? "" : String(rawVersion);
+  const created = pickFeishuMetaValue(payload, (key, value) =>
+    /(create_?time|created_?at|gmt_?create)$/i.test(key) && (typeof value === "number" || /^\d+$/.test(String(value))));
   let publishedAt = "";
   const value = Number(created);
   if (Number.isFinite(value) && value > 0) publishedAt = localIso(new Date(value > 1e12 ? value : value * 1000));

@@ -697,7 +697,9 @@ class WebClipper {
         if (!file.fallbackStreamUrl || !/404/.test(error?.message || "")) throw error;
         downloaded = await downloadOnce(file.fallbackStreamUrl, url.match(/\/file\/([A-Za-z0-9]+)/)[1]);
       }
-      const fileName = downloaded.fileName || file.fallbackName;
+      const rawName = downloaded.fileName || "";
+      // downloadRemoteFile 在 mime 推断失败时会补 .bin;meta 拿到的真实文件名(带扩展)优先
+      const fileName = file.fallbackName.includes(".") ? file.fallbackName : (rawName || file.fallbackName);
       return {
         url,
         canonicalUrl: url,
