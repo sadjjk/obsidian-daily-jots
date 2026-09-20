@@ -3,6 +3,7 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const { resolveDentryKey, fetchDocumentData, packageToHtml, extractDingtalkDoc } = require("../src/core/dingtalk-docs");
+const { localIso } = require("../src/core/util");
 
 test("resolveDentryKey takes the key straight from note/preview URL params", async () => {
   const key = await resolveDentryKey("https://alidocs.dingtalk.com/note/preview?dentryKey=abc123def456&other=1");
@@ -145,7 +146,7 @@ test("extractDingtalkDoc injects session cookies into GET and POST and skips the
   const doc = await extractDingtalkDoc("https://alidocs.dingtalk.com/i/nodes/gpG2NdyVX3mmZxQYHA1AGnXAWMwvDqPk?utm_scene=person_space", { webSessionManager: manager, fetchImpl });
   assert.equal(doc.title, "测试文档");
   assert.equal(doc.author, "钉钉用户6073");
-  assert.equal(doc.publishedAt, "2024-08-13T05:56:58.000Z");
+  assert.equal(doc.publishedAt, localIso(new Date(1723528618000)));
   assert.ok(doc.html.includes("标题一"));
   assert.equal(doc.cookieHeader, "doc_atoken=tok; stayLogin=1");
   assert.equal(doc.imageHeaders.cookie, "doc_atoken=tok; stayLogin=1");

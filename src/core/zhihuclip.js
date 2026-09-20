@@ -2,6 +2,7 @@
 
 const { parseHTML } = require("linkedom");
 const { readLimitedBody, safeFetch } = require("./network");
+const { localIso } = require("./util");
 
 const ZHIHU_HTML_LIMIT = 5 * 1024 * 1024;
 const ZHIHU_CHALLENGE_PATTERN = /安全验证|系统监测到您的网络环境|请完成身份验证|verify you are human/i;
@@ -99,7 +100,7 @@ function secondsToIso(seconds) {
   const numeric = Number(seconds);
   if (!Number.isFinite(numeric) || numeric <= 0) return "";
   const date = new Date(numeric < 10_000_000_000 ? numeric * 1000 : numeric);
-  return Number.isNaN(date.getTime()) ? "" : date.toISOString();
+  return Number.isNaN(date.getTime()) ? "" : localIso(date);
 }
 
 function formatVoteup(count) {

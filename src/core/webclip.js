@@ -4,7 +4,7 @@ const { Readability } = require("@mozilla/readability");
 const { parseHTML } = require("linkedom");
 const { extractCommunityPost } = require("./communityclip");
 const { decodeHtmlBuffer, downloadRemoteFile, readLimitedBody, safeFetch } = require("./network");
-const { localDateParts, safeFileName, shortHash, yamlString } = require("./util");
+const { localDateParts, localIso, safeFileName, shortHash, yamlString } = require("./util");
 const { extractPdf } = require("./pdfclip");
 const { extractRedditPost, parseRedditUrl } = require("./redditclip");
 const { COMMUNITY_SERVICES, DOCUMENT_SERVICES, communityServiceForUrl, documentServiceForUrl, googleDocumentKind, googleExportUrl, googleFileIdFromUrl, isLikelyPdfUrl, renderServiceForUrl } = require("./web-platforms");
@@ -310,7 +310,7 @@ function publishedWechatTime(html) {
     if (!value) continue;
     const number = Number(value);
     const date = new Date(value.length === 13 ? number : number * 1000);
-    if (!Number.isNaN(date.getTime())) return date.toISOString();
+    if (!Number.isNaN(date.getTime())) return localIso(date);
   }
   return "";
 }

@@ -38,6 +38,10 @@ function localDateParts(input = new Date()) {
   };
 }
 
+function localIso(input = new Date()) {
+  return localDateParts(input).iso;
+}
+
 function extractUrls(text) {
   const matches = String(text || "").match(/https?:\/\/[^\s<>"'）)\]]+/gi) || [];
   return [...new Set(matches.map((url) => url.replace(/[.,;!?，。；！？]+$/, "")))];
@@ -125,4 +129,4 @@ function toErrorMessage(error) {
   return String(error?.message || error || "Unknown error");
 }
 
-module.exports = { assertSafeRemoteUrl, encodeMultipart, exportMimeType, extractUrls, isPrivateHost, localDateParts, markdownEscape, mimeExtension, safeFileName, shortHash, toErrorMessage, yamlString };
+module.exports = { assertSafeRemoteUrl, encodeMultipart, exportMimeType, extractUrls, isPrivateHost, localDateParts, localIso, markdownEscape, mimeExtension, safeFileName, shortHash, toErrorMessage, yamlString };

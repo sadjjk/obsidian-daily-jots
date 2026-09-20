@@ -8,6 +8,7 @@
 // real error rather than saving an empty note.
 
 const { decodeHtmlBuffer, readLimitedBody, safeFetch } = require("./network");
+const { localIso } = require("./util");
 
 const STATE_MARKER = "window.__INITIAL_STATE__=";
 const HTML_LIMIT = 5 * 1024 * 1024;
@@ -116,7 +117,7 @@ function videoFromInitialState(state, finalUrl) {
     markdown: markdown || desc,
     plainText: desc,
     images: cover ? [cover] : [],
-    publishedAt: video.pubdate ? new Date(Number(video.pubdate) * 1000).toISOString() : "",
+    publishedAt: video.pubdate ? localIso(new Date(Number(video.pubdate) * 1000)) : "",
     extractionMethod: "bilibili-initial-state",
     extractionStatus: desc.length >= 40 ? "complete" : "partial",
   };

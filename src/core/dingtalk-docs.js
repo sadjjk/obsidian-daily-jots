@@ -6,6 +6,7 @@ const DINGTALK_ORIGIN = "https://alidocs.dingtalk.com";
 const DENTRY_KEY_PATTERN = /"dentryKey"\s*:\s*"([^"]{8,64})"/i;
 const UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36 Edg/132";
 const { readLimitedBody } = require("./network");
+const { localIso } = require("./util");
 
 // 双形态兼容:原生 fetch Response 有 text/json;safeFetch 的自定义 response 只有
 // body(async iterable,IncomingMessage),webclip 体系一律用 readLimitedBody 读取。
@@ -177,7 +178,7 @@ function packageToHtml(payload) {
   const html = slateNodeToHtml(body).replace(/\n{3,}/g, "\n\n").trim();
   // 实测 fileMetaInfo:creator.nick 为作者昵称,gmtCreate 为文档创建时间(epoch 毫秒)
   const author = String(meta.creator && meta.creator.nick || "");
-  const publishedAt = meta.gmtCreate ? new Date(meta.gmtCreate).toISOString() : "";
+  const publishedAt = meta.gmtCreate ? localIso(new Date(meta.gmtCreate)) : "";
   return {
     title: String(meta.name || (metaPart && metaPart.data && metaPart.data.fileName) || "钉钉文档"),
     html,

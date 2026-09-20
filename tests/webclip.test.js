@@ -8,7 +8,7 @@ const {
   isLikelyContentImage, nodeToMarkdown, prepareDocument, selectArticle, wechatArticleIdentityUrl,
 } = require("../src/core/webclip");
 const { decodeHtmlBuffer } = require("../src/core/network");
-const { safeFileName } = require("../src/core/util");
+const { localIso, safeFileName } = require("../src/core/util");
 
 test("HTML buffers decode with the declared GBK charset instead of forcing UTF-8", () => {
   // "测试" in GBK is B2 E2 CA D4; force-decoding those bytes as UTF-8 garbles them.
@@ -143,7 +143,7 @@ test("WeChat extraction removes page chrome, normalizes titles, records publish 
   const article = articleFromHtml(html, "https://mp.weixin.qq.com/s/short-id?scene=1");
   assert.equal(article.title, "First title");
   assert.equal(article.identityUrl, "https://mp.weixin.qq.com/s?__biz=MzA1234&mid=123456789&idx=2");
-  assert.equal(article.publishedAt, "2023-11-14T22:13:20.000Z");
+  assert.equal(article.publishedAt, localIso(new Date(1700000000000)));
   assert.doesNotMatch(article.markdown, /Scan with WeChat/);
 });
 
@@ -413,7 +413,7 @@ test("DingTalk doc pages clip through the document/data API with session cookies
   assert.equal(article.extractionMethod, "dingtalk-api");
   assert.equal(article.title, "新人百宝箱");
   assert.equal(article.byline, "张三");
-  assert.equal(article.publishedAt, "2023-11-14T22:13:20.000Z");
+  assert.equal(article.publishedAt, localIso(new Date(1700000000000)));
   // 代码块经 pre/code → 围栏 markdown,换行保留不拍平
   assert.ok(article.markdown.includes("```"));
   assert.ok(article.markdown.includes("DOC_ENGINE=elasticsearch\nSTACK_VERSION=8.11.3"));

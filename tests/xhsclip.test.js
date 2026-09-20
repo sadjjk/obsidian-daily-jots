@@ -2,6 +2,7 @@
 
 const test = require("node:test");
 const assert = require("node:assert/strict");
+const { localIso } = require("../src/core/util");
 const {
   extractXiaohongshu,
   isXiaohongshuUrl,
@@ -116,6 +117,7 @@ test("textless photo-only notes still extract with a fallback title and partial 
   assert.equal(data.byline, "Alice");
   assert.equal(data.extractionStatus, "complete");
   assert.equal(data.textless, true);
+  assert.equal(data.publishedAt, localIso(new Date(1788253336000)));
   assert.deepEqual(data.images, [
     "https://sns-webpic-qc.xhscdn.com/one",
     "https://sns-webpic-hw.xhscdn.com/two",

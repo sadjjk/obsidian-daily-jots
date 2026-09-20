@@ -2,7 +2,7 @@
 
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { assertSafeRemoteUrl, encodeMultipart, exportMimeType, extractUrls, isPrivateHost, safeFileName } = require("../src/core/util");
+const { assertSafeRemoteUrl, encodeMultipart, exportMimeType, extractUrls, isPrivateHost, localDateParts, localIso, safeFileName } = require("../src/core/util");
 const { decodeDataUrl, readLimitedBody } = require("../src/core/network");
 
 test("URL extraction de-duplicates links and trims sentence punctuation", () => {
@@ -40,4 +40,11 @@ test("data URLs decode without a network request", () => {
 test("limited response reader stops oversized payloads", async () => {
   const response = new Response(Buffer.from("12345"), { headers: { "content-length": "5" } });
   await assert.rejects(() => readLimitedBody(response, 4), /exceeds 4 bytes/);
+});
+
+test("localIso emits the same local-time format as clipped_at", () => {
+  const stamp = 1700000000000;
+  assert.equal(localIso(new Date(stamp)), localDateParts(new Date(stamp)).iso);
+  assert.match(localIso(new Date(stamp)), /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}[+-]\d{2}:\d{2}$/);
+  assert.doesNotMatch(localIso(new Date(stamp)), /Z$/);
 });

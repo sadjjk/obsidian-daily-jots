@@ -2,6 +2,7 @@
 
 const { parseHTML } = require("linkedom");
 const { readLimitedBody, safeFetch } = require("./network");
+const { localIso } = require("./util");
 
 const XHS_HTML_LIMIT = 5 * 1024 * 1024;
 
@@ -136,7 +137,7 @@ function publishedAt(value) {
   if (!Number.isFinite(numeric) || numeric <= 0) return "";
   const milliseconds = numeric < 10_000_000_000 ? numeric * 1000 : numeric;
   const date = new Date(milliseconds);
-  return Number.isNaN(date.getTime()) ? "" : date.toISOString();
+  return Number.isNaN(date.getTime()) ? "" : localIso(date);
 }
 
 function xiaohongshuDataFromHtml(html, finalUrl) {

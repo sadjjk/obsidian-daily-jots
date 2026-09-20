@@ -3,6 +3,7 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const { extractBilibili, formatCount, isBilibiliUrl, isBilibiliVideoUrl, jsonAssignmentFromHtml } = require("../src/core/biliclip");
+const { localIso } = require("../src/core/util");
 
 const stateHtml = (videoDataJson) => `<!doctype html><html><head><title>x</title></head><body>
 <script>window.__INITIAL_STATE__=${videoDataJson};(function(){var a={};})();</script>
@@ -66,7 +67,7 @@ test("Bilibili video pages extract structured metadata from the initial state", 
   assert.match(clipper.markdown, /播放 121\.5万 · 弹幕 2021 · 点赞 6\.7万/);
   assert.match(clipper.markdown, /伊莫上线定档 · 游戏/);
   assert.match(clipper.markdown, /谜立方/);
-  assert.equal(clipper.publishedAt, new Date(1789457142 * 1000).toISOString());
+  assert.equal(clipper.publishedAt, localIso(new Date(1789457142 * 1000)));
   assert.deepEqual(clipper.images, ["https://i0.hdslb.com/bfs/archive/cover.jpg"]);
 });
 

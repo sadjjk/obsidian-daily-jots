@@ -9,6 +9,7 @@ const {
   parseInitialData,
   zhihuDataFromHtml,
 } = require("../src/core/zhihuclip");
+const { localIso } = require("../src/core/util");
 
 const ANSWER_URL = "https://www.zhihu.com/question/1951716962645288920/answer/2035816979085390373?share_code=KoQvmVk9iNoq";
 const ARTICLE_URL = "https://zhuanlan.zhihu.com/p/1909282";
@@ -122,7 +123,7 @@ test("answer pages parse js-initialData into structured content with images and 
   assert.equal(data.byline, "张三");
   assert.equal(data.siteName, "知乎");
   assert.equal(data.extractionMethod, "zhihu-initial-state");
-  assert.equal(data.publishedAt, "2023-11-14T22:13:20.000Z");
+  assert.equal(data.publishedAt, localIso(new Date(1700000000000)));
   assert.equal(data.identityUrl, "https://www.zhihu.com/question/1951716962645288920/answer/2035816979085390373");
   assert.deepEqual(data.images, ["https://pic1.zhimg.com/50/v2-abc.jpg"]);
   assert.match(data.contentHtml, /先分析再动手/);
@@ -156,7 +157,7 @@ test("column articles parse their own initial-data entities", () => {
   assert.equal(data.title, "一篇知乎专栏文章");
   assert.equal(data.byline, "李四");
   assert.equal(data.siteName, "知乎专栏");
-  assert.equal(data.publishedAt, "2023-07-22T04:26:40.000Z");
+  assert.equal(data.publishedAt, localIso(new Date(1690000000000)));
 });
 
 test("pages without js-initialData fall back to question and answer DOM", async () => {
