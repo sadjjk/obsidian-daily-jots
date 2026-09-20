@@ -3,6 +3,7 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const { extractTencentDoc, parseTencentDocPayload, stripTencentChrome, tencentDocApiUrl, tencentDocToMarkdown, tencentHostForUrl, tencentSessionServiceForUrl, tencentSiteNameForUrl } = require("../src/clip/cloud-docs/tencent-docs");
+const { localIso } = require("../src/core/util");
 
 test("tencent rendered chrome lines are stripped while body lines survive", () => {
   const markdown = [
@@ -126,6 +127,28 @@ test("tencent TOC field codes and anchor entries are stripped, bold title line i
   assert.match(markdown, /## \*\*一、正文标题\*\*/);
   assert.match(markdown, /\*\*目录\*\*/);
   assert.doesNotMatch(markdown, /^# 测试$/m);
+});
+
+test("tencent wecom mention directives are stripped while mention names survive", () => {
+  const text = "MENTION_WXWORK at-1714027908250-0 0 0 w3_ABQAcgYGAFIO1ijvHcNRtaZE6oD1U_p@李石。\rMENTION_WXWORK at-1714027908235-1688851236418068 1688851236418068 w3_ABQAcgYGAFIO1ijvHcNRtaZE6oD1U_p@杨懿宁 今日进展\r";
+  const markdown = tencentDocToMarkdown(text, {}, {}, "测试文档");
+  assert.match(markdown, /@李石。/);
+  assert.match(markdown, /@杨懿宁 今日进展/);
+  assert.doesNotMatch(markdown, /MENTION_WXWORK/);
+  assert.doesNotMatch(markdown, /at-1714027908250/);
+});
+
+test("tencent author prefers the doc owner and published_at parses create time", () => {
+  const payload = docPayload([{ s: "正文\r" }]);
+  payload.clientVars.userName = "剪藏人";
+  payload.clientVars.ownerName = "王金宇";
+  payload.clientVars.createTime = 1745577637;
+  const parsed = parseTencentDocPayload(payload);
+  assert.equal(parsed.author, "王金宇");
+  assert.equal(parsed.publishedAt, localIso(new Date(1745577637 * 1000)));
+  const fallback = parseTencentDocPayload({ ...docPayload([{ s: "正文\r" }]), clientVars: { ...docPayload([{ s: "正文\r" }]).clientVars, userName: "剪藏人" } });
+  assert.equal(fallback.author, "剪藏人");
+  assert.equal(fallback.publishedAt, "");
 });
 
 test("tencent extract fetches opendoc with session cookie and parses the body-only response", async () => {

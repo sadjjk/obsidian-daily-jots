@@ -747,7 +747,7 @@ class WebClipper {
             contentChars: doc.markdown.length,
             extractionMethod: "tencent-opendoc",
             extractionStatus: "complete",
-            publishedAt: "",
+            publishedAt: doc.publishedAt || "",
           };
         }
       } catch (_) {

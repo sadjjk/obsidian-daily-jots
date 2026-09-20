@@ -1,5 +1,6 @@
 // 腾讯文档专用处理:收敛渲染提取后的页面 chrome 清洗与 opendoc 正文提取。
 const { readLimitedBody } = require("../../core/network");
+const { localIso } = require("../../core/util");
 // 渲染页会把工具栏/菜单按钮文字与只读横幅混进正文短行
 // (菜单/插入/标题 1/默认字体/快捷工具…、View only / Log in now),
 // 这里按完全锚定的短行黑名单剥离;长正文行不受影响。
@@ -49,21 +50,21 @@ function tencentDocApiUrl(url) {
   return `https://${host}/dop-api/opendoc?${params.toString()}`;
 }
 
-// 深度优先按谓词取值(与飞书 meta 同款思路,但这里路径已知,主要用于容错)
+// 深度优先按谓词取值(key, value 双参);这里路径已知,主要用于容错与元数据宽匹配
 function pickTencentValue(payload, match) {
-  const walk = (node) => {
+  const walk = (node, key) => {
     if (!node || typeof node !== "object") return undefined;
     if (Array.isArray(node)) {
-      for (const item of node) { const hit = walk(item); if (hit !== undefined) return hit; }
+      for (const item of node) { const hit = walk(item, key); if (hit !== undefined) return hit; }
       return undefined;
     }
-    for (const value of Object.values(node)) {
-      if (match(value)) return value;
-      if (value && typeof value === "object") { const hit = walk(value); if (hit !== undefined) return hit; }
+    for (const [childKey, value] of Object.entries(node)) {
+      if (match(childKey, value)) return value;
+      if (value && typeof value === "object") { const hit = walk(value, childKey); if (hit !== undefined) return hit; }
     }
     return undefined;
   };
-  return walk(payload);
+  return walk(payload, "");
 }
 
 function parseTencentDocPayload(payload) {
@@ -105,9 +106,30 @@ function parseTencentDocPayload(payload) {
       imageMap[bi] = { url: imageUrl, width, height, descr: pic?.nvPicPr?.cNvPr?.descr || "image" };
     }
   }
+  // 作者:优先文档创建者(owner/creator);clientVars.userName 是当前登录者(剪藏人),仅兜底
+  let author = "";
+  const ownerNode = pickTencentValue(payload, (key, value) => /^(owner|creator)$/i.test(key) && value != null && value !== "");
+  if (typeof ownerNode === "string") author = ownerNode.trim();
+  else if (ownerNode && typeof ownerNode === "object") {
+    const ownerName = pickTencentValue(ownerNode, (key, value) => /^(name|user_?name|nick_?name)$/i.test(key) && typeof value === "string" && value.trim());
+    author = ownerName ? String(ownerName).trim() : "";
+  }
+  if (!author) {
+    const hit = pickTencentValue(payload, (key, value) => typeof value === "string"
+      && /(owner_?name|creator_?name|author)$/i.test(key) && !/(^id$|_?id$|key|token)$/i.test(key) && value.trim());
+    author = hit ? String(hit).trim() : "";
+  }
+  if (!author) author = String(clientVars.userName || "").trim();
+  // 创建时间:秒/毫秒自动判别,转 localIso
+  const created = pickTencentValue(payload, (key, value) =>
+    /(create_?time|created_?at|gmt_?create|doc_?create)/i.test(key) && (typeof value === "number" || /^\d+$/.test(String(value))));
+  let publishedAt = "";
+  const createdValue = Number(created);
+  if (Number.isFinite(createdValue) && createdValue > 0) publishedAt = localIso(new Date(createdValue > 1e12 ? createdValue : createdValue * 1000));
   return {
     title: String(clientVars.title || "").trim(),
-    author: String(clientVars.userName || "").trim(),
+    author,
+    publishedAt,
     markdown: tencentDocToMarkdown(rawText, formatMap, imageMap, String(clientVars.title || "").trim()),
     // 图片 URL 喂给既有 downloadWebImages 管线;markdown 里的 URL 与之逐字一致,下载后自动替换成本地路径
     images: [...new Set(Object.values(imageMap).map((img) => img.url).filter(Boolean))],
@@ -217,10 +239,13 @@ function tencentDocToMarkdown(rawText, formatMap = {}, imageMap = {}, title = ""
     const img = imageEntries[imageIndex++][1];
     parts.push("", `![${(img.descr || "image").replace(/[[\]]/g, "")}](${img.url})`, "");
   }
-  // TOC 域还原不出有意义文本:首行是域指令(TOC \o "1-1" \h \z \u),条目是内部锚 id 链接,整块剥除
+  // TOC 域还原不出有意义文本:首行是域指令(TOC \o "1-1" \h \z \u),条目是内部锚 id 链接,整块剥除;
+  // MENTION_WXWORK at-... 是企微 @提及指令串,剥掉标记保留 @名字,无名字的提及行整行删除
   const cleaned = parts.join("\n").split("\n")
     .filter((line) => !/^TOC\s+\\/.test(line.trim()) && !/^\["[^"]+"\]\(\\l\)$/.test(line.trim()))
-    .join("\n");
+    .join("\n")
+    .replace(/MENTION_WXWORK(?:\s+(?!@)[^\s@]+)+\s*(?=@)/g, "")
+    .replace(/MENTION_WXWORK[^\n]*/g, "");
   return cleaned.replace(/\n{3,}/g, "\n\n").trim() + "\n";
 }
 
