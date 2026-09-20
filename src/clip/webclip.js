@@ -9,7 +9,7 @@ const { extractRedditPost, parseRedditUrl } = require("./social-media/redditclip
 const { COMMUNITY_SERVICES, DOCUMENT_SERVICES, communityServiceForUrl, documentServiceForUrl, isLikelyPdfUrl, renderServiceForUrl } = require("./lib/web-platforms");
 const { extractDingtalkDoc } = require("./cloud-docs/dingtalk-docs");
 const { extractFeishuDoc, extractFeishuFile, isFeishuFileUrl } = require("./cloud-docs/feishu-docs");
-const { extractTencentDoc, stripTencentChrome, tencentHostForUrl } = require("./cloud-docs/tencent-docs");
+const { extractTencentDoc, stripTencentChrome, tencentHostForUrl, tencentSiteNameForUrl } = require("./cloud-docs/tencent-docs");
 const { extractXStatus } = require("./social-media/xclip");
 const { extractBilibili, isBilibiliUrl, isBilibiliVideoUrl } = require("./social-media/biliclip");
 const { extractXiaohongshu, isXiaohongshuUrl, isXhsNoteUrl } = require("./social-media/xhsclip");
@@ -736,10 +736,10 @@ class WebClipper {
             url,
             canonicalUrl: url,
             identityUrl: url,
-            title: doc.title || "腾讯文档",
+            title: doc.title || "云文档",
             byline: doc.author || "",
             excerpt: doc.markdown.replace(/\s+/g, " ").slice(0, 200),
-            siteName: "腾讯文档",
+            siteName: tencentSiteNameForUrl(url),
             markdown: doc.markdown,
             images: doc.images || [],
             // 图片 CDN 直连可能要求会话;cookie 从腾讯会话带来,downloadWebImages 下载时自动携带
@@ -809,9 +809,10 @@ class WebClipper {
           return { ...article, commentCount: Number(rendered.commentCount) || 0 };
         }
         if (tencentHostForUrl(url)) {
-          // 腾讯文档渲染拿不到正文(登录墙/私有文档/melo canvas 无文本):不回落 HTTP 空壳,
+          // 腾讯文档/企微文档渲染拿不到正文(登录墙/私有文档/melo canvas 无文本):不回落 HTTP 空壳,
           // 像钉钉/飞书一样明确提示用户先登录浏览器会话
-          const error = new Error("腾讯文档页面需要登录:请先在「浏览器会话」面板打开「腾讯文档」登录窗口完成登录,再重新剪藏");
+          const serviceName = DOCUMENT_SERVICES[documentServiceForUrl(url)]?.name || "腾讯文档";
+          const error = new Error(`${serviceName}页面需要登录:请先在「浏览器会话」面板打开「${serviceName}」登录窗口完成登录,再重新剪藏`);
           error.code = "DOCUMENT_LOGIN_REQUIRED";
           throw error;
         }

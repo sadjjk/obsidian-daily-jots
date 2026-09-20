@@ -9,6 +9,7 @@ const { WebClipper } = require("../src/clip/webclip");
 test("cloud documents and Product Hunt route to their rendered adapters", () => {
   assert.equal(documentServiceForUrl("https://example.feishu.cn/docx/abc"), "feishu");
   assert.equal(documentServiceForUrl("https://docs.qq.com/doc/abc"), "tencent");
+  assert.equal(documentServiceForUrl("https://doc.weixin.qq.com/doc/abc?scode=xyz"), "wecomdoc");
   assert.equal(documentServiceForUrl("https://www.kdocs.cn/l/abc"), "wps");
   assert.equal(documentServiceForUrl("https://www.office.com/"), null);
   assert.equal(renderServiceForUrl("https://www.producthunt.com/posts/tool"), "producthunt");

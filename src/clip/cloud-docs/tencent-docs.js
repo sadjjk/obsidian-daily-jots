@@ -230,11 +230,21 @@ function fencedCode(code) {
   return `${fence}\n${code}\n${fence}`;
 }
 
+// 会话服务按 host 分流:doc.weixin.qq.com 用独立的 wecomdoc 会话(cookie 与腾讯文档互不共享)
+function tencentSessionServiceForUrl(url) {
+  return tencentHostForUrl(url) === "doc.weixin.qq.com" ? "wecomdoc" : "tencent";
+}
+
+function tencentSiteNameForUrl(url) {
+  return tencentHostForUrl(url) === "doc.weixin.qq.com" ? "企微文档" : "腾讯文档";
+}
+
 // 会话 cookie 拉取 opendoc 并解析;任何失败抛错,由调用方回落渲染提取
 async function extractTencentDoc(url, { collectSessionCookies, fetchImpl } = {}) {
   const host = tencentHostForUrl(url);
   if (!host) throw new Error("不是腾讯文档链接");
-  const cookie = collectSessionCookies ? await collectSessionCookies("tencent", `https://${host}/`) : "";
+  const sessionService = tencentSessionServiceForUrl(url);
+  const cookie = collectSessionCookies ? await collectSessionCookies(sessionService, `https://${host}/`) : "";
   if (!cookie) {
     const error = new Error("腾讯文档正文提取需要登录会话:先在浏览器会话中登录腾讯文档后重试");
     error.code = "DOCUMENT_LOGIN_REQUIRED";
@@ -254,4 +264,4 @@ async function extractTencentDoc(url, { collectSessionCookies, fetchImpl } = {})
   return { ...parseTencentDocPayload(payload), imageHeaders: { cookie } };
 }
 
-module.exports = { extractTencentDoc, parseTencentDocPayload, stripTencentChrome, tencentDocApiUrl, tencentDocToMarkdown, tencentHostForUrl };
+module.exports = { extractTencentDoc, parseTencentDocPayload, stripTencentChrome, tencentDocApiUrl, tencentDocToMarkdown, tencentHostForUrl, tencentSessionServiceForUrl, tencentSiteNameForUrl };

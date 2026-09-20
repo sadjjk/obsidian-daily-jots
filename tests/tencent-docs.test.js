@@ -2,7 +2,7 @@
 
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { extractTencentDoc, parseTencentDocPayload, stripTencentChrome, tencentDocApiUrl, tencentDocToMarkdown, tencentHostForUrl } = require("../src/clip/cloud-docs/tencent-docs");
+const { extractTencentDoc, parseTencentDocPayload, stripTencentChrome, tencentDocApiUrl, tencentDocToMarkdown, tencentHostForUrl, tencentSessionServiceForUrl, tencentSiteNameForUrl } = require("../src/clip/cloud-docs/tencent-docs");
 
 test("tencent rendered chrome lines are stripped while body lines survive", () => {
   const markdown = [
@@ -74,6 +74,13 @@ test("tencent opendoc url works for docs.qq.com and doc.weixin.qq.com", () => {
   const wecomUrl = tencentDocApiUrl("https://doc.weixin.qq.com/doc/m2nABC?scode=xyz");
   assert.match(wecomUrl, /^https:\/\/doc\.weixin\.qq\.com\/dop-api\/opendoc\?/);
   assert.match(wecomUrl, /scode=xyz/);
+});
+
+test("wecom doc links use an independent session service and site name", () => {
+  assert.equal(tencentSessionServiceForUrl("https://docs.qq.com/doc/DR25"), "tencent");
+  assert.equal(tencentSessionServiceForUrl("https://doc.weixin.qq.com/doc/m2nABC?scode=xyz"), "wecomdoc");
+  assert.equal(tencentSiteNameForUrl("https://docs.qq.com/doc/DR25"), "腾讯文档");
+  assert.equal(tencentSiteNameForUrl("https://doc.weixin.qq.com/doc/m2nABC"), "企微文档");
 });
 
 test("tencent mutations convert to markdown with heading, bold, image, and table", () => {

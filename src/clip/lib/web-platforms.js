@@ -25,6 +25,15 @@ const DOCUMENT_SERVICES = {
     hosts: ["docs.qq.com"],
     contentSelectors: [".editor-content", ".ql-editor", ".canvas-content", "[contenteditable='true']", "main", "body"],
   },
+  // 企微文档与腾讯文档同内核(opendoc 协议复用),但登录会话独立:profile 按服务名隔离
+  wecomdoc: {
+    name: "企微文档",
+    loginUrl: "https://doc.weixin.qq.com/",
+    hosts: ["doc.weixin.qq.com"],
+    paths: [/\/doc\//i],
+    contentSelectors: [".editor-content", ".ql-editor", ".canvas-content", "[contenteditable='true']", "main", "body"],
+    authPattern: "微信扫码登录|请先登录|登录.*企微|sign in.*wecom",
+  },
   wps: {
     name: "WPS文档",
     loginUrl: "https://www.kdocs.cn/",
