@@ -122,24 +122,10 @@ function formatCaptureReceipt(result, locale = "zh-CN", preview = null) {
     const savedFiles = Math.max(0, Number(clip.savedFiles) || 0);
     const failedFiles = clip.fileFailures?.length || 0;
     const commentCount = Math.max(0, Number(clip.article?.commentCount) || 0);
-    const isPdf = clip.article?.extractionMethod === "pdf-text";
-    const pageCount = Math.max(0, Number(clip.article?.pageCount) || 0);
     if (clip.reused && !failedImages && !failedFiles) {
       lines.push(locale === "en"
         ? `🔖 “${title}” was already saved. Reused the clipping in “${clippingFolder}”.`
         : `🔖 《${title}》之前已经保存，已复用「${clippingFolder}」中的剪藏`);
-      continue;
-    }
-    if (isPdf) {
-      if (locale === "en") {
-        const pages = pageCount ? `${pageCount}-page ` : "";
-        if (clip.article?.extractionStatus === "partial") pushWithPreview(`⚠️ “${title}” was saved to “${clippingFolder}”, but only part of the ${pages}PDF text could be extracted.`, clip);
-        else pushWithPreview(`🔖 “${title}” was saved to “${clippingFolder}” with the extracted ${pages}PDF text.${savedFiles ? " The original PDF was also saved." : ""}`, clip);
-      } else if (clip.article?.extractionStatus === "partial") {
-        pushWithPreview(`⚠️ 《${title}》已保存到「${clippingFolder}」，但${pageCount ? ` ${pageCount} 页` : ""} PDF 正文提取不完整`, clip);
-      } else {
-        pushWithPreview(`🔖 《${title}》已提取${pageCount ? ` ${pageCount} 页` : ""} PDF 正文并保存到「${clippingFolder}」${savedFiles ? "，并保留原 PDF" : ""}`, clip);
-      }
       continue;
     }
     // 正文有无以 textless 显式标志为准:小红书纯图笔记本来就无文字

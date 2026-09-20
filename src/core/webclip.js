@@ -5,7 +5,6 @@ const { parseHTML } = require("linkedom");
 const { extractCommunityPost } = require("./communityclip");
 const { decodeHtmlBuffer, downloadRemoteFile, readLimitedBody, safeFetch } = require("./network");
 const { localDateParts, localIso, safeFileName, shortHash, yamlString } = require("./util");
-const { extractPdf } = require("./pdfclip");
 const { extractRedditPost, parseRedditUrl } = require("./redditclip");
 const { COMMUNITY_SERVICES, DOCUMENT_SERVICES, communityServiceForUrl, documentServiceForUrl, isLikelyPdfUrl, renderServiceForUrl } = require("./web-platforms");
 const { extractDingtalkDoc } = require("./dingtalk-docs");
@@ -722,8 +721,7 @@ class WebClipper {
     }
     const contentType = response.headers.get("content-type") || "";
     if (contentType.includes("application/pdf") || (isLikelyPdfUrl(finalUrl) && !contentType.includes("html"))) {
-      const buffer = await readLimitedBody(response, this.settings.capture.maxFileMb * 1024 * 1024);
-      return extractPdf(buffer, finalUrl, response.headers.get("content-disposition") || "");
+      throw new Error("PDF 链接不再自动提取正文：聊天里的 PDF 附件会正常保存，直链 PDF 可手动下载");
     }
     if (!contentType.includes("html") && !contentType.includes("xml")) throw new Error(`Unsupported page type: ${contentType || "unknown"}`);
     const html = decodeHtmlBuffer(await readLimitedBody(response, 5 * 1024 * 1024), contentType);
