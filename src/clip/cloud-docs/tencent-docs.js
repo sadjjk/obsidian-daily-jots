@@ -9,7 +9,7 @@ const TENCENT_UI_LINE = new RegExp("^(?:" + [
   "复制", "粘贴", "剪切", "加粗", "斜体", "下划线", "删除线", "字体", "字号", "默认字体",
   "小二", "小四", "四号", "五号", "正文", "引用", "高亮", "批注", "表格", "图片",
   "链接", "代码块", "分隔线", "页面", "缩放", "快捷工具", "PDF转换", "生成图片", "排版美化",
-  "腾讯文档", "微信", "QQ", "登录", "注册", "扫码", "标题\\s?\\d?",
+  "腾讯文档", "微信", "QQ", "登录", "注册", "扫码", "标题\\s?\\d?", "text", "正在同步内容\\S*",
 ].join("|") + ")$", "i");
 
 function stripTencentChrome(markdown) {
@@ -17,6 +17,8 @@ function stripTencentChrome(markdown) {
     const trimmed = line.trim();
     if (!trimmed) return true;
     if (trimmed.length <= 14 && TENCENT_UI_LINE.test(trimmed)) return false;
+    // 编辑器字体宽度测量串(mmmmmmmmmmlli1ƒ⁇! 形态),行超长但只含度量字符
+    if (/^m{3,}[a-z0-9!ƒ⁇.·]*$/i.test(trimmed)) return false;
     if (trimmed.length <= 60 && /^(view only|log in now|log in to|login\b)/i.test(trimmed)) return false;
     return true;
   }).join("\n");

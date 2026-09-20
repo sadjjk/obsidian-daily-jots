@@ -38,6 +38,19 @@ test("tencent chrome stripping keeps blank lines and normal punctuation lines", 
   assert.equal(stripTencentChrome(markdown), markdown);
 });
 
+test("tencent chrome stripping removes sync banner and font metric lines", () => {
+  const markdown = [
+    "正在同步内容...",
+    "mmmmmmmmmmlli1ƒ⁇!",
+    "mmmmmmmmmmlli1ƒ⁇!",
+    "真实正文行",
+    "text",
+    "M",
+  ].join("\n");
+  const cleaned = stripTencentChrome(markdown);
+  assert.deepEqual(cleaned.split("\n").filter((line) => line.trim()), ["真实正文行", "M"]);
+});
+
 // ==== opendoc 提取 ====
 
 function docPayload(mutations, extra = {}) {
