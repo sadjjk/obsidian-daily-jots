@@ -9,7 +9,7 @@ const { extractRedditPost, parseRedditUrl } = require("./social-media/redditclip
 const { COMMUNITY_SERVICES, DOCUMENT_SERVICES, communityServiceForUrl, documentServiceForUrl, isLikelyPdfUrl, renderServiceForUrl } = require("./lib/web-platforms");
 const { extractDingtalkDoc } = require("./cloud-docs/dingtalk-docs");
 const { extractFeishuDoc, extractFeishuFile, isFeishuFileUrl } = require("./cloud-docs/feishu-docs");
-const { stripTencentChrome } = require("./cloud-docs/tencent-docs");
+const { extractTencentDoc, stripTencentChrome, tencentHostForUrl } = require("./cloud-docs/tencent-docs");
 const { extractXStatus } = require("./social-media/xclip");
 const { extractBilibili, isBilibiliUrl, isBilibiliVideoUrl } = require("./social-media/biliclip");
 const { extractXiaohongshu, isXiaohongshuUrl, isXhsNoteUrl } = require("./social-media/xhsclip");
@@ -719,6 +719,38 @@ class WebClipper {
         publishedAt: file.publishedAt || "",
         binaryFiles: [{ buffer: downloaded.buffer, fileName, mimeType: downloaded.mimeType }],
       };
+    }
+    if (tencentHostForUrl(url)) {
+      // 腾讯文档:优先 opendoc 接口拿全量正文(文本/格式/图片 URL,会话 cookie);
+      // 新版 melo 内核把正文画在 canvas 上,渲染提取拿不到文本,接口路线是唯一文本来源。
+      try {
+        const doc = await extractTencentDoc(url, {
+          collectSessionCookies: this.collectSessionCookies.bind(this),
+          fetchImpl: async (target, init) => {
+            const result = await this.fetch(target, init);
+            return result && result.response !== undefined ? result.response : result;
+          },
+        });
+        if (doc.markdown && doc.markdown.trim().length > 60) {
+          return {
+            url,
+            canonicalUrl: url,
+            identityUrl: url,
+            title: doc.title || "腾讯文档",
+            byline: doc.author || "",
+            excerpt: doc.markdown.replace(/\s+/g, " ").slice(0, 200),
+            siteName: "腾讯文档",
+            markdown: doc.markdown,
+            images: [],
+            contentChars: doc.markdown.length,
+            extractionMethod: "tencent-opendoc",
+            extractionStatus: "complete",
+            publishedAt: "",
+          };
+        }
+      } catch (_) {
+        // 接口拿不到(无会话/结构变化/非文档页)一律回落渲染提取,不中断剪藏
+      }
     }
     if (documentServiceForUrl(url) === "dingtalk") {
       const dingtalk = await extractDingtalkDoc(url, {
