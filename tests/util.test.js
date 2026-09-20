@@ -21,6 +21,11 @@ test("file names cannot escape the vault folder", () => {
   assert.equal(safeFileName("../../a:b?.png"), "-a-b-.png");
 });
 
+test("file names drop zero-width characters entirely", () => {
+  assert.equal(safeFileName("​‌‍​⁠​‌​​⁠​AI 鹊桥"), "AI 鹊桥");
+  assert.equal(safeFileName("a\u00ADb\u200Bc\u200Dd\u2060e\uFEFFf"), "abcdef");
+});
+
 test("export mime types cover packed note formats", () => {
   assert.equal(exportMimeType("md"), "text/markdown");
   assert.equal(exportMimeType("txt"), "text/plain");
