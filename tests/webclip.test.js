@@ -386,6 +386,37 @@ test("feishu rendered payload forwards author and publishedTime into the article
   assert.deepEqual(article.imageHeaders, { cookie: "feishu_session=tok" });
 });
 
+test("feishu file links download the binary as an attachment instead of extracting content", async () => {
+  const savedBinaries = [];
+  const downloadCalls = [];
+  const writer = {
+    findTextBySuffix: () => "",
+    saveBinary: async (folder, name, buffer, mimeType) => { savedBinaries.push({ folder, name, buffer, mimeType }); return `${folder}/${name}`; },
+    upsertText: async (path, content) => { writes.push({ path, content }); return path; },
+  };
+  const writes = [];
+  const clipper = new WebClipper(writer, dingtalkTestSettings(), {
+    fetch: async () => { throw new Error("file links should not fall back to HTTP extraction"); },
+    sessionManager: { collectCookies: async () => "session=tok; _csrf_token=csrf-1" },
+    download: async (url, options) => {
+      downloadCalls.push({ url, options });
+      return { buffer: Buffer.from("PDFDATA"), mimeType: "application/pdf", fileName: "设计稿.pdf" };
+    },
+  });
+  const article = await clipper.extract("https://my.feishu.cn/file/NOU6bPeNfoKwPbxZDPlcQ0InnL4");
+  assert.equal(article.extractionMethod, "feishu-file-attachment");
+  assert.equal(article.title, "设计稿.pdf");
+  assert.equal(article.binaryFiles.length, 1);
+  assert.equal(downloadCalls[0].url.includes("download/preview/NOU6bPeNfoKwPbxZDPlcQ0InnL4?mount_point=explorer&preview_type=16"), true);
+  assert.equal(downloadCalls[0].url.includes("version="), false);
+  assert.equal(downloadCalls[0].options.headers["x-csrftoken"], "csrf-1");
+  assert.equal(downloadCalls[0].options.headers["x-command"], "stream.download.preview");
+  await clipper.saveArticle(article, { timestamp: new Date("2026-09-20T00:00:00Z") });
+  assert.equal(savedBinaries[0].name, "设计稿.pdf");
+  assert.equal(savedBinaries[0].mimeType, "application/pdf");
+  assert.match(writes[0].content, /设计稿\.pdf/);
+});
+
 test("the session-cookie bridge passes the site-specific refresh parameters", async () => {
   const cookieOptions = [];
   const clipper = new WebClipper({}, zhihuTestSettings(), {

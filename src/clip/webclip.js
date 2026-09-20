@@ -8,7 +8,7 @@ const { localDateParts, localIso, safeFileName, shortHash, yamlString } = requir
 const { extractRedditPost, parseRedditUrl } = require("./social-media/redditclip");
 const { COMMUNITY_SERVICES, DOCUMENT_SERVICES, communityServiceForUrl, documentServiceForUrl, isLikelyPdfUrl, renderServiceForUrl } = require("./lib/web-platforms");
 const { extractDingtalkDoc } = require("./cloud-docs/dingtalk-docs");
-const { extractFeishuDoc } = require("./cloud-docs/feishu-docs");
+const { extractFeishuDoc, extractFeishuFile, isFeishuFileUrl } = require("./cloud-docs/feishu-docs");
 const { extractXStatus } = require("./social-media/xclip");
 const { extractBilibili, isBilibiliUrl, isBilibiliVideoUrl } = require("./social-media/biliclip");
 const { extractXiaohongshu, isXiaohongshuUrl, isXhsNoteUrl } = require("./social-media/xhsclip");
@@ -662,6 +662,35 @@ class WebClipper {
           return { ...article, commentCount: data.commentCount || 0, extractionStatus: data.extractionStatus || article.extractionStatus };
         }
       } catch (error) { communityError = error; }
+    }
+    if (isFeishuFileUrl(url)) {
+      // 飞书云盘文件:不做正文提取,带会话头下载原文件,交给 binaryFiles 附件机制落盘
+      const file = await extractFeishuFile(url, { collectSessionCookies: this.collectSessionCookies.bind(this) });
+      const downloaded = await this.download(file.streamUrl, {
+        headers: file.headers,
+        accept: "application/json, text/plain, */*",
+        maxBytes: Math.max(1, Number(this.settings.capture.maxFileMb) || 20) * 1024 * 1024,
+        timeoutMs: 60_000,
+        requestAttempts: 1,
+        fileName: file.fallbackName,
+      });
+      const fileName = downloaded.fileName || file.fallbackName;
+      return {
+        url,
+        canonicalUrl: url,
+        identityUrl: url,
+        title: fileName,
+        byline: "",
+        excerpt: "飞书云盘文件,已作为附件保存",
+        siteName: "飞书文档",
+        markdown: "",
+        images: [],
+        contentChars: 0,
+        extractionMethod: "feishu-file-attachment",
+        extractionStatus: "complete",
+        publishedAt: "",
+        binaryFiles: [{ buffer: downloaded.buffer, fileName, mimeType: downloaded.mimeType }],
+      };
     }
     if (documentServiceForUrl(url) === "dingtalk") {
       const dingtalk = await extractDingtalkDoc(url, {

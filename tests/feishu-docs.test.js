@@ -2,7 +2,7 @@
 
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { extractFeishuDoc } = require("../src/clip/cloud-docs/feishu-docs");
+const { extractFeishuDoc, normalizeFeishuPublishedTime, isFeishuFileUrl, extractFeishuFile } = require("../src/clip/cloud-docs/feishu-docs");
 const { localIso } = require("../src/core/util");
 
 test("extractFeishuDoc bridges the rendered session cookie into imageHeaders", async () => {
@@ -45,4 +45,23 @@ test("normalizeFeishuPublishedTime falls back to the raw copy when no date is pr
     localIso(new Date(new Date().getFullYear(), 4, 19)),
   );
   assert.equal(normalizeFeishuPublishedTime(""), "");
+});
+
+test("feishu file links resolve a version-less stream URL with session headers", async () => {
+  assert.equal(isFeishuFileUrl("https://my.feishu.cn/file/NOU6bPeNfoKwPbxZDPlcQ0InnL4"), true);
+  assert.equal(isFeishuFileUrl("https://my.feishu.cn/wiki/CEFJwoogJiIRG7kUISbc6JctnJg"), false);
+  const cookie = "session=tok; _csrf_token=csrf-value-123; lang=zh";
+  const file = await extractFeishuFile("https://my.feishu.cn/file/NOU6bPeNfoKwPbxZDPlcQ0InnL4", {
+    collectSessionCookies: async () => cookie,
+  });
+  assert.equal(file.streamUrl, "https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/preview/NOU6bPeNfoKwPbxZDPlcQ0InnL4?mount_point=explorer&preview_type=16");
+  assert.equal(file.headers.cookie, cookie);
+  assert.equal(file.headers["x-csrftoken"], "csrf-value-123");
+  assert.equal(file.headers["x-command"], "stream.download.preview");
+  assert.equal(file.headers["x-lgw-app-id"], "1161");
+  assert.equal(file.fallbackName, "NOU6bPeNfoKwPbxZDPlcQ0InnL4");
+  await assert.rejects(
+    extractFeishuFile("https://my.feishu.cn/file/NOU6bPeNfoKwPbxZDPlcQ0InnL4", { collectSessionCookies: async () => "" }),
+    (error) => error.code === "DOCUMENT_LOGIN_REQUIRED",
+  );
 });
