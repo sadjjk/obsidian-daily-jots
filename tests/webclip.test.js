@@ -374,7 +374,7 @@ test("feishu rendered payload forwards author and publishedTime into the article
   });
   const article = await clipper.extract("https://my.feishu.cn/wiki/CEFJwoogJiIRG7kUISbc6JctnJg");
   assert.equal(article.byline, "张三");
-  assert.equal(article.publishedAt, "2026-09-18 10:00");
+  assert.equal(article.publishedAt, localIso(new Date(2026, 8, 18, 10, 0)));
   assert.deepEqual(article.imageHeaders, { cookie: "feishu_session=tok" });
 });
 

@@ -3,6 +3,7 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const { extractFeishuDoc } = require("../src/clip/cloud-docs/feishu-docs");
+const { localIso } = require("../src/core/util");
 
 test("extractFeishuDoc bridges the rendered session cookie into imageHeaders", async () => {
   const calls = [];
@@ -22,7 +23,7 @@ test("extractFeishuDoc bridges the rendered session cookie into imageHeaders", a
   assert.deepEqual(calls[1], ["feishu", "https://my.feishu.cn/"]);
   assert.deepEqual(result.imageHeaders, { cookie: "feishu_session=tok" });
   assert.equal(result.author, "Alice");
-  assert.equal(result.publishedTime, "2023年11月3日");
+  assert.equal(result.publishedTime, localIso(new Date(2023, 10, 3)));
 });
 
 test("extractFeishuDoc keeps imageHeaders unset when no session cookie exists", async () => {
@@ -31,4 +32,12 @@ test("extractFeishuDoc keeps imageHeaders unset when no session cookie exists", 
     collectSessionCookies: async () => "",
   });
   assert.equal("imageHeaders" in result, false);
+});
+
+test("normalizeFeishuPublishedTime falls back to the raw copy when no date is present", () => {
+  const { normalizeFeishuPublishedTime } = require("../src/clip/cloud-docs/feishu-docs");
+  assert.equal(normalizeFeishuPublishedTime("刚刚更新"), "刚刚更新");
+  assert.equal(normalizeFeishuPublishedTime("编辑于 2023年11月3日"), localIso(new Date(2023, 10, 3)));
+  assert.equal(normalizeFeishuPublishedTime("2023-11-03 14:30"), localIso(new Date(2023, 10, 3, 14, 30)));
+  assert.equal(normalizeFeishuPublishedTime(""), "");
 });
