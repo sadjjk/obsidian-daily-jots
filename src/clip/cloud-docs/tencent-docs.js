@@ -254,14 +254,26 @@ async function extractTencentDoc(url, { collectSessionCookies, fetchImpl } = {})
   const response = await fetchImpl(apiUrl, {
     headers: { accept: "*/*", cookie, referer: `https://${host}/` },
   });
-  const text = typeof response.text === "function"
-    ? await response.text()
-    : (await readLimitedBody(response, 32 * 1024 * 1024)).toString("utf8");
+  let text;
+  try {
+    text = typeof response.text === "function"
+      ? await response.text()
+      : (await readLimitedBody(response, 32 * 1024 * 1024)).toString("utf8");
+  } catch (error) {
+    console.warn(`[omnichannel] ${sessionService} opendoc 响应读取失败:`, error?.message || error);
+    throw error;
+  }
+  if (!/^2\d\d$/.test(String(response.status))) {
+    // 诊断输出:HTTP 状态异常多半是会话 cookie 不对/过期,把状态与响应头片段留给用户排查
+    console.warn(`[omnichannel] ${sessionService} opendoc HTTP ${response.status},cookie 长度 ${cookie.length},响应前 200 字:`, String(text).slice(0, 200));
+  }
   let payload;
   try { payload = JSON.parse(text); } catch (_) {
     payload = JSON.parse(text.replace(/^[^(]*\(/, "").replace(/\)\s*;?\s*$/, ""));
   }
-  return { ...parseTencentDocPayload(payload), imageHeaders: { cookie } };
+  const parsed = parseTencentDocPayload(payload);
+  console.warn(`[omnichannel] ${sessionService} opendoc 提取成功:markdown ${parsed.markdown.length} 字符,图片 ${parsed.images.length} 张`);
+  return { ...parsed, imageHeaders: { cookie } };
 }
 
 module.exports = { extractTencentDoc, parseTencentDocPayload, stripTencentChrome, tencentDocApiUrl, tencentDocToMarkdown, tencentHostForUrl, tencentSessionServiceForUrl, tencentSiteNameForUrl };

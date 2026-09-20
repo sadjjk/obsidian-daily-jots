@@ -802,7 +802,11 @@ class WebClipper {
           extractionMethod: documentServiceForUrl(rendered.url) ? `${renderService}-rendered-document` : `${renderService}-rendered-community-comments`,
         });
         if (article.extractionStatus === "complete") {
-          if (renderService === "tencent") article.markdown = stripTencentChrome(article.markdown);
+          // 旧版文档被管理员升级为新智能文档:渲染页只有升级横幅,提示去剪新链接而不是产噪音笔记
+          if (tencentHostForUrl(url) && /文档已不再使用|升级为新的智能文档/.test(rendered.text || "")) {
+            throw new Error("该云文档已升级为新的智能文档:请打开原链接,前往新文档后剪藏新链接");
+          }
+          if (["tencent", "wecomdoc"].includes(renderService)) article.markdown = stripTencentChrome(article.markdown);
           // 飞书正文图片是 internal-api-drive-stream 内部流,下载需登录 cookie(实测匿名失败):
           // cookie 桥接在 extractFeishuDoc 内完成,imageHeaders 仅在拿到会话 cookie 时存在
           if (rendered.imageHeaders) article.imageHeaders = rendered.imageHeaders;
