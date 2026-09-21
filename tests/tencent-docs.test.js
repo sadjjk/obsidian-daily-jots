@@ -129,10 +129,10 @@ test("tencent TOC field codes and anchor entries are stripped, bold title line i
   assert.doesNotMatch(markdown, /^# 测试$/m);
 });
 
-test("wecom paragraph pStyle drives headings, code paragraphs, and quotes", () => {
-  // 段落属性挂在段尾 \r 位置:文本行 + 段落标记 mutation(bi 指向该行末 \r)
+test("wecom paragraph styles drive headings, code paragraphs, and quotes", () => {
+  // 段落属性挂在段尾 \r 位置,值已预解析为语义 { heading, code }
   const text = "底层数据依赖\r2.1 测试环节\r2.2.1 工单申请\rimport pandas as pd\r正文段落\r引用引言\r";
-  const paraStyleAt = { 6: "wb5joj", 15: "4gbizg", 26: "wkxqic", 46: "phispn", 51: "ablt93" };
+  const paraStyleAt = { 6: { heading: 2 }, 15: { heading: 3 }, 26: { heading: 4 }, 46: { code: true }, 51: {} };
   const blockQuoteAt = { 56: true };
   const markdown = tencentDocToMarkdown(text, {}, {}, "", paraStyleAt, blockQuoteAt);
   assert.match(markdown, /^## 底层数据依赖$/m);
@@ -143,12 +143,28 @@ test("wecom paragraph pStyle drives headings, code paragraphs, and quotes", () =
   assert.match(markdown, /^> 引用引言$/m);
 });
 
+test("wecom pr.styles table resolves heading levels by name, not fixed ids", () => {
+  // 样式 id 逐篇可变:styles 表的 name/outlineLvl 是稳定语义(每日进展实测 poycdr=heading 3)
+  const payload = docPayload([{ s: "04月25日\r正文段\r" }]);
+  const text0 = payload.clientVars.collab_client_vars.initialAttributedText.text[0];
+  text0.commands[0].mutations.push(
+    { ty: "mp", bi: 6, ei: 7, pr: { paragraph: { pStyle: { val: "poycdr" } } } },
+    { ty: "mp", bi: 10, ei: 11, pr: { paragraph: { pStyle: { val: "ablt93" } } } },
+    { ty: "mp", bi: 0, ei: 0, pr: { styles: { style: { poycdr: { name: { val: "heading 3" }, pPr: { outlineLvl: { val: 2 } } }, ablt93: { name: { val: "Normal" } } } } } },
+  );
+  const parsed = parseTencentDocPayload(payload);
+  assert.match(parsed.markdown, /^### 04月25日$/m);
+  assert.match(parsed.markdown, /^正文段$/m);
+});
+
 test("wecom code block markers \\x0f/\\x1e/\\x1d and structured links resolve", () => {
-  const text = "说明如下\r\x0f\x1e\x1e\x1cimport os\x1eimport sys\x1d\r参考 \x13HYPERLINK https://example.com/x\x14示例页面\x15 继续\r";
+  const text = "说明如下\r\x0f\x1e\x1cimport os\rimport sys\r\x1d\x1e\r参考 \x13HYPERLINK https://example.com/x\x14示例页面\x15 继续\r提及 \x13MENTION_WXWORK at-100 0 0 w3_doc\x14@李石\x15。\r";
   const markdown = tencentDocToMarkdown(text, {}, {}, "");
   assert.match(markdown, /````\nimport os\nimport sys\n````/);
   assert.match(markdown, /\[示例页面\]\(https:\/\/example\.com\/x\)/);
+  assert.match(markdown, /提及 @李石。/);
   assert.doesNotMatch(markdown, /HYPERLINK/);
+  assert.doesNotMatch(markdown, /MENTION_WXWORK/);
   assert.doesNotMatch(markdown, /[\x13\x14\x15]/);
 });
 

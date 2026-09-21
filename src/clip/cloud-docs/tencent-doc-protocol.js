@@ -72,12 +72,29 @@ function pickTencentValue(payload, match) {
   return walk(payload, "");
 }
 
-// 企微文档段落样式(pStyle,挂在段尾 \r 位置):2026-09-20 按真实 opendoc 返回实测校准。
-// 腾讯文档标题走 run.sz 字号,企微走段落样式 id;未知样式按正文处理并打诊断日志。
-const PARAGRAPH_STYLE_HEADING = { rdbvau: 1, wb5joj: 2, "4gbizg": 3, wkxqic: 4 };
+// 企微文档段落样式兜底表(2026-09-20 实测):样式 id 逐篇可变,优先用 pr.styles 样式表的 name/outlineLvl 语义解析
+const PARAGRAPH_STYLE_FALLBACK = { rdbvau: { heading: 1 }, wb5joj: { heading: 2 }, "4gbizg": { heading: 3 }, wkxqic: { heading: 4 }, phispn: { code: true } };
 const PARAGRAPH_STYLE_CODE = new Set(["phispn"]);
-const PARAGRAPH_STYLE_BODY = new Set(["ablt93"]);
-const KNOWN_PARAGRAPH_STYLES = new Set([...Object.keys(PARAGRAPH_STYLE_HEADING), ...PARAGRAPH_STYLE_CODE, ...PARAGRAPH_STYLE_BODY]);
+
+// Word OOXML 风格样式定义 → 语义:heading N / Title → 标题层级;Preformatted/Code → 代码段
+function styleHeadingLevel(def) {
+  if (!def) return 0;
+  if (typeof def.heading === "number") return def.heading;
+  const name = String(def?.name?.val || "");
+  const m = name.match(/^heading (\d)$/i);
+  if (m) return Number(m[1]);
+  if (/^title$/i.test(name)) return 1;
+  const lvl = Number(def?.pPr?.outlineLvl?.val);
+  if (Number.isFinite(lvl) && lvl >= 0 && lvl < 9) return lvl + 1;
+  return 0;
+}
+
+function styleIsCode(def, styleId) {
+  if (!def) return false;
+  if (def.code) return true;
+  if (PARAGRAPH_STYLE_CODE.has(styleId)) return true;
+  return /pre(?:formatted)?|code/i.test(String(def?.name?.val || ""));
+}
 
 function parseTencentDocPayload(payload) {  const clientVars = payload && payload.clientVars;
   if (!clientVars) throw new Error("opendoc 响应缺少 clientVars");
@@ -92,13 +109,29 @@ function parseTencentDocPayload(payload) {  const clientVars = payload && payloa
 
   const formatMap = {};
   const imageMap = {};
-  // 段落级属性挂在段尾 \r 的位置上(bi=ei-1 指向段落标记符):企微文档标题/代码走 pStyle 而非字号
+  // 通用样式表:pr.styles(Word OOXML 风格)提供 id→语义(name/outlineLvl);样式 id 逐篇可变,语义稳定。
+  // 必须先全量收集样式表,再解析段落 pStyle(styles 表 mutation 可能排在段落 mutation 之后)
+  const styleTable = {};
+  for (const m of mutations) {
+    const styles = m.pr?.styles?.style;
+    if (styles && typeof styles === "object") Object.assign(styleTable, styles);
+  }
+  // 段落级属性挂在段尾 \r 的位置上(bi 指向段落标记符):值直接预解析为语义 { heading, code }
   const paraStyleAt = {};
   const blockQuoteAt = {};
+  const unknownParaStyles = new Set();
   for (const m of mutations) {
     if (m?.ty !== "mp" || typeof m.bi !== "number") continue;
-    if (m.pr?.paragraph?.pStyle?.val) paraStyleAt[m.bi] = m.pr.paragraph.pStyle.val;
+    const val = m.pr?.paragraph?.pStyle?.val;
+    if (val) {
+      const def = styleTable[val] || PARAGRAPH_STYLE_FALLBACK[val];
+      if (!def) unknownParaStyles.add(val);
+      paraStyleAt[m.bi] = { heading: styleHeadingLevel(def), code: styleIsCode(def, val) };
+    }
     if (m.pr?.paragraph?.blockQuote) blockQuoteAt[m.bi] = true;
+  }
+  for (const m of mutations) {
+    if (m?.ty !== "mp" || !m.pr || typeof m.bi !== "number" || typeof m.ei !== "number") continue;
     const pr = m.pr;
     const run = pr.run || {};
     const { bi, ei } = m;
@@ -137,7 +170,7 @@ function parseTencentDocPayload(payload) {  const clientVars = payload && payloa
         else if (value && typeof value === "object") collect(value);
       }
     })(clientVars);
-    const unknownStyles = [...new Set(Object.values(paraStyleAt))].filter((s) => !KNOWN_PARAGRAPH_STYLES.has(s));
+    const unknownStyles = [...unknownParaStyles];
     if (unknownStyles.length) console.warn(`[omnichannel] opendoc 未知段落样式: [${unknownStyles.join(",")}] 按正文处理,请反馈校准`);
     console.warn(`[omnichannel] opendoc 结构: mutations=${mutations.length} pr=[${runKeys}] run=[${runSubKeys}] 控制字符=[${ctrl || "无"}] clientVars=[${Object.keys(clientVars).join(",")}] 元数据候选=${JSON.stringify(metaCandidates)}`);
   } catch (_) { /* 诊断日志不影响主流程 */ }
@@ -181,6 +214,7 @@ function tencentDocToMarkdown(rawText, formatMap = {}, imageMap = {}, title = ""
   const parts = [];
   let codeLines = [];
   let prevEmpty = false;
+  let inCodeBlock = false;
   let imageEntries = Object.entries(imageMap).map(([pos, img]) => [Number(pos), img]).sort((a, b) => a[0] - b[0]);
   let imageIndex = 0;
   let charPos = 0;
@@ -214,7 +248,17 @@ function tencentDocToMarkdown(rawText, formatMap = {}, imageMap = {}, title = ""
     }
 
     const plain = line.replace(/[\x00-\x08\x0e-\x1f]/g, "").replace(/\t/g, " ").trim();
-    if (!plain) { flushTable(); if (codeLines.length) codeLines.push(""); else if (!prevEmpty) { parts.push(""); prevEmpty = true; } continue; }
+    if (!plain) {
+      flushTable();
+      // 代码块内"空"行可能是纯标记行(如 \x1d\x1e 收块标记被 strip 成空串):先处理块状态再当空行
+      if (inCodeBlock) {
+        if (line.includes("\x1d")) inCodeBlock = false;
+        else if (codeLines.length) codeLines.push("");
+        continue;
+      }
+      if (codeLines.length) codeLines.push(""); else if (!prevEmpty) { parts.push(""); prevEmpty = true; }
+      continue;
+    }
     prevEmpty = false;
 
     // 表格:\x1a 表头行;\x07\x06 数据行;\x07 续列
@@ -223,19 +267,25 @@ function tencentDocToMarkdown(rawText, formatMap = {}, imageMap = {}, title = ""
     if (line.startsWith("\x07")) { if (!tableRows.length) tableRows.push([]); tableRows[tableRows.length - 1].push(...splitRow(line.replace(/^\x07/, ""))); continue; }
     flushTable();
 
-    // 代码块:企微协议 \x0f 开块 \x1e 块内行分隔 \x1d 收块(块内无 \r,一整段);
-    // 腾讯协议 \x1d 是逐行前缀标记;段落 pStyle=phispn(企微代码样式)也按代码行收集。
+    // 代码块:企微协议 \x0f 开块 \x1d 收块(可跨多个 \r 行,行可带 \x1e/\x1c 前缀标记);
+    // 腾讯协议 \x1d 是逐行前缀标记;段落样式为代码(Preformatted/phispn)也按代码行收集。
     // 段落属性挂在段尾 \r 上:split("\r") 后 line 不含分隔符,标记位置 = lineStart + line.length
     const paraMarkPos = lineStart + line.length;
-    const codeBlock = line.match(/\x0f([\s\S]*?)\x1d/);
-    const paraStyle = paraStyleAt[paraMarkPos];
-    const isCodePara = paraStyle && PARAGRAPH_STYLE_CODE.has(paraStyle);
-    if (codeBlock || isCodePara) {
+    const paraMark = paraStyleAt[paraMarkPos];
+    const isCodePara = paraMark?.code;
+    if (line.includes("\x0f") || inCodeBlock) {
       flushTable();
-      const blockLines = codeBlock ? codeBlock[1].split("\x1e") : [line];
-      codeLines.push(...blockLines.map((s) => s.replace(/[\x00-\x1f]/g, "").trimEnd()));
+      let chunk = line.includes("\x0f") ? line.slice(line.indexOf("\x0f") + 1) : line;
+      if (chunk.includes("\x1d")) {
+        inCodeBlock = false;
+        chunk = chunk.slice(0, chunk.indexOf("\x1d"));
+      } else {
+        inCodeBlock = true;
+      }
+      codeLines.push(...chunk.split("\x1e").map((s) => s.replace(/[\x00-\x1f]/g, "").trimEnd()));
       continue;
     }
+    if (isCodePara) { flushTable(); codeLines.push(line.replace(/[\x00-\x1f]/g, "").trimEnd()); continue; }
     if (line.includes("\x1d")) { flushTable(); codeLines.push(line.replace(/[\x00-\x1f]/g, "").trimEnd()); continue; }
     if (codeLines.length) { parts.push("", fencedCode(codeLines.join("\n").replace(/^\n+|\n+$/g, "")), ""); codeLines = []; }
 
@@ -272,6 +322,8 @@ function tencentDocToMarkdown(rawText, formatMap = {}, imageMap = {}, title = ""
     // 结构化超链接(企微):\x13 URL \x14 显示文本 \x15 → [display](url);残留标记剥除。
     // 必须在旧 HYPERLINK 正则之前:\x14/\x15 不属于 \s,老正则会把 URL 与显示文本连成一个 \S+ 词
     inline = inline.replace(/\x13([^\x14]*)\x14([^\x15]*)\x15/g, (all, linkUrl, display) => {
+      // 企微 @提及:\x13 MENTION_WXWORK 指令串 \x14 @名字 \x15 —— 直接还原 @名字,指令串不进 URL
+      if (/^MENTION_WXWORK/.test(linkUrl.trim())) return display.trim();
       // URL 组尾部可能带 docLink 属性串(" docLink \tdft Doc ... \l"):URL 取第一个空白前的部分
       const url = linkUrl.replace(/^HYPERLINK\s+/i, "").trim().split(/\s+/)[0];
       const linkText = display.trim();
@@ -288,10 +340,9 @@ function tencentDocToMarkdown(rawText, formatMap = {}, imageMap = {}, title = ""
     // 文档首行常与标题重复(可能带粗体 run):剥掉 markdown 标记后再比较
     if (!skippedTitle && title && (inline.trim() === String(title).trim() || plain.trim() === String(title).trim())) { skippedTitle = true; continue; }
 
-    // 标题:段落 pStyle(企微)优先,run 字号(腾讯)兜底
+    // 标题:段落样式语义(styles 表/fallback)优先,run 字号(腾讯)兜底
     const runHeading = Math.max(...Array.from({ length: line.length }, (_, i) => charFormat(lineStart + i).heading || 0), 0);
-    const paraHeading = paraStyle ? PARAGRAPH_STYLE_HEADING[paraStyle] || 0 : 0;
-    const heading = paraHeading || runHeading;
+    const heading = paraMark?.heading || runHeading;
     if (heading) { parts.push("", "#".repeat(heading) + " " + inline, ""); continue; }
     if (blockQuoteAt[paraMarkPos]) { parts.push("> " + inline, ""); continue; }
     if (/^[•·▪◦●]\s*/.test(inline)) { parts.push("- " + inline.replace(/^[•·▪◦●]\s*/, "")); continue; }
