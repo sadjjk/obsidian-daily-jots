@@ -119,13 +119,11 @@ function parseTencentDocPayload(payload) {  const clientVars = payload && payloa
   // 段落级属性挂在段尾 \r 的位置上(bi 指向段落标记符):值直接预解析为语义 { heading, code }
   const paraStyleAt = {};
   const blockQuoteAt = {};
-  const unknownParaStyles = new Set();
   for (const m of mutations) {
     if (m?.ty !== "mp" || typeof m.bi !== "number") continue;
     const val = m.pr?.paragraph?.pStyle?.val;
     if (val) {
       const def = styleTable[val] || PARAGRAPH_STYLE_FALLBACK[val];
-      if (!def) unknownParaStyles.add(val);
       paraStyleAt[m.bi] = { heading: styleHeadingLevel(def), code: styleIsCode(def, val) };
     }
     if (m.pr?.paragraph?.blockQuote) blockQuoteAt[m.bi] = true;
@@ -156,24 +154,6 @@ function parseTencentDocPayload(payload) {  const clientVars = payload && payloa
       imageMap[bi] = { url: imageUrl, width, height, descr: pic?.nvPicPr?.cNvPr?.descr || "image" };
     }
   }
-
-  // 诊断日志:结构差异(标题字号体系/代码块标记/元数据字段)靠真实返回暴露,不靠猜
-  try {
-    const runKeys = [...new Set(mutations.flatMap((m) => Object.keys(m?.pr || {})))].join(",");
-    const runSubKeys = [...new Set(mutations.flatMap((m) => Object.keys(m?.pr?.run || {})))].join(",");
-    const ctrl = [...new Set(rawText.match(/[\x01-\x1f]/g) || [])].map((c) => `\\x${c.charCodeAt(0).toString(16).padStart(2, "0")}`).join(" ");
-    const metaCandidates = {};
-    (function collect(node) {
-      if (!node || typeof node !== "object" || Array.isArray(node)) return;
-      for (const [key, value] of Object.entries(node)) {
-        if (/(create|modify|owner|creator|author)/i.test(key) && (typeof value === "string" || typeof value === "number")) metaCandidates[key] = value;
-        else if (value && typeof value === "object") collect(value);
-      }
-    })(clientVars);
-    const unknownStyles = [...unknownParaStyles];
-    if (unknownStyles.length) console.warn(`[omnichannel] opendoc 未知段落样式: [${unknownStyles.join(",")}] 按正文处理,请反馈校准`);
-    console.warn(`[omnichannel] opendoc 结构: mutations=${mutations.length} pr=[${runKeys}] run=[${runSubKeys}] 控制字符=[${ctrl || "无"}] clientVars=[${Object.keys(clientVars).join(",")}] 元数据候选=${JSON.stringify(metaCandidates)}`);
-  } catch (_) { /* 诊断日志不影响主流程 */ }
 
   // 作者:优先文档创建者(owner/creator);clientVars.userName 是当前登录者(剪藏人),仅兜底。
   // 接口返回的创建者只有 id(run.author/creatorId/ownerId 形如 "p.1310..." 或长数字),id 不是名字,一律排除
@@ -391,19 +371,13 @@ async function extractDoc(url, { sessionService, siteName, collectSessionCookies
       ? await response.text()
       : (await readLimitedBody(response, 32 * 1024 * 1024)).toString("utf8");
   } catch (error) {
-    console.warn(`[omnichannel] ${sessionService} opendoc 响应读取失败:`, error?.message || error);
     throw error;
-  }
-  if (!/^2\d\d$/.test(String(response.status))) {
-    // 诊断输出:HTTP 状态异常多半是会话 cookie 不对/过期,把状态与响应片段留给用户排查
-    console.warn(`[omnichannel] ${sessionService} opendoc HTTP ${response.status},cookie 长度 ${cookie.length},响应前 200 字:`, String(text).slice(0, 200));
   }
   let payload;
   try { payload = JSON.parse(text); } catch (_) {
     payload = JSON.parse(text.replace(/^[^(]*\(/, "").replace(/\)\s*;?\s*$/, ""));
   }
   const parsed = parseTencentDocPayload(payload);
-  console.warn(`[omnichannel] ${sessionService} opendoc 提取成功:markdown ${parsed.markdown.length} 字符,图片 ${parsed.images.length} 张`);
   return { ...parsed, imageHeaders: { cookie } };
 }
 
