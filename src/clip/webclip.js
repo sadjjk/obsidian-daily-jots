@@ -895,8 +895,9 @@ class WebClipper {
     const existingPath = typeof this.writer.findTextBySuffix === "function"
       ? this.writer.findTextBySuffix(clipFolder, suffix)
       : "";
-    const notePath = existingPath || `${clipFolder}/${date.day}/${date.day}-${labelForPath}-${stem}${suffix}`;
-    const reused = Boolean(existingPath);
+    // 同链接重剪:一律写入今天路径,旧文件与旧本地图在写入成功后清理(系统回收站,可反悔)
+    const notePath = `${clipFolder}/${date.day}/${date.day}-${labelForPath}-${stem}${suffix}`;
+    const reused = Boolean(existingPath) && existingPath !== notePath;
     let markdown = article.markdown || article.excerpt || article.url;
     const failures = [];
     const skippedImages = [];
@@ -980,6 +981,20 @@ class WebClipper {
     const content = `${frontmatter}# ${escapeWebText(title)}\n\n${markdown}${report}\n`;
     if (typeof this.writer.upsertText === "function") await this.writer.upsertText(notePath, content);
     else await this.writer.createText(notePath, content);
+    // 新文件写成功后清理旧剪藏:旧文件挪到今天路径,旧正文里引用的本地图/附件一并入回收站
+    if (reused && existingPath && typeof this.writer.trashFile === "function") {
+      try {
+        const previousMarkdown = typeof this.writer.readText === "function" ? await this.writer.readText(existingPath) : "";
+        for (const linkMatch of String(previousMarkdown || "").matchAll(/\]\(([^)\s]+)\)/g)) {
+          let localPath;
+          try { localPath = decodeURI(linkMatch[1] || ""); } catch (_) { localPath = linkMatch[1] || ""; }
+          if (localPath && localPath.startsWith(this.settings.storage.attachmentFolder)) {
+            await this.writer.trashFile(localPath).catch(() => {});
+          }
+        }
+        await this.writer.trashFile(existingPath).catch(() => {});
+      } catch (_) { /* 清理失败静默:旧文件保留,下次重剪再试 */ }
+    }
     return { notePath, article: { ...article, title, identityUrl }, sourceLabel, reused, savedImages, savedFiles, imageFailures: failures, imageSkipped: skippedImages, fileFailures };
   }
 }

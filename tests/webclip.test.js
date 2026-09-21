@@ -188,10 +188,13 @@ test("web image localization is concurrent, bounded, and reuses the stable clipp
   let active = 0;
   let peak = 0;
   const writes = [];
+  const trashed = [];
   const writer = {
     findTextBySuffix: () => existingPath,
     saveBinary: async (folder, name) => `${folder}/${name}.png`,
     upsertText: async (path, content) => { existingPath = path; writes.push({ path, content }); },
+    readText: async (path) => writes.find((w) => w.path === path)?.content || "",
+    trashFile: async (path) => { trashed.push(path); return true; },
   };
   const clipper = new WebClipper(writer, settings, {
     download: async (_url, options) => {
@@ -209,7 +212,7 @@ test("web image localization is concurrent, bounded, and reuses the stable clipp
     title: "Example",
     siteName: "Example",
     byline: "",
-    markdown: Array.from({ length: 5 }, (_, index) => `https://img.example/${index}.png`).join("\n"),
+    markdown: Array.from({ length: 5 }, (_, index) => `![](https://img.example/${index}.png)`).join("\n"),
     images: Array.from({ length: 5 }, (_, index) => `https://img.example/${index}.png`),
     extractionMethod: "test",
     extractionStatus: "complete",
@@ -218,13 +221,20 @@ test("web image localization is concurrent, bounded, and reuses the stable clipp
   const second = await clipper.saveArticle(article, { timestamp: new Date("2026-09-01T00:00:00Z") });
   assert.equal(first.reused, false);
   assert.equal(second.reused, true);
-  assert.equal(second.notePath, first.notePath);
+  // 同链接重剪:写入当天新路径,旧文件与旧本地图移入回收站
+  assert.notEqual(second.notePath, first.notePath);
+  assert.match(first.notePath, /2026-08-31/);
+  assert.match(second.notePath, /2026-09-01/);
   assert.equal(first.savedImages, 2);
   // 第 3 张超出 maxWebImageTotalMb=1MB 预算(真失败),第 4、5 张超出 maxWebImages=3 上限(保留原链)
   assert.equal(first.imageSkipped.length, 2);
   assert.equal(first.imageFailures.length, 1);
   assert.equal(peak > 1 && peak <= 4, true);
   assert.equal(writes.length, 2);
+  assert.ok(trashed.includes(first.notePath));
+  const oldImages = trashed.filter((p) => p.startsWith("Attachments/Web/2026-08-31/"));
+  assert.equal(oldImages.length, 2);
+  assert.equal(trashed.includes(second.notePath), false);
 });
 
 test("unknown forum engines and generic comment markup receive a conversation fallback", () => {

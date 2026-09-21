@@ -55,6 +55,22 @@ class VaultWriter {
     return files.find((file) => String(file.path || "").startsWith(prefix) && String(file.path || "").endsWith(ending))?.path || "";
   }
 
+  async readText(filePath) {
+    const normalized = normalizePath(filePath);
+    const file = this.vault.getAbstractFileByPath(normalized);
+    if (!file) return "";
+    return this.vault.cachedRead(file);
+  }
+
+  // 移入系统回收站(可反悔);文件不存在返回 false,不抛错
+  async trashFile(filePath) {
+    const normalized = normalizePath(filePath);
+    const file = this.vault.getAbstractFileByPath(normalized);
+    if (!file) return false;
+    await this.vault.trash(file, true);
+    return true;
+  }
+
   async append(filePath, content, initial = "") {
     const normalized = normalizePath(filePath);
     const previous = this.pending.get(normalized) || Promise.resolve();
