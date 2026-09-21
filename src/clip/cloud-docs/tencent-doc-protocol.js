@@ -96,6 +96,11 @@ function styleIsCode(def, styleId) {
   return /pre(?:formatted)?|code/i.test(String(def?.name?.val || ""));
 }
 
+// 目录条目段样式(Word "toc N"):整段剥除,不进正文
+function styleIsToc(def) {
+  return /^toc \d+$/i.test(String(def?.name?.val || ""));
+}
+
 function parseTencentDocPayload(payload) {  const clientVars = payload && payload.clientVars;
   if (!clientVars) throw new Error("opendoc 响应缺少 clientVars");
   const textRoot = clientVars?.collab_client_vars?.initialAttributedText?.text;
@@ -124,7 +129,7 @@ function parseTencentDocPayload(payload) {  const clientVars = payload && payloa
     const val = m.pr?.paragraph?.pStyle?.val;
     if (val) {
       const def = styleTable[val] || PARAGRAPH_STYLE_FALLBACK[val];
-      paraStyleAt[m.bi] = { heading: styleHeadingLevel(def), code: styleIsCode(def, val) };
+      paraStyleAt[m.bi] = { heading: styleHeadingLevel(def), code: styleIsCode(def, val), toc: styleIsToc(def) };
     }
     if (m.pr?.paragraph?.blockQuote) blockQuoteAt[m.bi] = true;
   }
@@ -195,6 +200,7 @@ function tencentDocToMarkdown(rawText, formatMap = {}, imageMap = {}, title = ""
   let codeLines = [];
   let prevEmpty = false;
   let inCodeBlock = false;
+  const hasCodeCloseMark = String(rawText || "").includes("\x1d");
   let imageEntries = Object.entries(imageMap).map(([pos, img]) => [Number(pos), img]).sort((a, b) => a[0] - b[0]);
   let imageIndex = 0;
   let charPos = 0;
@@ -253,7 +259,11 @@ function tencentDocToMarkdown(rawText, formatMap = {}, imageMap = {}, title = ""
     const paraMarkPos = lineStart + line.length;
     const paraMark = paraStyleAt[paraMarkPos];
     const isCodePara = paraMark?.code;
-    if (line.includes("\x0f") || inCodeBlock) {
+    // 目录条目:样式 toc N 或域指令特征(HYPERLINK \l "section-N" / PAGEREF),整行剥除
+    if (paraMark?.toc || /\\l "section-|PAGEREF /.test(line)) { flushTable(); prevEmpty = false; continue; }
+    // 腾讯文档的 \x0f 是卡片/分隔装饰而非代码块开(其真代码块以 \x1d 收块);
+    // 整篇存在 \x1d 时代码块状态机才启用,防止无 \x1d 的文档误开块吞掉全文
+    if ((line.includes("\x0f") || inCodeBlock) && hasCodeCloseMark) {
       flushTable();
       let chunk = line.includes("\x0f") ? line.slice(line.indexOf("\x0f") + 1) : line;
       if (chunk.includes("\x1d")) {

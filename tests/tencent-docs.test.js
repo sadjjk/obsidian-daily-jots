@@ -168,6 +168,25 @@ test("wecom code block markers \\x0f/\\x1e/\\x1d and structured links resolve", 
   assert.doesNotMatch(markdown, /[\x13\x14\x15]/);
 });
 
+test("tencent decorative \\x0f without \\x1d does not open a code block and toc styles are stripped", () => {
+  const payload = docPayload([{ s: "前言\r建议篇幅：3000 字\x0f核心立意：正文段\r目录\r\x13 TOC \\o \"1-1\" \\h \\z \\u \x14\x13 HYPERLINK \\l \"section-1\" \x14一、引言\x15\t\x13 PAGEREF section-1 \\h \x141\x15\r正文继续\r" }]);
+  const text0 = payload.clientVars.collab_client_vars.initialAttributedText.text[0];
+  // 段尾 \r 实测:目录=26、TOC 条目行=112、正文行=117
+  text0.commands[0].mutations.push(
+    { ty: "mp", bi: 112, ei: 113, pr: { paragraph: { pStyle: { val: "000003" } } } },
+    { ty: "mp", bi: 117, ei: 118, pr: { paragraph: { pStyle: { val: "000004" } } } },
+    { ty: "mp", bi: 0, ei: 0, pr: { styles: { style: { "000004": { name: { val: "heading 2" } }, "000003": { name: { val: "toc 1" } } } } } },
+  );
+  const { markdown } = parseTencentDocPayload(payload);
+  assert.match(markdown, /## 正文继续/);
+  assert.doesNotMatch(markdown, /````/);
+  assert.doesNotMatch(markdown, /HYPERLINK|PAGEREF|TOC \\o/);
+  assert.doesNotMatch(markdown, /一、引言/);
+  assert.match(markdown, /前言/);
+  assert.match(markdown, /核心立意：正文段/);
+  assert.match(markdown, /目录/);
+});
+
 test("wecom mention directives are stripped while mention names survive", () => {
   const text = "MENTION_WXWORK at-1714027908250-0 0 0 w3_ABQAcgYGAFIO1ijvHcNRtaZE6oD1U_p@李石。\rMENTION_WXWORK at-1714027908235-1688851236418068 1688851236418068 w3_ABQAcgYGAFIO1ijvHcNRtaZE6oD1U_p@杨懿宁 今日进展\r";
   const markdown = tencentDocToMarkdown(text, {}, {}, "测试文档");
