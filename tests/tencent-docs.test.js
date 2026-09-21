@@ -129,13 +129,45 @@ test("tencent TOC field codes and anchor entries are stripped, bold title line i
   assert.doesNotMatch(markdown, /^# 测试$/m);
 });
 
-test("tencent wecom mention directives are stripped while mention names survive", () => {
+test("wecom paragraph pStyle drives headings, code paragraphs, and quotes", () => {
+  // 段落属性挂在段尾 \r 位置:文本行 + 段落标记 mutation(bi 指向该行末 \r)
+  const text = "底层数据依赖\r2.1 测试环节\r2.2.1 工单申请\rimport pandas as pd\r正文段落\r引用引言\r";
+  const paraStyleAt = { 6: "wb5joj", 15: "4gbizg", 26: "wkxqic", 46: "phispn", 51: "ablt93" };
+  const blockQuoteAt = { 56: true };
+  const markdown = tencentDocToMarkdown(text, {}, {}, "", paraStyleAt, blockQuoteAt);
+  assert.match(markdown, /^## 底层数据依赖$/m);
+  assert.match(markdown, /^### 2\.1 测试环节$/m);
+  assert.match(markdown, /^#### 2\.2\.1 工单申请$/m);
+  assert.match(markdown, /````\nimport pandas as pd\n````/);
+  assert.match(markdown, /^正文段落$/m);
+  assert.match(markdown, /^> 引用引言$/m);
+});
+
+test("wecom code block markers \\x0f/\\x1e/\\x1d and structured links resolve", () => {
+  const text = "说明如下\r\x0f\x1e\x1e\x1cimport os\x1eimport sys\x1d\r参考 \x13HYPERLINK https://example.com/x\x14示例页面\x15 继续\r";
+  const markdown = tencentDocToMarkdown(text, {}, {}, "");
+  assert.match(markdown, /````\nimport os\nimport sys\n````/);
+  assert.match(markdown, /\[示例页面\]\(https:\/\/example\.com\/x\)/);
+  assert.doesNotMatch(markdown, /HYPERLINK/);
+  assert.doesNotMatch(markdown, /[\x13\x14\x15]/);
+});
+
+test("wecom mention directives are stripped while mention names survive", () => {
   const text = "MENTION_WXWORK at-1714027908250-0 0 0 w3_ABQAcgYGAFIO1ijvHcNRtaZE6oD1U_p@李石。\rMENTION_WXWORK at-1714027908235-1688851236418068 1688851236418068 w3_ABQAcgYGAFIO1ijvHcNRtaZE6oD1U_p@杨懿宁 今日进展\r";
   const markdown = tencentDocToMarkdown(text, {}, {}, "测试文档");
   assert.match(markdown, /@李石。/);
   assert.match(markdown, /@杨懿宁 今日进展/);
   assert.doesNotMatch(markdown, /MENTION_WXWORK/);
   assert.doesNotMatch(markdown, /at-1714027908250/);
+});
+
+test("wecom author ignores id-like values and falls back to session user", () => {
+  const payload = docPayload([{ s: "正文\r" }]);
+  payload.clientVars.userName = "王金宇";
+  const mutations = payload.clientVars.collab_client_vars.initialAttributedText.text[0].commands[0].mutations;
+  mutations.push({ ty: "mp", bi: 0, ei: 2, pr: { run: { author: "p.13102701727529031" } } });
+  const parsed = parseTencentDocPayload(payload);
+  assert.equal(parsed.author, "王金宇");
 });
 
 test("tencent author prefers the doc owner and published_at parses create time", () => {
