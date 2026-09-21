@@ -20,14 +20,150 @@ function normalizeFeishuPublishedTime(value) {
   return Number.isNaN(date.getTime()) ? raw : localIso(date);
 }
 
+// 飞书文档 token(docx/wiki 路径)
+function feishuDocToken(url) {
+  return (String(url || "").match(/\/(?:docx|wiki)\/([A-Za-z0-9]+)/) || [])[1] || "";
+}
+
+// 页面上下文读取内存块数据的表达式:_clientvarMap[token] 是 JSON 字符串,原样带回。
+function feishuBlockMapExpression(token) {
+  return `(() => {
+    try {
+      const m = window.docxClientvarFetchManager;
+      const map = m && m._clientvarMap;
+      if (!map) return "";
+      const entry = map instanceof Map ? map.get(${JSON.stringify(token)}) : map[${JSON.stringify(token)}];
+      if (!entry) return "";
+      return typeof entry === "string" ? entry : JSON.stringify(entry);
+    } catch (_) { return ""; }
+  })()`;
+}
+
+// 飞书富文本:文本存 initialAttributedTexts.text["0"](纯串,含 \n),
+// 行内样式存 attribs["0"](etherpad changeset:段 (*idx)*(|line)?+len36,*idx 引用 apool.numToAttrib)。
+// 实测出现的属性:author(忽略)/bold/inlineCode。
+function feishuRichText(textObj) {
+  const iat = textObj?.initialAttributedTexts;
+  const content = iat?.text?.["0"];
+  if (typeof content !== "string") return "";
+  const attribStr = iat?.attribs?.["0"] || "";
+  const pool = textObj?.apool?.numToAttrib || {};
+  if (!attribStr) return content;
+  let out = "";
+  let pos = 0;
+  const re = /((?:\*[0-9a-z]+)*)(?:\|[0-9a-z]+)?\+([0-9a-z]+)/g;
+  let m;
+  while ((m = re.exec(attribStr))) {
+    const kinds = (m[1].match(/\*([0-9a-z]+)/g) || []).map((x) => pool[parseInt(x.slice(1), 36)]?.[0]);
+    const len = parseInt(m[2], 36);
+    let chunk = content.slice(pos, pos + len);
+    pos += len;
+    if (chunk) {
+      if (kinds.includes("inlineCode")) chunk = "`" + chunk + "`";
+      if (kinds.includes("bold")) chunk = "**" + chunk + "**";
+    }
+    out += chunk;
+  }
+  return out + content.slice(pos);
+}
+
+function feishuTableMarkdown(blocks, data) {
+  const rows = data.rows_id || [];
+  const cols = data.columns_id || [];
+  const cellSet = data.cell_set || {};
+  const cellText = (rowId, colId) => {
+    const cell = cellSet[rowId + colId];
+    const cellBlock = cell && blocks[cell.block_id];
+    if (!cellBlock?.data?.children?.length) return "";
+    return cellBlock.data.children
+      .map((cid) => feishuRichText(blocks[cid]?.data?.text))
+      .join(" ").replace(/\n+/g, " ").replace(/\|/g, "\\|").trim();
+  };
+  const lines = [];
+  rows.forEach((rowId, ri) => {
+    lines.push("| " + cols.map((colId) => cellText(rowId, colId)).join(" | ") + " |");
+    if (ri === 0) lines.push("| " + cols.map(() => "---").join(" | ") + " |");
+  });
+  return lines.length ? `\n\n${lines.join("\n")}\n\n` : "";
+}
+
+// 飞书内存块数据 → Markdown:page.children 树序遍历,与官方 docx blocks 同构。
+// 未知块类型降级:有文本出文本,否则递归子块,不丢行。
+function blockMapToMarkdown(clientvarRaw) {
+  let inner;
+  try { inner = typeof clientvarRaw === "string" ? JSON.parse(clientvarRaw) : clientvarRaw; }
+  catch (_) { return ""; }
+  const blocks = inner?.data?.block_map;
+  if (!blocks || typeof blocks !== "object") return "";
+  const rootId = Object.keys(blocks).find((id) => blocks[id]?.data?.type === "page");
+  const root = rootId && blocks[rootId];
+  if (!root?.data?.children?.length) return "";
+  const lines = [];
+  const emit = (tokenId, depth) => {
+    const block = blocks[tokenId];
+    if (!block?.data) return;
+    const data = block.data;
+    const type = String(data.type || "");
+    const kids = data.children || [];
+    const text = feishuRichText(data.text);
+    const headingMatch = type.match(/^heading([1-9])$/);
+    if (headingMatch) {
+      lines.push(`\n\n${"#".repeat(Math.min(6, Number(headingMatch[1]) + 1))} ${text.trim()}\n\n`);
+    } else if (type === "text") {
+      if (text.trim()) lines.push(`\n\n${text.trim()}\n\n`);
+    } else if (type === "bullet") {
+      lines.push(`${"  ".repeat(depth)}- ${text.trim()}\n`);
+    } else if (type === "ordered") {
+      lines.push(`${"  ".repeat(depth)}1. ${text.trim()}\n`);
+    } else if (type === "code") {
+      const lang = data.language && data.language !== "Plain Text" ? String(data.language).toLowerCase() : "";
+      lines.push(`\n\n\`\`\`${lang}\n${(data.text?.initialAttributedTexts?.text?.["0"] || "").replace(/\n$/, "")}\n\`\`\`\n\n`);
+    } else if (type === "quote" || type === "quote_container") {
+      const body = text.trim() || kids.map((k) => feishuRichText(blocks[k]?.data?.text)).join("\n").trim();
+      lines.push(`\n\n${body.split("\n").map((l) => `> ${l}`).join("\n")}\n\n`);
+    } else if (type === "divider") {
+      lines.push("\n\n---\n\n");
+    } else if (type === "image") {
+      lines.push(`\n\n![](<${data.image?.token ? feishuImageUrl(data.image.token) : ""}>)\n\n`);
+    } else if (type === "table") {
+      lines.push(feishuTableMarkdown(blocks, data));
+    } else if (type === "callout" || type === "page") {
+      kids.forEach((k) => emit(k, depth));
+    } else {
+      // 未知类型:先出自身文本,再递归子块
+      if (text.trim()) lines.push(`\n\n${text.trim()}\n\n`);
+      else kids.forEach((k) => emit(k, depth));
+    }
+    // 列表允许嵌套子项
+    if (type === "bullet" || type === "ordered") kids.forEach((k) => emit(k, depth + 1));
+  };
+  root.data.children.forEach((k) => emit(k, 0));
+  return lines.join("").replace(/\n{3,}/g, "\n\n").trim() + "\n";
+}
+
+// 飞书图片下载地址(以云盘 medias 下载端点为准),需会话 cookie。
+function feishuImageUrl(token) {
+  return `https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/all/${token}`;
+}
+
 async function extractFeishuDoc(url, { webSessionManager, collectSessionCookies, captureTimeoutMs } = {}) {
-  const rendered = await webSessionManager.extract(url, "feishu", { captureTimeoutMs });
+  const token = feishuDocToken(url);
+  const rendered = await webSessionManager.extract(url, "feishu", {
+    captureTimeoutMs,
+    extraEvaluate: token ? feishuBlockMapExpression(token) : "",
+  });
   const publishedTime = typeof rendered.publishedTime === "string"
     ? normalizeFeishuPublishedTime(rendered.publishedTime)
     : rendered.publishedTime;
   const normalized = publishedTime ? { ...rendered, publishedTime } : rendered;
   const cookie = collectSessionCookies ? await collectSessionCookies("feishu", "https://my.feishu.cn/") : "";
-  return cookie ? { ...normalized, imageHeaders: { cookie } } : normalized;
+  const withCookie = cookie ? { ...normalized, imageHeaders: { cookie } } : normalized;
+  // 内存块数据直取:成功则以结构化 Markdown 覆盖正文,失败/为空维持渲染提取(兜底)
+  const blockMarkdown = rendered.extraValue ? blockMapToMarkdown(rendered.extraValue) : "";
+  if (blockMarkdown.trim()) {
+    return { ...withCookie, markdown: blockMarkdown, extractionMethod: "feishu-block-map" };
+  }
+  return { ...withCookie, extractionMethod: "feishu-dom" };
 }
 
 // 飞书云盘文件页(/file/{token}):非文档,不做正文提取,按附件下载。
@@ -156,4 +292,4 @@ async function extractFeishuFile(url, { collectSessionCookies, fetchImpl } = {})
   };
 }
 
-module.exports = { extractFeishuDoc, normalizeFeishuPublishedTime, isFeishuFileUrl, extractFeishuFile };
+module.exports = { extractFeishuDoc, normalizeFeishuPublishedTime, isFeishuFileUrl, extractFeishuFile, blockMapToMarkdown, feishuRichText };

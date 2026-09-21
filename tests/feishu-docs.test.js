@@ -2,7 +2,7 @@
 
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { extractFeishuDoc, normalizeFeishuPublishedTime, isFeishuFileUrl, extractFeishuFile } = require("../src/clip/cloud-docs/feishu-docs");
+const { extractFeishuDoc, normalizeFeishuPublishedTime, isFeishuFileUrl, extractFeishuFile, blockMapToMarkdown, feishuRichText } = require("../src/clip/cloud-docs/feishu-docs");
 const { localIso } = require("../src/core/util");
 
 test("extractFeishuDoc bridges the rendered session cookie into imageHeaders", async () => {
@@ -19,10 +19,12 @@ test("extractFeishuDoc bridges the rendered session cookie into imageHeaders", a
     collectSessionCookies: async (service, origin) => { calls.push([service, origin]); return "feishu_session=tok"; },
     captureTimeoutMs: 42_000,
   });
-  assert.deepEqual(calls[0], ["https://my.feishu.cn/wiki/x", "feishu", { captureTimeoutMs: 42_000 }]);
+  assert.deepEqual(calls[0], ["https://my.feishu.cn/wiki/x", "feishu", { captureTimeoutMs: 42_000, extraEvaluate: calls[0][2].extraEvaluate }]);
+  assert.match(calls[0][2].extraEvaluate, /_clientvarMap/);
   assert.deepEqual(calls[1], ["feishu", "https://my.feishu.cn/"]);
   assert.deepEqual(result.imageHeaders, { cookie: "feishu_session=tok" });
   assert.equal(result.author, "Alice");
+  assert.equal(result.extractionMethod, "feishu-dom");
   assert.equal(result.publishedTime, localIso(new Date(2023, 10, 3)));
 });
 
@@ -140,4 +142,102 @@ test("feishu file meta name matching degrades when the field is not exactly name
   assert.equal(file.fallbackName, "prompt_builder.py");
   assert.equal(file.streamUrl.includes("version="), false);
   assert.equal(file.publishedAt, "");
+});
+
+// C1: 内存块数据 → Markdown 转换 —— fixture 结构与实测 _clientvarMap 一致
+// (block[id]={id,version,data:{type,children,text:{apool,initialAttributedTexts},language}})
+function block(type, extra = {}) {
+  return { data: { type, parent_id: "", comments: [], children: [], author: "u", ...extra } };
+}
+// 富文本:content 是纯串,attribs 是 etherpad changeset(*idx 引用 apool,+len36 段长)
+function richText(content, attribs = "", pool = {}) {
+  return { apool: { numToAttrib: pool }, initialAttributedTexts: { attribs: { "0": attribs }, text: { "0": content } } };
+}
+function clientvar(blockMap) {
+  return JSON.stringify({ data: { block_map: blockMap } });
+}
+
+test("blockMapToMarkdown renders headings, lists, code, quote from the memory block map", () => {
+  const raw = clientvar({
+    root: block("page", { children: ["h1", "t1", "b1", "o1", "c1", "q1"] }),
+    h1: block("heading1", { text: richText("标题一") }),
+    t1: block("text", { text: richText("普通段落") }),
+    b1: block("bullet", { text: richText("无序项") }),
+    o1: block("ordered", { text: richText("有序项") }),
+    c1: block("code", { language: "JavaScript", text: richText("const a = 1;\n") }),
+    q1: block("quote", { text: richText("引用行") }),
+  });
+  const md = blockMapToMarkdown(raw);
+  assert.match(md, /^## 标题一/m);
+  assert.match(md, /^普通段落/m);
+  assert.match(md, /^- 无序项/m);
+  assert.match(md, /^1\. 有序项/m);
+  assert.match(md, /```javascript\nconst a = 1;\n```/);
+  assert.match(md, /^> 引用行/m);
+});
+
+test("feishuRichText applies bold and inlineCode from apool attribs", () => {
+  // apool 0=bold 1=inlineCode;"粗体"(2字)加粗 + "码"(1字)行内代码 + 尾部普通
+  // 段编码:*0+2 (前2字加粗) ; *1+1 (次1字行内码) ; +2 (末2字普通)
+  const text = richText("粗体码尾巴", "*0+2*1+1+2", { 0: ["bold", "true"], 1: ["inlineCode", "true"] });
+  assert.equal(feishuRichText(text), "**粗体**`码`尾巴");
+});
+
+test("blockMapToMarkdown emits a GFM table from cell_set block references", () => {
+  const raw = clientvar({
+    root: block("page", { children: ["tb"] }),
+    tb: block("table", {
+      columns_id: ["cA", "cB"],
+      rows_id: ["r1", "r2"],
+      cell_set: {
+        r1cA: { block_id: "e1" }, r1cB: { block_id: "e2" },
+        r2cA: { block_id: "e3" }, r2cB: { block_id: "e4" },
+      },
+    }),
+    e1: block("table_cell", { children: ["te1"] }),
+    e2: block("table_cell", { children: ["te2"] }),
+    e3: block("table_cell", { children: ["te3"] }),
+    e4: block("table_cell", { children: ["te4"] }),
+    te1: block("text", { text: richText("H1") }),
+    te2: block("text", { text: richText("H2") }),
+    te3: block("text", { text: richText("v1") }),
+    te4: block("text", { text: richText("v2") }),
+  });
+  const md = blockMapToMarkdown(raw);
+  assert.match(md, /\| H1 \| H2 \|/);
+  assert.match(md, /\| --- \| --- \|/);
+  assert.match(md, /\| v1 \| v2 \|/);
+});
+
+test("blockMapToMarkdown degrades unknown block types to their text and returns empty on missing root", () => {
+  const raw = clientvar({
+    root: block("page", { children: ["x1"] }),
+    x1: block("mystery_widget", { text: richText("兜底文本") }),
+  });
+  assert.match(blockMapToMarkdown(raw), /兜底文本/);
+  assert.equal(blockMapToMarkdown(clientvar({})), "");
+  assert.equal(blockMapToMarkdown("not json"), "");
+});
+
+test("extractFeishuDoc prefers memory block map and labels feishu-block-map", async () => {
+  const raw = clientvar({
+    root: block("page", { children: ["h"] }),
+    h: block("heading1", { text: richText("内存直取标题") }),
+  });
+  const result = await extractFeishuDoc("https://my.feishu.cn/docx/KsWjdmlguoa5WCxliKKcpTfXn8N", {
+    webSessionManager: { extract: async (url, service, opts) => ({ html: "<main>渲染兜底</main>", url, title: "t", extraValue: raw }) },
+    collectSessionCookies: async () => "feishu_session=tok",
+  });
+  assert.equal(result.extractionMethod, "feishu-block-map");
+  assert.match(result.markdown, /## 内存直取标题/);
+  assert.deepEqual(result.imageHeaders, { cookie: "feishu_session=tok" });
+});
+
+test("extractFeishuDoc falls back to feishu-dom when memory block map is empty", async () => {
+  const result = await extractFeishuDoc("https://my.feishu.cn/docx/KsWjdmlguoa5WCxliKKcpTfXn8N", {
+    webSessionManager: { extract: async (url) => ({ html: "<main>渲染正文</main>", url, extraValue: "" }) },
+    collectSessionCookies: async () => "",
+  });
+  assert.equal(result.extractionMethod, "feishu-dom");
+  assert.equal("markdown" in result, false);
 });

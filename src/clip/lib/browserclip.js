@@ -624,6 +624,12 @@ class WebSessionManager {
         error.code = "DOCUMENT_LOGIN_REQUIRED";
         throw error;
       }
+      // 渲染完成后在同一页面上下文读取内存数据(飞书 block_map 内存直取等);
+      // 必须在 finally 关闭 page 之前执行,失败不影响渲染提取结果。
+      if (options.extraEvaluate) {
+        try { payload.extraValue = await runtimeValue(client, options.extraEvaluate, true, 10_000); }
+        catch (_) { payload.extraValue = ""; }
+      }
       return payload;
     } finally {
       offFetch();
