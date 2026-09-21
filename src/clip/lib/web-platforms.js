@@ -38,7 +38,8 @@ const DOCUMENT_SERVICES = {
     name: "WPS文档",
     loginUrl: "https://www.kdocs.cn/",
     hosts: ["kdocs.cn", "wps.cn"],
-    contentSelectors: [".kdocs-reader-content", ".editor-container", "[contenteditable='true']", "main", "body"],
+    paths: [/\/(?:l|view\/l|w)\/[A-Za-z0-9]+/i],
+    contentSelectors: [".ProseMirror.otl-main-editor", ".kdocs-reader-content", ".editor-container", "[contenteditable='true']", "main", "body"],
   },
   dingtalk: {
     name: "钉钉文档",
