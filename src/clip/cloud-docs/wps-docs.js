@@ -145,6 +145,8 @@ function otlRequest(token, cookie) {
     init: {
       method: "POST",
       headers: {
+        "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36 Edg/132",
+        "origin": WPS_ORIGIN,
         "content-type": "text/plain;charset=UTF-8",
         "referer": `${WPS_ORIGIN}/l/${token}`,
         ...(csrf ? { "x-csrf-rand": decodeURIComponent(csrf) } : {}),
