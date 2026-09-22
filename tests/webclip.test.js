@@ -419,11 +419,15 @@ test("WPS clips through the open/otl API and labels wps-otl", async () => {
     { type: "heading", attrs: { level: 1 }, content: [{ type: "text", text: "美团外卖" }] },
     { type: "paragraph", attrs: {}, content: [{ type: "text", text: "正文内容需要超过六十字符的阈值才会被 WPS 直取分支采用作为最终结果返回给调用方使用。" }] },
   ] }] } };
+  const fileInfo = { file: { name: "外卖红包.otl", office_type: "o", create_time: 1747930231, creator: { name: "未命名" } } };
   const fetchCalls = [];
   const clipper = new WebClipper({}, dingtalkTestSettings(), {
     fetch: async (target, init) => {
       fetchCalls.push({ target, method: init?.method });
-      return { response: { status: 200, json: async () => otl }, finalUrl: target };
+      if (/\/file\/ck1mE4vgjirr$/.test(target)) return { response: { status: 200, json: async () => fileInfo }, finalUrl: target };
+      if (/\/open\/otl$/.test(target)) return { response: { status: 200, json: async () => otl }, finalUrl: target };
+      if (/\/attachment\/shapes$/.test(target)) return { response: { status: 200, json: async () => ({ data: {} }) }, finalUrl: target };
+      return { response: { status: 200, json: async () => ({}) }, finalUrl: target };
     },
     sessionManager: { collectCookies: async () => "csrf=abc123; s=1", extract: async () => ({ html: "", url: "", text: "" }) },
   });
@@ -431,8 +435,10 @@ test("WPS clips through the open/otl API and labels wps-otl", async () => {
   assert.equal(article.extractionMethod, "wps-otl");
   assert.equal(article.title, "外卖红包");
   assert.match(article.markdown, /## 美团外卖/);
-  assert.equal(fetchCalls[0].target, "https://www.kdocs.cn/api/v3/office/file/ck1mE4vgjirr/open/otl");
-  assert.equal(fetchCalls[0].method, "POST");
+  // 先 file 接口拿 office_type,再 open/otl
+  assert.match(fetchCalls[0].target, /\/file\/ck1mE4vgjirr$/);
+  assert.equal(fetchCalls[1].target, "https://www.kdocs.cn/api/v3/office/file/ck1mE4vgjirr/open/otl");
+  assert.equal(fetchCalls[1].method, "POST");
   assert.deepEqual(article.imageHeaders, { cookie: "csrf=abc123; s=1" });
 });
 

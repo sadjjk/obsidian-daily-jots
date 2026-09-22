@@ -61,31 +61,66 @@ test("otlToMarkdown degrades unknown leaf to text and title falls back", () => {
   assert.equal(otlTitle(doc), "");
 });
 
-test("extractWpsDoc posts open/otl with csrf, fetches file meta, and labels wps-otl", async () => {
+test("extractWpsDoc picks open/otl for office_type o and labels wps-otl", async () => {
   const calls = [];
   const doc = otl([{ type: "outline-title", content: [textNode("标题文档")] }, para("正文")]);
-  const fileInfo = { file: { name: "标题文档.otl", create_time: 1747930231, creator: { name: "未命名" } } };
+  const fileInfo = { file: { name: "标题文档.otl", office_type: "o", create_time: 1747930231, creator: { name: "未命名" } } };
   const result = await extractWpsDoc("https://www.kdocs.cn/l/ck1mE4vgjirr", {
     collectSessionCookies: async (service, origin) => { calls.push([service, origin]); return "csrf=my-csrf-token; other=1"; },
     fetchImpl: async (target, init) => {
       calls.push({ target, method: init.method, headers: init.headers });
-      if (/\/open\/otl$/.test(target)) return { status: 200, json: async () => doc };
       if (/\/file\/ck1mE4vgjirr$/.test(target)) return { status: 200, json: async () => fileInfo };
+      if (/\/open\/otl$/.test(target)) return { status: 200, json: async () => doc };
+      if (/\/attachment\/shapes$/.test(target)) return { status: 200, json: async () => ({ data: {} }) };
       return { status: 200, json: async () => ({}) };
     },
   });
   assert.deepEqual(calls[0], ["wps", "https://www.kdocs.cn/"]);
-  const req = calls[1];
-  assert.equal(req.target, "https://www.kdocs.cn/api/v3/office/file/ck1mE4vgjirr/open/otl");
-  assert.equal(req.method, "POST");
-  assert.equal(req.headers["x-csrf-rand"], "my-csrf-token");
-  assert.equal(req.headers["x-forward-region"], "yxy");
+  // 先 file 接口拿 office_type,再 open/otl
+  assert.match(calls[1].target, /\/file\/ck1mE4vgjirr$/);
+  const otlReq = calls[2];
+  assert.equal(otlReq.target, "https://www.kdocs.cn/api/v3/office/file/ck1mE4vgjirr/open/otl");
+  assert.equal(otlReq.method, "POST");
+  assert.equal(otlReq.headers["x-csrf-rand"], "my-csrf-token");
+  assert.equal(otlReq.headers["x-forward-region"], "yxy");
   assert.equal(result.extractionMethod, "wps-otl");
   assert.equal(result.title, "标题文档");
   assert.match(result.markdown, /正文/);
   assert.equal(result.author, "未命名");
   assert.match(result.publishedAt, /^2025-/);
   assert.deepEqual(result.imageHeaders, { cookie: "csrf=my-csrf-token; other=1" });
+});
+
+test("extractWpsDoc picks open/md for office_type md and labels wps-md", async () => {
+  const mdText = "# 长会话攻略\n\n正文内容足够长以满足阈值检查。".repeat(3);
+  const fileInfo = { file: { name: "长会话攻略.md", office_type: "md", create_time: 1788759635, creator: { name: "WPS_1006143687" } } };
+  const result = await extractWpsDoc("https://www.kdocs.cn/l/cmWNSE8HVadT", {
+    collectSessionCookies: async () => "csrf=t",
+    fetchImpl: async (target, init) => {
+      if (/\/file\/cmWNSE8HVadT$/.test(target)) return { status: 200, json: async () => fileInfo };
+      if (/\/open\/md$/.test(target)) return { status: 200, text: async () => mdText };
+      return { status: 200, json: async () => ({}) };
+    },
+  });
+  assert.equal(result.extractionMethod, "wps-md");
+  assert.equal(result.title, "长会话攻略.md");
+  assert.match(result.markdown, /长会话攻略/);
+  assert.equal(result.author, "WPS_1006143687");
+  assert.match(result.publishedAt, /^2026-/);
+});
+
+test("extractWpsDoc throws WPS_DOCS_UNREACHABLE for unsupported office_type (et/wps/wpp)", async () => {
+  const fileInfo = { file: { name: "表格.xls", office_type: "s", create_time: 0, creator: {} } };
+  await assert.rejects(
+    extractWpsDoc("https://www.kdocs.cn/l/abc123", {
+      collectSessionCookies: async () => "csrf=t",
+      fetchImpl: async (target) => {
+        if (/\/file\/abc123$/.test(target)) return { status: 200, json: async () => fileInfo };
+        return { status: 200, json: async () => ({}) };
+      },
+    }),
+    (error) => error.code === "WPS_DOCS_UNREACHABLE" && /et|wps|wpp|pdf/.test(error.message) === false && /暂不支持/.test(error.message),
+  );
 });
 
 test("extractWpsDoc fetches picture URLs via POST shapes with attachment_id objects", async () => {
@@ -98,8 +133,8 @@ test("extractWpsDoc fetches picture URLs via POST shapes with attachment_id obje
   const result = await extractWpsDoc("https://www.kdocs.cn/l/abc123", {
     collectSessionCookies: async () => "csrf=t",
     fetchImpl: async (target, init) => {
+      if (/\/file\/abc123$/.test(target)) return { status: 200, json: async () => ({ file: { name: "图文档.otl", office_type: "o", create_time: 0, creator: {} } }) };
       if (/\/open\/otl$/.test(target)) return { status: 200, json: async () => doc };
-      if (/\/file\/abc123$/.test(target)) return { status: 200, json: async () => ({ file: { name: "图文档", create_time: 0, creator: {} } }) };
       if (/\/attachment\/shapes$/.test(target)) {
         const body = JSON.parse(init.body);
         assert.equal(init.method, "POST");
@@ -116,10 +151,14 @@ test("extractWpsDoc fetches picture URLs via POST shapes with attachment_id obje
 });
 
 test("extractWpsDoc throws WPS_DOCS_UNREACHABLE on non-2xx (fallback handled by caller)", async () => {
+  const fileInfo = { file: { name: "x.otl", office_type: "o", create_time: 0, creator: {} } };
   await assert.rejects(
     extractWpsDoc("https://www.kdocs.cn/l/ck1mE4vgjirr", {
       collectSessionCookies: async () => "csrf=x",
-      fetchImpl: async () => ({ status: 401, json: async () => ({}) }),
+      fetchImpl: async (target) => {
+        if (/\/file\/ck1mE4vgjirr$/.test(target)) return { status: 200, json: async () => fileInfo };
+        return { status: 401, json: async () => ({}) };
+      },
     }),
     (error) => error.code === "WPS_DOCS_UNREACHABLE",
   );

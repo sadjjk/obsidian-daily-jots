@@ -770,7 +770,7 @@ class WebClipper {
       throw error;
     }
     if (documentServiceForUrl(url) === "wps") {
-      // WPS:优先 open/otl 接口拿结构化正文(会话 cookie + 自造协议参数),失败回落 ProseMirror 渲染
+      // WPS:优先 open/{suffix} 接口拿结构化正文(会话 cookie + office_type 选端点),失败回落 ProseMirror 渲染
       try {
         const doc = await extractWpsDoc(url, {
           collectSessionCookies: this.collectSessionCookies.bind(this),
@@ -793,7 +793,7 @@ class WebClipper {
             // 图片 CDN(shapes 返回的 url)下载可能要求会话,cookie 从 wps 会话带来
             ...(doc.imageHeaders ? { imageHeaders: doc.imageHeaders } : {}),
             contentChars: doc.markdown.length,
-            extractionMethod: "wps-otl",
+            extractionMethod: doc.extractionMethod || "wps-otl",
             extractionStatus: "complete",
             publishedAt: doc.publishedAt || "",
           };
