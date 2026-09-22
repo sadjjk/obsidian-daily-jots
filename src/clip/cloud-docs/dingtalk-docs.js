@@ -374,13 +374,19 @@ async function fetchDentryInfo(dentryUuid, jar = new Map(), fetchImpl = globalTh
   try {
     payload = await responseJson(response);
   } catch (_) {
-    return { extension: "", dentryKey: "", name: "" };
+    return { extension: "", dentryKey: "", name: "", creator: "", createdTime: 0 };
   }
   if (payload && (payload.isSuccess === false || payload.success === false)) {
     throw dingtalkError("钉钉 list_brothers 返回失败(权限不足或链接失效)", "DINGTALK_DOCS_API_ERROR");
   }
   const current = (payload && payload.data && payload.data.current) || {};
-  return { extension: current.extension || "", dentryKey: current.dentryKey || "", name: current.name || "" };
+  return {
+    extension: current.extension || "",
+    dentryKey: current.dentryKey || "",
+    name: current.name || "",
+    creator: (current.creator && current.creator.name) || (current.updator && current.updator.name) || "",
+    createdTime: Number(current.createdTime) || 0,
+  };
 }
 
 async function fetchDownloadUrl(dentryUuid, version, jar, fetchImpl) {
@@ -472,7 +478,12 @@ async function extractDingtalkDoc(url, { webSessionManager, fetchImpl = globalTh
       error.code = "DINGTALK_BINARY_DOC";
       error.buffer = buffer;
       error.fileName = finalName;
-      error.meta = { extension: "xlsx", mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" };
+      error.meta = {
+        extension: "xlsx",
+        mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        author: info.creator || "",
+        publishedAt: info.createdTime ? localIso(new Date(info.createdTime)) : "",
+      };
       throw error;
     }
   }

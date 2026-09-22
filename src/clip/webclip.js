@@ -886,7 +886,7 @@ class WebClipper {
             canonicalUrl: url,
             identityUrl: url,
             title: fileName,
-            byline: "",
+            byline: dingtalkError.meta?.author || "",
             excerpt: `钉钉文档(${ext || "未知"}格式),已作为附件保存`,
             siteName: DOCUMENT_SERVICES.dingtalk?.name || "钉钉文档",
             markdown: "",
@@ -894,7 +894,7 @@ class WebClipper {
             contentChars: 0,
             extractionMethod,
             extractionStatus: "complete",
-            publishedAt: "",
+            publishedAt: dingtalkError.meta?.publishedAt || "",
             binaryFiles: [{ buffer, fileName, mimeType }],
           };
         }
