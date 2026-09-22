@@ -206,7 +206,7 @@ test("receipt previews keep markdown line breaks after a blank line", () => {
   const text = formatCaptureReceipt({
     diaryPath: "日记/today.md", clips: [clip], clipFailures: [], attachmentFailures: [],
   }, "zh-CN", { enabled: true, chars: 200 });
-  assert.match(text, /已提取正文和 0 张图片并保存到「全渠道剪藏」\n\n预览如下，仅展示前 200 字：\n第一段开头。\n\n第二段另起。第三段同段。/);
+  assert.match(text, /已提取正文并保存到「全渠道剪藏」\n\n预览如下，仅展示前 200 字：\n第一段开头。\n\n第二段另起。第三段同段。/);
   assert.doesNotMatch(text, /› /);
 });
 

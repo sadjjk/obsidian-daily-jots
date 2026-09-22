@@ -135,7 +135,8 @@ function formatCaptureReceipt(result, locale = "zh-CN", preview = null) {
       const items = [];
       if (hasBody) items.push(textContent);
       if (commentCount) items.push(`${commentCount} comment${commentCount === 1 ? "" : "s"}`);
-      items.push(`${savedImages} image${savedImages === 1 ? "" : "s"}`);
+      if (savedImages) items.push(`${savedImages} image${savedImages === 1 ? "" : "s"}`);
+      if (items.length === 0) return savedFiles ? "the original file" : "the content";
       if (items.length === 1) return items[0];
       if (items.length === 2) return `${items[0]} and ${items[1]}`;
       return `${items.slice(0, -1).join(", ")}, and ${items[items.length - 1]}`;
@@ -144,10 +145,11 @@ function formatCaptureReceipt(result, locale = "zh-CN", preview = null) {
       const items = [];
       if (hasBody) items.push(textContent);
       if (commentCount) items.push(`${commentCount} 条评论`);
-      items.push(`${savedImages} 张图片`);
+      if (savedImages) items.push(`${savedImages} 张图片`);
       const last = items.pop();
-      // 纯图片时带前导空格:与 "已提取/已保存" 拼出 "已提取 8 张图片"
-      return items.length ? `${items.join("、")}和 ${last}` : ` ${last}`;
+      if (!last) return savedFiles ? "原文件" : "内容";
+      // hasBody 时 last 紧跟"已提取/已保存"(无需前导空格);纯图片时带前导空格
+      return items.length ? `${items.join("、")}和 ${last}` : (hasBody ? last : ` ${last}`);
     };
     const extractedEn = enList("the full text");
     const partialEn = enList("the available text");
