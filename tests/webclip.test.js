@@ -452,6 +452,18 @@ test("WPS falls back to rendered extraction when open/otl fails", async () => {
   assert.match(article.markdown, /WPS 会话渲染出的文档正文/);
 });
 
+test("WPS login redirect page surfaces DOCUMENT_LOGIN_REQUIRED instead of clipping the login shell", async () => {
+  const loginUrl = "https://account.kdocs.cn/passport/singlesign?cb=https%3A%2F%2Fwww.kdocs.cn%2Fl%2FcmWNSE8HVadT&appid=375024576&f=c";
+  const clipper = new WebClipper({}, dingtalkTestSettings(), {
+    fetch: async () => ({ response: fakeHtmlResponse("<html>登录页</html>"), finalUrl: loginUrl }),
+    sessionManager: { collectCookies: async () => "", extract: async () => ({ html: "", url: "", text: "" }) },
+  });
+  await assert.rejects(
+    clipper.extract(loginUrl),
+    (error) => error.code === "DOCUMENT_LOGIN_REQUIRED" && /WPS文档页面需要登录/.test(error.message) && /cmWNSE8HVadT/.test(error.message),
+  );
+});
+
 test("feishu rendered payload forwards author and publishedTime into the article", async () => {
   const rendered = {
     html: `<!doctype html><html><body><div class="doc-content"><p>${"飞书会话渲染出的文档正文,长度需要超过完整性阈值才能通过校验。".repeat(6)}</p></div></body></html>`,

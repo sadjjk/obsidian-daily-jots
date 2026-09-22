@@ -758,6 +758,17 @@ class WebClipper {
         // 接口拿不到(无会话/结构变化/非文档页)一律回落渲染提取,不中断剪藏
       }
     }
+    // WPS 登录跳转页(account.kdocs.cn/passport/singlesign?cb=真实文档URL):
+    // 说明当前未登录 WPS,从 cb 提取真实链接,引导用户去「浏览器会话」面板登录,而非把登录页当正文剪藏
+    if (/account\.kdocs\.cn\/passport\/singlesign/.test(url)) {
+      let realUrl = "";
+      try { realUrl = new URL(url).searchParams.get("cb") || ""; } catch (_) {}
+      const error = new Error(
+        `WPS文档页面需要登录:请先在「浏览器会话」面板打开「WPS文档」登录窗口完成登录,再重新剪藏${realUrl ? `(原始文档链接:${realUrl})` : ""}`,
+      );
+      error.code = "DOCUMENT_LOGIN_REQUIRED";
+      throw error;
+    }
     if (documentServiceForUrl(url) === "wps") {
       // WPS:优先 open/otl 接口拿结构化正文(会话 cookie + 自造协议参数),失败回落 ProseMirror 渲染
       try {
