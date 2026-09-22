@@ -816,7 +816,7 @@ class WebClipper {
             identityUrl: url,
             title: fileName,
             byline: wpsError.meta?.author || "",
-            excerpt: `WPS ${wpsError.meta?.officeType || "二进制"}文档,已作为附件保存`,
+            excerpt: `WPS 文档(${(wpsError.fileName || "").split(".").pop() || wpsError.meta?.officeType || "未知"}格式),已作为附件保存`,
             siteName: DOCUMENT_SERVICES.wps?.name || "WPS文档",
             markdown: "",
             images: [],
