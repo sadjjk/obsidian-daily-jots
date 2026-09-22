@@ -855,16 +855,30 @@ class WebClipper {
         return article;
       } catch (dingtalkError) {
         // 附件型文档(docx/xlsx/pdf 等):/box/api/v2/file/download 拿 OSS 预签名直链 → 下载为附件保存
-        if (dingtalkError?.code === "DINGTALK_BINARY_DOC" && dingtalkError.downloadUrl) {
-          const maxBytes = Math.max(1, Number(this.settings.capture.maxFileMb) || 20) * 1024 * 1024;
-          const downloaded = await this.download(dingtalkError.downloadUrl, {
-            headers: {},
-            maxBytes,
-            timeoutMs: 60_000,
-            requestAttempts: 1,
-            fileName: dingtalkError.fileName,
-          });
-          const fileName = dingtalkError.fileName || downloaded.fileName || "dingtalk-attachment.bin";
+        // 钉钉二进制文档:在线表格(buffer 已导出 xlsx)或附件型(downloadUrl OSS 直链)
+        if (dingtalkError?.code === "DINGTALK_BINARY_DOC" && (dingtalkError.buffer || dingtalkError.downloadUrl)) {
+          let buffer, fileName, mimeType, extractionMethod;
+          if (dingtalkError.buffer) {
+            // 在线表格:无头 Chrome 已导出 xlsx buffer,直接落盘(跳过 this.download)
+            buffer = dingtalkError.buffer;
+            fileName = dingtalkError.fileName || "dingtalk-spreadsheet.xlsx";
+            mimeType = dingtalkError.meta?.mimeType || "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+            extractionMethod = "dingtalk-spreadsheet-export";
+          } else {
+            // 附件型文档:OSS 预签名直链下载原文件
+            const maxBytes = Math.max(1, Number(this.settings.capture.maxFileMb) || 20) * 1024 * 1024;
+            const downloaded = await this.download(dingtalkError.downloadUrl, {
+              headers: {},
+              maxBytes,
+              timeoutMs: 60_000,
+              requestAttempts: 1,
+              fileName: dingtalkError.fileName,
+            });
+            buffer = downloaded.buffer;
+            fileName = dingtalkError.fileName || downloaded.fileName || "dingtalk-attachment.bin";
+            mimeType = downloaded.mimeType;
+            extractionMethod = "dingtalk-file-attachment";
+          }
           const ext = (fileName.split(".").pop() || dingtalkError.meta?.extension || "").toLowerCase();
           return {
             url,
@@ -877,10 +891,10 @@ class WebClipper {
             markdown: "",
             images: [],
             contentChars: 0,
-            extractionMethod: "dingtalk-file-attachment",
+            extractionMethod,
             extractionStatus: "complete",
             publishedAt: "",
-            binaryFiles: [{ buffer: downloaded.buffer, fileName, mimeType: downloaded.mimeType }],
+            binaryFiles: [{ buffer, fileName, mimeType }],
           };
         }
         // 登录/权限类错误(DENTRY_KEY_NOT_FOUND/API_ERROR/URL_MISMATCH)继续抛出,提示用户登录;
