@@ -898,6 +898,17 @@ class WebClipper {
       throw new Error("PDF 链接不再自动提取正文：聊天里的 PDF 附件会正常保存，直链 PDF 可手动下载");
     }
     if (!contentType.includes("html") && !contentType.includes("xml")) throw new Error(`Unsupported page type: ${contentType || "unknown"}`);
+    // WPS 未登录:safeFetch 跟随 302 到 account.kdocs.cn/passport/singlesign 登录跳转页。
+    // 原始 www.kdocs.cn/l/{token} 文档需要登录态,从 cb 参数提取真实链接引导用户登录,而非存登录页空壳。
+    if (/account\.kdocs\.cn\/passport\/singlesign/.test(finalUrl)) {
+      let realUrl = "";
+      try { realUrl = new URL(finalUrl).searchParams.get("cb") || ""; } catch (_) {}
+      const error = new Error(
+        `WPS文档页面需要登录:请先在「浏览器会话」面板打开「WPS文档」登录窗口完成登录,再重新剪藏${realUrl ? `(原始文档链接:${realUrl})` : ""}`,
+      );
+      error.code = "DOCUMENT_LOGIN_REQUIRED";
+      throw error;
+    }
     const html = decodeHtmlBuffer(await readLimitedBody(response, 5 * 1024 * 1024), contentType);
     if (!renderService && this.settings.capture.renderDynamicPages !== false && this.sessionManager && detectCommunityPage(html, finalUrl)) {
       try {
