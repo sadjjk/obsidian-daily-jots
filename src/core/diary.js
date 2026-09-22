@@ -171,14 +171,24 @@ class DiaryService {
 
     const title = `${date.time} · ${safeDiaryLabel(envelope.channelName || envelope.channel, "channel")} · ${safeDiaryLabel(envelope.senderName, "未知发送者")}`;
     const lines = [`\n## ${title}\n`, normalizeDiaryMessage(envelope.text) || "_无文字内容_", ""];
-    if (attachmentLines.length) lines.push(...attachmentLines, "");
     for (const clip of clips) {
       const skipped = clip.imageSkipped?.length || 0;
       const failed = clip.imageFailures?.length || 0;
-      let detail = `本地图片 ${clip.savedImages} 张`;
-      if (skipped) detail += `，另有 ${skipped} 张超出上限保留原链`;
-      if (failed) detail += `，${failed} 张图片保存失败`;
-      lines.push(`- 网页剪藏：[[${clip.notePath.replace(/\.md$/i, "")}]]（${detail}）`);
+      const sourceLabel = clip.sourceLabel || "普通网页";
+      const parts = [];
+      if (clip.savedFiles > 0) parts.push(`附件 ${clip.savedFiles} 个已保存`);
+      if (clip.savedImages > 0) parts.push(`本地图片 ${clip.savedImages} 张`);
+      if (skipped) parts.push(`另有 ${skipped} 张超出上限保留原链`);
+      if (failed) parts.push(`${failed} 张图片保存失败`);
+      const detail = parts.length ? `（${parts.join("，")}）` : "";
+      lines.push(`- 网页剪藏 · ${sourceLabel}：[[${clip.notePath.replace(/\.md$/i, "")}]]${detail}`);
+    }
+    if (clips.length) lines.push("");
+    // 聊天附件:只列非图片文件(图片不在 receipt 单独展示)
+    const fileAttachments = attachmentLines.filter((line) => !line.startsWith("!"));
+    if (fileAttachments.length) {
+      lines.push(`- 聊天附件：${fileAttachments.join(" ")}`);
+      lines.push("");
     }
     if (attachmentFailures.length) lines.push(`> [!warning] ${attachmentFailures.length} 个聊天附件保存失败\n> ${attachmentFailures.join("\n> ")}`);
     if (clipFailures.length) lines.push(`> [!warning] ${clipFailures.length} 个链接提取失败，原始链接已保留\n> ${clipFailures.join("\n> ")}`);

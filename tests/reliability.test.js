@@ -57,6 +57,7 @@ test("multiple web links share one bounded capture window and one daily-note blo
         deadlines.push(source.deadline);
         return {
           notePath: `剪藏/${url.endsWith("one") ? "one" : "two"}.md`,
+          sourceLabel: "普通网页",
           article: { url, title: url.endsWith("one") ? "One" : "Two", extractionStatus: "complete" },
           savedImages: 0,
           imageFailures: [],
@@ -73,8 +74,8 @@ test("multiple web links share one bounded capture window and one daily-note blo
   assert.equal(new Set(deadlines).size, 1);
   assert.equal(writes.length, 1);
   assert.match(writes[0].content, new RegExp(original.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
-  assert.match(writes[0].content, /网页剪藏：\[\[剪藏\/one\]\]/);
-  assert.match(writes[0].content, /网页剪藏：\[\[剪藏\/two\]\]/);
+  assert.match(writes[0].content, /网页剪藏 · 普通网页：\[\[剪藏\/one\]\]/);
+  assert.match(writes[0].content, /网页剪藏 · 普通网页：\[\[剪藏\/two\]\]/);
 });
 
 test("chat PDF attachments are saved once and linked from the daily note without generating a clipping", async () => {
