@@ -672,11 +672,10 @@ test("DingTalk attachment docs (uni-preview?previewAtta=1) download as binary fi
 });
 
 test("DingTalk spreadsheet (spreadsheetv2) exports xlsx via headless buffer path", async () => {
-  const headlessPath = require.resolve("../src/clip/cloud-docs/headless-chrome");
+  const dingtalkDocs = require("../src/clip/cloud-docs/dingtalk-docs");
   const fakeBuffer = Buffer.from("fake-xlsx-content");
-  require.cache[headlessPath] = { id: headlessPath, filename: headlessPath, loaded: true, exports: {
-    exportDingtalkSpreadsheet: async () => ({ buffer: fakeBuffer, fileName: "bQ0O0KO0c1XKJNVb.xlsx" }),
-  }};
+  const origExport = dingtalkDocs.exportDingtalkSpreadsheet;
+  dingtalkDocs.exportDingtalkSpreadsheet = async () => ({ buffer: fakeBuffer, fileName: "bQ0O0KO0c1XKJNVb.xlsx" });
   try {
     const clipper = new WebClipper({}, dingtalkTestSettings(), {
       fetch: async () => { throw new Error("fetch should not be called for spreadsheet export"); },
@@ -690,6 +689,6 @@ test("DingTalk spreadsheet (spreadsheetv2) exports xlsx via headless buffer path
     assert.equal(article.binaryFiles[0].fileName, "bQ0O0KO0c1XKJNVb.xlsx");
     assert.ok(article.binaryFiles[0].mimeType.includes("spreadsheetml"));
   } finally {
-    delete require.cache[headlessPath];
+    dingtalkDocs.exportDingtalkSpreadsheet = origExport;
   }
 });
