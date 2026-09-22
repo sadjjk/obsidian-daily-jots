@@ -188,11 +188,13 @@ class DiaryService {
     const fileAttachments = attachmentLines.filter((line) => !line.startsWith("!"));
     // 剪藏附件(WPS/飞书等二进制文档附件):从各 clip 收集
     const clipAttachments = clips.flatMap((clip) => (clip.savedFilePaths || []).map((p) => `[[${p}]]`));
-    const allAttachments = [...fileAttachments, ...clipAttachments];
-    if (allAttachments.length) {
-      lines.push(`- 聊天附件：${allAttachments.join(" ")}`);
-      lines.push("");
+    if (fileAttachments.length) {
+      lines.push(`- 聊天附件：${fileAttachments.join(" ")}`);
     }
+    if (clipAttachments.length) {
+      lines.push(`- 剪藏附件：${clipAttachments.join(" ")}`);
+    }
+    if (fileAttachments.length || clipAttachments.length) lines.push("");
     if (attachmentFailures.length) lines.push(`> [!warning] ${attachmentFailures.length} 个聊天附件保存失败\n> ${attachmentFailures.join("\n> ")}`);
     if (clipFailures.length) lines.push(`> [!warning] ${clipFailures.length} 个链接提取失败，原始链接已保留\n> ${clipFailures.join("\n> ")}`);
     if (settings.storage.addSourceMetadata) {
