@@ -2,7 +2,7 @@
 
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { resolveDentryKey, fetchDocumentData, packageToHtml, extractDingtalkDoc, parseSpreadsheetUrl } = require("../src/clip/cloud-docs/dingtalk-docs");
+const { resolveDentryKey, fetchDocumentData, packageToHtml, extractDingtalkDoc, parseSpreadsheetUrl, parseNodeDentryUuid, fetchDentryInfo } = require("../src/clip/cloud-docs/dingtalk-docs");
 const { localIso } = require("../src/core/util");
 
 test("resolveDentryKey takes the key straight from note/preview URL params", async () => {
@@ -198,9 +198,10 @@ test("responses without text/json (safeFetch shape) are read via the body stream
   });
   assert.equal(doc.title, "测试文档");
   assert.ok(doc.html.includes("标题一"));
-  assert.equal(seen.length, 2);
+  // list_brothers(类型探测) + resolveDentryKey(页面) + fetchDocumentData(API),共 3 次
+  assert.equal(seen.length, 3);
   // jar 合并了匿名访客 cookie:POST 与图片下载都带上
-  assert.ok(seen[1].includes("api/document/data"));
+  assert.ok(seen[2].includes("api/document/data"));
   assert.match(doc.imageHeaders.cookie, /XSRF-TOKEN=abc/);
   assert.match(doc.imageHeaders.cookie, /cna=xyz/);
   assert.match(doc.imageHeaders.cookie, /visitor=9/);
@@ -220,4 +221,24 @@ test("parseSpreadsheetUrl returns null for non-spreadsheet URLs", () => {
   assert.equal(parseSpreadsheetUrl("https://alidocs.dingtalk.com/uni-preview?previewAtta=1&dentryUuid=x"), null);
   assert.equal(parseSpreadsheetUrl("https://example.com/other"), null);
   assert.equal(parseSpreadsheetUrl("not-a-url"), null);
+});
+
+test("parseNodeDentryUuid extracts nodeId from /i/nodes/ URL", () => {
+  assert.equal(parseNodeDentryUuid("https://alidocs.dingtalk.com/i/nodes/np9zOoBVBQEzkYAGTenPnzPnW1DK0g6l?iframeQuery=xxx"), "np9zOoBVBQEzkYAGTenPnzPnW1DK0g6l");
+  assert.equal(parseNodeDentryUuid("https://alidocs.dingtalk.com/i/nodes/abc123"), "abc123");
+  assert.equal(parseNodeDentryUuid("https://alidocs.dingtalk.com/spreadsheetv2/xxx/edit"), null);
+  assert.equal(parseNodeDentryUuid("https://alidocs.dingtalk.com/uni-preview?previewAtta=1"), null);
+  assert.equal(parseNodeDentryUuid("not-a-url"), null);
+});
+
+test("fetchDentryInfo reads extension/dentryKey from list_brothers current", async () => {
+  const seen = [];
+  const info = await fetchDentryInfo("nodeUuid123", new Map([["doc_atoken", "tok"]]), async (url, options) => {
+    seen.push(String(url));
+    return { ok: true, status: 200, json: async () => ({ isSuccess: true, data: { current: { extension: "axls", dentryKey: "sheetKey123", name: "表.axls" } } }), headers: {} };
+  });
+  assert.equal(info.extension, "axls");
+  assert.equal(info.dentryKey, "sheetKey123");
+  assert.equal(info.name, "表.axls");
+  assert.match(seen[0], /list_brothers\?dentryUuid=nodeUuid123/);
 });

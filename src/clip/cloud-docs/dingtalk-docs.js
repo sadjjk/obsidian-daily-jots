@@ -232,6 +232,36 @@ async function headlessExport(spreadsheetUrl, cookieHeader) {
   return await exportDingtalkSpreadsheet(spreadsheetUrl, cookieHeader);
 }
 
+// 从 /i/nodes/{nodeId} URL 提取 dentryUuid(nodeId),用于 list_brothers 查询文档类型
+function parseNodeDentryUuid(url) {
+  let parsed;
+  try { parsed = new URL(url); } catch (_) { return null; }
+  const m = parsed.pathname.match(/\/i\/nodes\/([^/?]+)/);
+  return m ? m[1] : null;
+}
+
+// 调 list_brothers 拿当前 dentry 的 extension/dentryKey/name;extension=axls 表示钉钉表格
+async function fetchDentryInfo(dentryUuid, jar = new Map(), fetchImpl = globalThis.fetch) {
+  const apiUrl = `${DINGTALK_ORIGIN}/box/api/v2/dentry/list_brothers?dentryUuid=${encodeURIComponent(dentryUuid)}&orderType=SORT_KEY&sortType=desc&prevPageSize=1&nextPageSize=1`;
+  const response = await fetchImpl(apiUrl, { headers: requestHeaders(jarHeader(jar)) });
+  if (!response.ok) {
+    throw dingtalkError(`钉钉 list_brothers 返回 HTTP ${response.status}`, "DINGTALK_DOCS_UNREACHABLE");
+  }
+  mergeCookieJar(jar, response);
+  // list_brothers 返回非 JSON(如登录页 HTML)时,返回空 info,走兜底 document/data 流程
+  let payload;
+  try {
+    payload = await responseJson(response);
+  } catch (_) {
+    return { extension: "", dentryKey: "", name: "" };
+  }
+  if (payload && (payload.isSuccess === false || payload.success === false)) {
+    throw dingtalkError("钉钉 list_brothers 返回失败(权限不足或链接失效)", "DINGTALK_DOCS_API_ERROR");
+  }
+  const current = (payload && payload.data && payload.data.current) || {};
+  return { extension: current.extension || "", dentryKey: current.dentryKey || "", name: current.name || "" };
+}
+
 async function fetchDownloadUrl(dentryUuid, version, jar, fetchImpl) {
   const apiUrl = `${DINGTALK_ORIGIN}/box/api/v2/file/download?dentryUuid=${encodeURIComponent(dentryUuid)}&version=${encodeURIComponent(version)}&supportDownloadTypes=URL_PRE_SIGNATURE,HTTP_TO_CENTER&downloadType=URL_PRE_SIGNATURE`;
   const response = await fetchImpl(apiUrl, {
@@ -307,6 +337,23 @@ async function extractDingtalkDoc(url, { webSessionManager, fetchImpl = globalTh
     error.meta = { extension: "xlsx", mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" };
     throw error;
   }
+  // 在线文档(/i/nodes):先查 dentry extension,表格(axls)走无头导出,其余走 document/data
+  const nodeUuid = parseNodeDentryUuid(url);
+  if (nodeUuid) {
+    const info = await fetchDentryInfo(nodeUuid, jar, fetchImpl);
+    if (info.extension === "axls") {
+      const sheetKey = info.dentryKey || await resolveDentryKey(url, jar, fetchImpl);
+      const editorUrl = `${DINGTALK_ORIGIN}/spreadsheetv2/${sheetKey}/edit?dentryKey=${encodeURIComponent(sheetKey)}`;
+      const { buffer } = await headlessExport(editorUrl, cookieHeader || jarHeader(jar));
+      const fileName = `${sheetKey}.xlsx`;
+      const error = new Error(`钉钉在线表格(${fileName}),已导出 xlsx`);
+      error.code = "DINGTALK_BINARY_DOC";
+      error.buffer = buffer;
+      error.fileName = fileName;
+      error.meta = { extension: "xlsx", mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" };
+      throw error;
+    }
+  }
   // 在线文档(/i/nodes):Slate 结构,走 document/data API 提取
   const dentryKey = await resolveDentryKey(url, jar, fetchImpl);
   const payload = await fetchDocumentData(dentryKey, jar, fetchImpl);
@@ -316,4 +363,4 @@ async function extractDingtalkDoc(url, { webSessionManager, fetchImpl = globalTh
   return { title, html, author, publishedAt, cookieHeader, imageHeaders };
 }
 
-module.exports = { resolveDentryKey, fetchDocumentData, packageToHtml, extractDingtalkDoc, parseAttachmentUrl, fetchDownloadUrl, parseSpreadsheetUrl, headlessExport };
+module.exports = { resolveDentryKey, fetchDocumentData, packageToHtml, extractDingtalkDoc, parseAttachmentUrl, fetchDownloadUrl, parseSpreadsheetUrl, headlessExport, parseNodeDentryUuid, fetchDentryInfo };
