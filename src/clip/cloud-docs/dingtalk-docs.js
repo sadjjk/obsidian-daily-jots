@@ -187,6 +187,45 @@ function packageToHtml(payload) {
   };
 }
 
+// 附件型文档(uni-preview?previewAtta=1):上传的原文件(docx/xlsx/pdf 等),
+// 走 /box/api/v2/file/download 拿 OSS 预签名直链,webclip 下载为附件保存。
+// 实测(2026-09-22):dentryUuid + version 从 URL 参数取;downloadType=URL_PRE_SIGNATURE 返回 preSignUrls[0]。
+function parseAttachmentUrl(url) {
+  let parsed;
+  try { parsed = new URL(url); } catch (_) { return null; }
+  if (parsed.pathname !== "/uni-preview") return null;
+  const params = parsed.searchParams;
+  if (params.get("previewAtta") !== "1") return null;
+  const dentryUuid = params.get("dentryUuid");
+  const version = params.get("version") || "1";
+  if (!dentryUuid) return null;
+  const extension = (params.get("extension") || "").toLowerCase();
+  const fileName = params.get("fileName") || "";
+  const fileSize = Number(params.get("fileSize")) || 0;
+  return { dentryUuid, version, extension, fileName, fileSize };
+}
+
+async function fetchDownloadUrl(dentryUuid, version, jar, fetchImpl) {
+  const apiUrl = `${DINGTALK_ORIGIN}/box/api/v2/file/download?dentryUuid=${encodeURIComponent(dentryUuid)}&version=${encodeURIComponent(version)}&supportDownloadTypes=URL_PRE_SIGNATURE,HTTP_TO_CENTER&downloadType=URL_PRE_SIGNATURE`;
+  const response = await fetchImpl(apiUrl, {
+    headers: requestHeaders(jarHeader(jar)),
+  });
+  if (!response.ok) {
+    throw dingtalkError(`钉钉附件下载接口返回 HTTP ${response.status}`, "DINGTALK_DOCS_UNREACHABLE");
+  }
+  mergeCookieJar(jar, response);
+  const payload = await responseJson(response);
+  if (payload && (payload.isSuccess === false || payload.success === false)) {
+    throw dingtalkError("钉钉附件下载接口返回失败(权限不足或链接失效)", "DINGTALK_DOCS_API_ERROR");
+  }
+  const info = payload?.data?.ossUrlPreSignatureInfo || {};
+  const preSignUrls = info.preSignUrls || [];
+  if (!preSignUrls.length) {
+    throw dingtalkError("钉钉附件下载接口未返回预签名 URL", "DINGTALK_DOCS_API_ERROR");
+  }
+  return { downloadUrl: preSignUrls[0], fileName: "" };
+}
+
 async function extractDingtalkDoc(url, { webSessionManager, fetchImpl = globalThis.fetch } = {}) {
   let hostname = "";
   try { hostname = new URL(url).hostname.toLowerCase(); } catch (_) {}
@@ -205,6 +244,19 @@ async function extractDingtalkDoc(url, { webSessionManager, fetchImpl = globalTh
       if (idx > 0) jar.set(pair.slice(0, idx).trim(), pair.slice(idx + 1).trim());
     }
   }
+  // 附件型文档(uni-preview?previewAtta=1):上传的原文件,走 /box/api/v2/file/download
+  const attachment = parseAttachmentUrl(url);
+  if (attachment) {
+    const { downloadUrl } = await fetchDownloadUrl(attachment.dentryUuid, attachment.version, jar, fetchImpl);
+    const fileName = attachment.fileName || `${attachment.dentryUuid}.${attachment.extension || "bin"}`;
+    const error = new Error(`钉钉附件文档(${attachment.extension || "未知"}格式),已获取下载链接`);
+    error.code = "DINGTALK_BINARY_DOC";
+    error.downloadUrl = downloadUrl;
+    error.fileName = fileName;
+    error.meta = { extension: attachment.extension, fileSize: attachment.fileSize };
+    throw error;
+  }
+  // 在线文档(/i/nodes):Slate 结构,走 document/data API 提取
   const dentryKey = await resolveDentryKey(url, jar, fetchImpl);
   const payload = await fetchDocumentData(dentryKey, jar, fetchImpl);
   const { title, html, author, publishedAt } = packageToHtml(payload);
@@ -213,4 +265,4 @@ async function extractDingtalkDoc(url, { webSessionManager, fetchImpl = globalTh
   return { title, html, author, publishedAt, cookieHeader, imageHeaders };
 }
 
-module.exports = { resolveDentryKey, fetchDocumentData, packageToHtml, extractDingtalkDoc };
+module.exports = { resolveDentryKey, fetchDocumentData, packageToHtml, extractDingtalkDoc, parseAttachmentUrl, fetchDownloadUrl };

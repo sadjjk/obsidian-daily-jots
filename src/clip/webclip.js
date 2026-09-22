@@ -831,27 +831,66 @@ class WebClipper {
       }
     }
     if (documentServiceForUrl(url) === "dingtalk") {
-      const dingtalk = await extractDingtalkDoc(url, {
-        webSessionManager: this.sessionManager,
-        // this.fetch(默认 safeFetch)返回 { response, finalUrl } 包装;解包出 response,
-        // 既保留 SSRF/重定向防护,也让测试注入的 mock fetch 生效。
-        fetchImpl: async (target, init) => {
-          const result = await this.fetch(target, init);
-          return result && result.response !== undefined ? result.response : result;
-        },
-      });
-      const article = articleFromHtml(dingtalk.html, url, {
-        title: dingtalk.title,
-        siteName: DOCUMENT_SERVICES.dingtalk?.name || "钉钉文档",
-        content: dingtalk.html,
-        extractionMethod: "dingtalk-api",
-        byline: dingtalk.author,
-        publishedAt: dingtalk.publishedAt,
-      });
-      article.canonicalUrl = url;
-      // 钉钉图片(站内 /core/api/resources/img 与 down.dingtalk.com)下载需要登录态
-      if (dingtalk.imageHeaders) article.imageHeaders = dingtalk.imageHeaders;
-      return article;
+      try {
+        const dingtalk = await extractDingtalkDoc(url, {
+          webSessionManager: this.sessionManager,
+          // this.fetch(默认 safeFetch)返回 { response, finalUrl } 包装;解包出 response,
+          // 既保留 SSRF/重定向防护,也让测试注入的 mock fetch 生效。
+          fetchImpl: async (target, init) => {
+            const result = await this.fetch(target, init);
+            return result && result.response !== undefined ? result.response : result;
+          },
+        });
+        const article = articleFromHtml(dingtalk.html, url, {
+          title: dingtalk.title,
+          siteName: DOCUMENT_SERVICES.dingtalk?.name || "钉钉文档",
+          content: dingtalk.html,
+          extractionMethod: "dingtalk-api",
+          byline: dingtalk.author,
+          publishedAt: dingtalk.publishedAt,
+        });
+        article.canonicalUrl = url;
+        // 钉钉图片(站内 /core/api/resources/img 与 down.dingtalk.com)下载需要登录态
+        if (dingtalk.imageHeaders) article.imageHeaders = dingtalk.imageHeaders;
+        return article;
+      } catch (dingtalkError) {
+        // 附件型文档(docx/xlsx/pdf 等):/box/api/v2/file/download 拿 OSS 预签名直链 → 下载为附件保存
+        if (dingtalkError?.code === "DINGTALK_BINARY_DOC" && dingtalkError.downloadUrl) {
+          const maxBytes = Math.max(1, Number(this.settings.capture.maxFileMb) || 20) * 1024 * 1024;
+          const downloaded = await this.download(dingtalkError.downloadUrl, {
+            headers: {},
+            maxBytes,
+            timeoutMs: 60_000,
+            requestAttempts: 1,
+            fileName: dingtalkError.fileName,
+          });
+          const fileName = dingtalkError.fileName || downloaded.fileName || "dingtalk-attachment.bin";
+          const ext = (fileName.split(".").pop() || dingtalkError.meta?.extension || "").toLowerCase();
+          return {
+            url,
+            canonicalUrl: url,
+            identityUrl: url,
+            title: fileName,
+            byline: "",
+            excerpt: `钉钉文档(${ext || "未知"}格式),已作为附件保存`,
+            siteName: DOCUMENT_SERVICES.dingtalk?.name || "钉钉文档",
+            markdown: "",
+            images: [],
+            contentChars: 0,
+            extractionMethod: "dingtalk-file-attachment",
+            extractionStatus: "complete",
+            publishedAt: "",
+            binaryFiles: [{ buffer: downloaded.buffer, fileName, mimeType: downloaded.mimeType }],
+          };
+        }
+        // 登录/权限类错误(DENTRY_KEY_NOT_FOUND/API_ERROR/URL_MISMATCH)继续抛出,提示用户登录;
+        // 其余结构变化类错误回落渲染提取,不中断剪藏
+        if (dingtalkError?.code === "DINGTALK_DENTRY_KEY_NOT_FOUND" ||
+            dingtalkError?.code === "DINGTALK_DOCS_API_ERROR" ||
+            dingtalkError?.code === "DINGTALK_DOCS_URL_MISMATCH") {
+          throw dingtalkError;
+        }
+      }
     }
     const renderService = this.settings.capture.renderDynamicPages !== false ? renderServiceForUrl(url) : null;
     let renderError;

@@ -641,3 +641,32 @@ test("DingTalk private docs surface the login guidance error without session coo
     (error) => error.code === "DINGTALK_DENTRY_KEY_NOT_FOUND" && /浏览器会话/.test(error.message),
   );
 });
+
+test("DingTalk attachment docs (uni-preview?previewAtta=1) download as binary file", async () => {
+  const downloadCalls = [];
+  const clipper = new WebClipper({}, dingtalkTestSettings(), {
+    fetch: async (url) => {
+      if (String(url).includes("/box/api/v2/file/download")) {
+        return { response: { ok: true, status: 200, json: async () => ({
+          status: 200, isSuccess: true,
+          data: { downloadType: "URL_PRE_SIGNATURE", ossUrlPreSignatureInfo: { preSignUrls: ["https://cdn.dingtalk.com/file.docx"] } },
+        }) } };
+      }
+      throw new Error(`unexpected fetch: ${url}`);
+    },
+    sessionManager: { collectCookies: async () => "session=abc" },
+    download: async (url) => {
+      downloadCalls.push(String(url));
+      return { buffer: Buffer.from("fake-docx"), fileName: "test.docx", mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" };
+    },
+  });
+  const article = await clipper.extract("https://alidocs.dingtalk.com/uni-preview?extension=docx&bizType=document&cloudSpaceDentryId=234268596550&previewAtta=1&cloudSpaceSpaceId=29449443993&version=24&scene=universalSpace&dentryUuid=R4GpnMqJzZl2gee6iLPNOr5lJKe0xjE3&fileId=234268596550");
+  assert.equal(article.extractionMethod, "dingtalk-file-attachment");
+  assert.equal(article.extractionStatus, "complete");
+  assert.ok(article.title.endsWith(".docx"));
+  assert.ok(article.excerpt.includes("docx"));
+  assert.equal(article.binaryFiles.length, 1);
+  assert.ok(article.binaryFiles[0].fileName.endsWith(".docx"));
+  assert.ok(article.markdown === "");
+  assert.deepEqual(downloadCalls, ["https://cdn.dingtalk.com/file.docx"]);
+});
