@@ -1012,12 +1012,14 @@ class WebClipper {
     const fileFailures = [];
     let savedImages = 0;
     let savedFiles = 0;
+    const savedFilePaths = [];
     const assetFolder = `${this.settings.storage.attachmentFolder}/Web/${date.day}/${date.day}-${labelForPath}-${stem}-${shortHash(identityUrl)}`;
     for (const [index, file] of (article.binaryFiles || []).entries()) {
       try {
         const localPath = await this.writer.saveBinary(assetFolder, file.fileName || `source-${index + 1}`, file.buffer, file.mimeType);
         markdown = `[${file.label || file.fileName || "Source file"}](${encodeURI(localPath)})\n\n${markdown}`;
         savedFiles += 1;
+        savedFilePaths.push(localPath.replace(/\.md$/i, ""));
       } catch (error) {
         fileFailures.push(`${file.fileName || `source-${index + 1}`}: ${error?.message || error}`);
       }
@@ -1103,7 +1105,7 @@ class WebClipper {
         await this.writer.trashFile(existingPath).catch(() => {});
       } catch (_) { /* 清理失败静默:旧文件保留,下次重剪再试 */ }
     }
-    return { notePath, article: { ...article, title, identityUrl }, sourceLabel, reused, savedImages, savedFiles, imageFailures: failures, imageSkipped: skippedImages, fileFailures };
+    return { notePath, article: { ...article, title, identityUrl }, sourceLabel, reused, savedImages, savedFiles, savedFilePaths, imageFailures: failures, imageSkipped: skippedImages, fileFailures };
   }
 }
 

@@ -186,8 +186,11 @@ class DiaryService {
     if (clips.length) lines.push("");
     // 聊天附件:只列非图片文件(图片不在 receipt 单独展示)
     const fileAttachments = attachmentLines.filter((line) => !line.startsWith("!"));
-    if (fileAttachments.length) {
-      lines.push(`- 聊天附件：${fileAttachments.join(" ")}`);
+    // 剪藏附件(WPS/飞书等二进制文档附件):从各 clip 收集
+    const clipAttachments = clips.flatMap((clip) => (clip.savedFilePaths || []).map((p) => `[[${p}]]`));
+    const allAttachments = [...fileAttachments, ...clipAttachments];
+    if (allAttachments.length) {
+      lines.push(`- 聊天附件：${allAttachments.join(" ")}`);
       lines.push("");
     }
     if (attachmentFailures.length) lines.push(`> [!warning] ${attachmentFailures.length} 个聊天附件保存失败\n> ${attachmentFailures.join("\n> ")}`);
