@@ -464,6 +464,18 @@ test("WPS login redirect page surfaces DOCUMENT_LOGIN_REQUIRED instead of clippi
   );
 });
 
+test("WPS document without login surfaces DOCUMENT_LOGIN_REQUIRED when rendered content is too short", async () => {
+  const clipper = new WebClipper({}, dingtalkTestSettings(), {
+    // OTL 401(无会话)→ 回退渲染 → 渲染拿到登录页(正文过短)→ 应抛登录引导
+    fetch: async () => ({ response: { status: 401, json: async () => ({}) }, finalUrl: "https://www.kdocs.cn/l/cmWNSE8HVadT" }),
+    sessionManager: { collectCookies: async () => "", extract: async () => ({ html: "<html>登录</html>", url: "https://www.kdocs.cn/l/cmWNSE8HVadT", text: "登录" }) },
+  });
+  await assert.rejects(
+    clipper.extract("https://www.kdocs.cn/l/cmWNSE8HVadT"),
+    (error) => error.code === "DOCUMENT_LOGIN_REQUIRED" && /WPS文档/.test(error.message),
+  );
+});
+
 test("feishu rendered payload forwards author and publishedTime into the article", async () => {
   const rendered = {
     html: `<!doctype html><html><body><div class="doc-content"><p>${"飞书会话渲染出的文档正文,长度需要超过完整性阈值才能通过校验。".repeat(6)}</p></div></body></html>`,

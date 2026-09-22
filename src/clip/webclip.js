@@ -870,8 +870,8 @@ class WebClipper {
           if (rendered.imageHeaders) article.imageHeaders = rendered.imageHeaders;
           return { ...article, commentCount: Number(rendered.commentCount) || 0 };
         }
-        if (tencentHostForUrl(url)) {
-          // 腾讯文档/企微文档渲染拿不到正文(登录墙/私有文档/melo canvas 无文本):不回落 HTTP 空壳,
+        if (tencentHostForUrl(url) || documentServiceForUrl(url) === "wps") {
+          // 腾讯/企微/WPS 文档渲染拿不到正文(登录墙/私有文档):不回落 HTTP 空壳,
           // 像钉钉/飞书一样明确提示用户先登录浏览器会话
           const serviceName = DOCUMENT_SERVICES[documentServiceForUrl(url)]?.name || "腾讯文档";
           const error = new Error(`${serviceName}页面需要登录:请先在「浏览器会话」面板打开「${serviceName}」登录窗口完成登录,再重新剪藏`);
