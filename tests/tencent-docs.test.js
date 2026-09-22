@@ -2,7 +2,7 @@
 
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { extractTencentDoc, parseTencentDocPayload, stripTencentChrome, tencentDocApiUrl, tencentDocToMarkdown, tencentHostForUrl, tencentSessionServiceForUrl, tencentSiteNameForUrl } = require("../src/clip/cloud-docs/tencent-docs");
+const { extractTencentDoc, extractTencentFileExportForTencent, parseTencentDocPayload, stripTencentChrome, tencentDocApiUrl, tencentDocToMarkdown, tencentHostForUrl, tencentSessionServiceForUrl, tencentSiteNameForUrl } = require("../src/clip/cloud-docs/tencent-docs");
 const { localIso } = require("../src/core/util");
 
 test("tencent rendered chrome lines are stripped while body lines survive", () => {
@@ -245,4 +245,113 @@ test("tencent extract requires a session and rejects non-doc links", async () =>
     (error) => error.code === "DOCUMENT_LOGIN_REQUIRED",
   );
   assert.throws(() => tencentDocApiUrl("https://example.com/x"), /腾讯文档/);
+});
+
+// ==== sheet/slide 导出链(opendoc 换 globalPadId → export_office → 轮询 → COS 下载) ====
+
+function exportMockFetch(opendocPayload, { pollPayloads, downloadBuffer, downloadDisposition } = {}) {
+  const calls = [];
+  let pollCount = 0;
+  const fetchImpl = async (target, init = {}) => {
+    calls.push({ target, init });
+    const jsonResponse = (payload) => ({
+      ok: true, status: 200,
+      headers: { get: () => "application/json" },
+      body: (async function* () { yield Buffer.from(typeof payload === "string" ? payload : JSON.stringify(payload)); })(),
+    });
+    if (target.includes("/dop-api/opendoc")) return jsonResponse(opendocPayload);
+    if (target.includes("/v1/export/export_office")) return jsonResponse({ ret: 0, operationId: "op-1" });
+    if (target.includes("/v1/export/query_progress")) {
+      const payload = pollPayloads[Math.min(pollCount, pollPayloads.length - 1)];
+      pollCount += 1;
+      return jsonResponse(payload);
+    }
+    return {
+      ok: true, status: 200,
+      headers: { get: (k) => (String(k).toLowerCase() === "content-disposition" ? downloadDisposition : "application/octet-stream") },
+      body: (async function* () { yield downloadBuffer; })(),
+    };
+  };
+  return { fetchImpl, calls };
+}
+
+test("tencent sheet export downloads xlsx buffer with UTF-8 filename", async () => {
+  const opendocPayload = {
+    globalPadId: "300000000$ZyCPHyECyGCs",
+    padType: "sheet",
+    initialTitle: "测试表格",
+  };
+  const downloadBuffer = Buffer.from("504b0304fake-zip-data");
+  const { fetchImpl, calls } = exportMockFetch(opendocPayload, {
+    pollPayloads: [
+      { ret: 0, status: "Processing", progress: 50 },
+      { ret: 0, status: "Done", progress: 100, file_url: "https://cos.example/file.xlsx?sig=1" },
+    ],
+    downloadBuffer,
+    downloadDisposition: "attachment; filename=\"t.xlsx\"; filename*=UTF-8''%E6%B5%8B%E8%AF%95%E8%A1%A8%E6%A0%BC.xlsx",
+  });
+  await assert.rejects(
+    extractTencentFileExportForTencent("https://docs.qq.com/sheet/DVnFYSGZ0cFJiZGpM?tab=BB08J2", {
+      collectSessionCookies: async () => "SID=tok",
+      fetchImpl,
+    }),
+    (error) => {
+      assert.equal(error.code, "TENCENT_DOCS_BINARY");
+      assert.ok(Buffer.isBuffer(error.buffer));
+      assert.ok(error.buffer.includes(downloadBuffer));
+      assert.equal(error.fileName, "测试表格.xlsx");       // filename* UTF-8 优先于 ASCII fallback
+      assert.equal(error.meta.padType, "sheet");
+      assert.match(error.meta.mimeType, /spreadsheetml\.sheet/);
+      return true;
+    },
+  );
+  const postCall = calls.find((c) => c.target.includes("/v1/export/export_office"));
+  assert.equal(postCall.init.headers["content-type"], "application/x-www-form-urlencoded");
+  assert.equal(postCall.init.headers["x-requested-with"], "XMLHttpRequest");
+  assert.match(postCall.init.body, /docId=300000000%24ZyCPHyECyGCs/);  // $ 已编码
+  assert.match(postCall.init.body, /exportType=0/);
+  // 下载请求不带会话 cookie(COS 预签名直链)
+  const downloadCall = calls[calls.length - 1];
+  assert.ok(downloadCall.target.includes("cos.example"));
+  assert.ok(!downloadCall.init.headers.cookie);
+});
+
+test("tencent slide export uses pptx metadata", async () => {
+  const { fetchImpl } = exportMockFetch(
+    { globalPadId: "300000000$ZyCPHyECyGCs", padType: "slide", initialTitle: "演示" },
+    {
+      pollPayloads: [{ ret: 0, status: "Done", progress: 100, file_url: "https://cos.example/f" }],
+      downloadBuffer: Buffer.from("504b0304pptx"),
+      downloadDisposition: "attachment; filename=\"12幢架空层提升建议.pptx\"",
+    },
+  );
+  await assert.rejects(
+    extractTencentFileExportForTencent("https://docs.qq.com/slide/DWnlDUEh5RUN5R0Nz", {
+      collectSessionCookies: async () => "SID=tok",
+      fetchImpl,
+    }),
+    (error) => {
+      assert.equal(error.code, "TENCENT_DOCS_BINARY");
+      assert.match(error.meta.mimeType, /presentationml\.presentation/);
+      return true;
+    },
+  );
+});
+
+test("tencent export rejects missing session and unsupported pad types", async () => {
+  await assert.rejects(
+    extractTencentFileExportForTencent("https://docs.qq.com/sheet/DVnFYSGZ0cFJiZGpM", { collectSessionCookies: async () => "" }),
+    (error) => error.code === "DOCUMENT_LOGIN_REQUIRED",
+  );
+  const { fetchImpl } = exportMockFetch(
+    { globalPadId: "300000000$ZyCPHyECyGCs", padType: "doc", initialTitle: "文档" },
+    { pollPayloads: [], downloadBuffer: Buffer.from(""), downloadDisposition: "" },
+  );
+  await assert.rejects(
+    extractTencentFileExportForTencent("https://docs.qq.com/doc/DR25Mc1hCeGdaVk1o", {
+      collectSessionCookies: async () => "SID=tok",
+      fetchImpl,
+    }),
+    (error) => error.code === "TENCENT_DOCS_EXPORT_UNSUPPORTED",
+  );
 });

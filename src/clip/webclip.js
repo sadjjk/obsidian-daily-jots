@@ -9,8 +9,8 @@ const { extractRedditPost, parseRedditUrl } = require("./social-media/redditclip
 const { COMMUNITY_SERVICES, DOCUMENT_SERVICES, communityServiceForUrl, documentServiceForUrl, isLikelyPdfUrl, renderServiceForUrl } = require("./lib/web-platforms");
 const { extractDingtalkDoc } = require("./cloud-docs/dingtalk-docs");
 const { extractFeishuDoc, extractFeishuFile, isFeishuFileUrl } = require("./cloud-docs/feishu-docs");
-const { extractTencentDoc, stripTencentChrome, tencentHostForUrl, tencentSiteNameForUrl } = require("./cloud-docs/tencent-docs");
-const { extractWecomDoc } = require("./cloud-docs/wecom-docs");
+const { extractTencentDoc, extractTencentFileExportForTencent, stripTencentChrome, tencentHostForUrl, tencentSiteNameForUrl } = require("./cloud-docs/tencent-docs");
+const { extractWecomDoc, extractWecomFileExport } = require("./cloud-docs/wecom-docs");
 const { extractWpsDoc, fetchFileInfo, wpsDocToken } = require("./cloud-docs/wps-docs");
 const { extractXStatus } = require("./social-media/xclip");
 const { extractBilibili, isBilibiliUrl, isBilibiliVideoUrl } = require("./social-media/biliclip");
@@ -723,6 +723,42 @@ class WebClipper {
       };
     }
     if (tencentHostForUrl(url)) {
+      // sheet/slide 等二进制类型:opendoc mutations 只解析 docx 文档,表格/幻灯走导出链
+      // (opendoc 换 globalPadId → export_office → 轮询 → COS 直链下载)。成功时抛
+      // TENCENT_DOCS_BINARY 带 buffer;其余失败静默继续下方 docx opendoc 流程/渲染兜底。
+      let tencentExportError;
+      try {
+        const fileExtractor = tencentHostForUrl(url) === "doc.weixin.qq.com" ? extractWecomFileExport : extractTencentFileExportForTencent;
+        await fileExtractor(url, {
+          collectSessionCookies: this.collectSessionCookies.bind(this),
+          fetchImpl: async (target, init) => {
+            const result = await this.fetch(target, init);
+            return result && result.response !== undefined ? result.response : result;
+          },
+        });
+      } catch (exportError) {
+        tencentExportError = exportError;
+      }
+      if (tencentExportError?.code === "TENCENT_DOCS_BINARY" && tencentExportError.buffer) {
+        const fileName = tencentExportError.fileName || "tencent-doc.bin";
+        const padType = tencentExportError.meta?.padType || "";
+        return {
+          url,
+          canonicalUrl: url,
+          identityUrl: url,
+          title: fileName,
+          byline: "",
+          excerpt: `腾讯文档(${padType === "slide" ? "幻灯" : "表格"}),已作为附件保存`,
+          siteName: tencentSiteNameForUrl(url),
+          markdown: "",
+          images: [],
+          contentChars: 0,
+          extractionMethod: "tencent-file-export",
+          extractionStatus: "complete",
+          publishedAt: "",
+          binaryFiles: [{ buffer: tencentExportError.buffer, fileName, mimeType: tencentExportError.meta?.mimeType }],
+        };
+      }
       // 腾讯文档/企微文档:优先 opendoc 接口拿全量正文(文本/格式/图片 URL,会话 cookie);
       // 新版 melo 内核把正文画在 canvas 上,渲染提取拿不到文本,接口路线是唯一文本来源。
       // 入口按 host 分流:企微文档走独立会话(wecomdoc profile,cookie 与腾讯文档互不共享)
