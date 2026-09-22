@@ -205,6 +205,33 @@ function parseAttachmentUrl(url) {
   return { dentryUuid, version, extension, fileName, fileSize };
 }
 
+// 钉钉在线表格(/spreadsheetv2/):collab 服务端存储,无 HTTP 导出 API,
+// 用无头 Chrome + 页面内 webpack hack 导出 xlsx(详见 headless-chrome.js)。
+function parseSpreadsheetUrl(url) {
+  let parsed;
+  try { parsed = new URL(url); } catch (_) { return null; }
+  if (!parsed.pathname.includes("/spreadsheetv2/")) return null;
+  const params = parsed.searchParams;
+  // dentryKey:优先查询参数,其次路径段(/spreadsheetv2/{dentryKey}/edit)
+  const pathSeg = parsed.pathname.split("/spreadsheetv2/")[1] || "";
+  const dentryKey = params.get("dentryKey") || pathSeg.split("/")[0] || "";
+  const docId = params.get("docId") || params.get("docKey") || "";
+  if (!dentryKey) return null;
+  // 构造编辑器完整 URL(带必要参数,确保 collab WebSocket 建立)
+  const editorUrl = `${DINGTALK_ORIGIN}/spreadsheetv2/${dentryKey}/edit?docId=${encodeURIComponent(docId)}&dentryKey=${encodeURIComponent(dentryKey)}`;
+  return { dentryKey, docId, editorUrl };
+}
+
+// 钉钉在线表格:无头 Chrome 导出 xlsx,返回 { buffer, fileName }
+// 延迟 require headless-chrome(任务 4 才创建该模块),避免模块加载期 MODULE_NOT_FOUND
+async function headlessExport(spreadsheetUrl, cookieHeader) {
+  if (!cookieHeader) {
+    throw dingtalkError("钉钉在线表格导出需要登录 cookie(请先在钉钉文档登录窗口登录)", "DINGTALK_DENTRY_KEY_NOT_FOUND");
+  }
+  const { exportDingtalkSpreadsheet } = require("./headless-chrome");
+  return await exportDingtalkSpreadsheet(spreadsheetUrl, cookieHeader);
+}
+
 async function fetchDownloadUrl(dentryUuid, version, jar, fetchImpl) {
   const apiUrl = `${DINGTALK_ORIGIN}/box/api/v2/file/download?dentryUuid=${encodeURIComponent(dentryUuid)}&version=${encodeURIComponent(version)}&supportDownloadTypes=URL_PRE_SIGNATURE,HTTP_TO_CENTER&downloadType=URL_PRE_SIGNATURE`;
   const response = await fetchImpl(apiUrl, {
@@ -223,7 +250,20 @@ async function fetchDownloadUrl(dentryUuid, version, jar, fetchImpl) {
   if (!preSignUrls.length) {
     throw dingtalkError("钉钉附件下载接口未返回预签名 URL", "DINGTALK_DOCS_API_ERROR");
   }
-  return { downloadUrl: preSignUrls[0], fileName: "" };
+  const downloadUrl = preSignUrls[0];
+  // 从 OSS URL 的 response-content-disposition 参数提取文件名(多层 URL encode)
+  let fileName = "";
+  try {
+    const cdMatch = downloadUrl.match(/response-content-disposition=([^&]+)/);
+    if (cdMatch) {
+      let decoded = cdMatch[1];
+      // OSS URL 参数通常被 encode 了 2-3 次
+      for (let i = 0; i < 3; i++) decoded = decodeURIComponent(decoded);
+      const fnMatch = decoded.match(/filename\*?=([^;]+)/);
+      if (fnMatch) fileName = fnMatch[1].replace(/^"(.*)"$/, "$1").trim();
+    }
+  } catch (_) {}
+  return { downloadUrl, fileName };
 }
 
 async function extractDingtalkDoc(url, { webSessionManager, fetchImpl = globalThis.fetch } = {}) {
@@ -247,13 +287,24 @@ async function extractDingtalkDoc(url, { webSessionManager, fetchImpl = globalTh
   // 附件型文档(uni-preview?previewAtta=1):上传的原文件,走 /box/api/v2/file/download
   const attachment = parseAttachmentUrl(url);
   if (attachment) {
-    const { downloadUrl } = await fetchDownloadUrl(attachment.dentryUuid, attachment.version, jar, fetchImpl);
-    const fileName = attachment.fileName || `${attachment.dentryUuid}.${attachment.extension || "bin"}`;
+    const { downloadUrl, fileName: dlFileName } = await fetchDownloadUrl(attachment.dentryUuid, attachment.version, jar, fetchImpl);
+    const fileName = attachment.fileName || dlFileName || `${attachment.dentryUuid}.${attachment.extension || "bin"}`;
     const error = new Error(`钉钉附件文档(${attachment.extension || "未知"}格式),已获取下载链接`);
     error.code = "DINGTALK_BINARY_DOC";
     error.downloadUrl = downloadUrl;
     error.fileName = fileName;
     error.meta = { extension: attachment.extension, fileSize: attachment.fileSize };
+    throw error;
+  }
+  // 在线表格(/spreadsheetv2/):无头 Chrome 导出 xlsx,抛 DINGTALK_BINARY_DOC 带 buffer(复用附件落盘)
+  const spreadsheet = parseSpreadsheetUrl(url);
+  if (spreadsheet) {
+    const { buffer, fileName } = await headlessExport(spreadsheet.editorUrl, cookieHeader || jarHeader(jar));
+    const error = new Error(`钉钉在线表格(${fileName}),已导出 xlsx`);
+    error.code = "DINGTALK_BINARY_DOC";
+    error.buffer = buffer;
+    error.fileName = fileName;
+    error.meta = { extension: "xlsx", mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" };
     throw error;
   }
   // 在线文档(/i/nodes):Slate 结构,走 document/data API 提取
@@ -265,4 +316,4 @@ async function extractDingtalkDoc(url, { webSessionManager, fetchImpl = globalTh
   return { title, html, author, publishedAt, cookieHeader, imageHeaders };
 }
 
-module.exports = { resolveDentryKey, fetchDocumentData, packageToHtml, extractDingtalkDoc, parseAttachmentUrl, fetchDownloadUrl };
+module.exports = { resolveDentryKey, fetchDocumentData, packageToHtml, extractDingtalkDoc, parseAttachmentUrl, fetchDownloadUrl, parseSpreadsheetUrl, headlessExport };
