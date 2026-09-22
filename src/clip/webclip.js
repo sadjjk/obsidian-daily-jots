@@ -854,6 +854,7 @@ class WebClipper {
         if (dingtalk.imageHeaders) article.imageHeaders = dingtalk.imageHeaders;
         return article;
       } catch (dingtalkError) {
+        console.error("[dingtalk] extractDingtalkDoc failed:", dingtalkError?.code || "NO_CODE", dingtalkError?.message);
         // 附件型文档(docx/xlsx/pdf 等):/box/api/v2/file/download 拿 OSS 预签名直链 → 下载为附件保存
         // 钉钉二进制文档:在线表格(buffer 已导出 xlsx)或附件型(downloadUrl OSS 直链)
         if (dingtalkError?.code === "DINGTALK_BINARY_DOC" && (dingtalkError.buffer || dingtalkError.downloadUrl)) {

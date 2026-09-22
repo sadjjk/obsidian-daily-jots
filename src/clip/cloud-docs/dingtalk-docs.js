@@ -7,19 +7,8 @@ const DENTRY_KEY_PATTERN = /"dentryKey"\s*:\s*"([^"]{8,64})"/i;
 const UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36 Edg/132";
 const { readLimitedBody } = require("../../core/network");
 const { localIso } = require("../../core/util");
-// 无头 Chrome 导出钉钉在线表格:系统 Chrome --headless=new + CDP 注入 cookie + 页面内 webpack hack
-const childProcess = require("node:child_process");
-const fs = require("node:fs");
-const http = require("node:http");
-const path = require("node:path");
-const WebSocket = require("ws");
-
-const KNOWN_CHROME_PATHS = process.platform === "darwin"
-  ? ["/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"]
-  : process.platform === "win32"
-    ? [path.join(process.env.PROGRAMFILES || "C:\\Program Files", "Google/Chrome/Application/chrome.exe")]
-    : ["/usr/bin/google-chrome", "/usr/bin/chromium", "/usr/bin/chromium-browser"];
-const TMP_PROFILE = "/tmp/dingtalk-headless-profile";
+// 无头 Chrome 导出钉钉在线表格:复用 browserclip 浏览器会话(--headless=new + --remote-allow-origins=*)
+// + CDP 注入 cookie + 页面内 webpack hack 导出 xlsx。
 const NAV_WAIT_MS = 25_000;       // 等 collab WebSocket 建立
 const CHUNK_SIZE = 500_000;       // base64 分块取回(每块 500KB)
 
@@ -239,67 +228,11 @@ function parseSpreadsheetUrl(url) {
 
 // 钉钉在线表格:无头 Chrome 导出 xlsx,返回 { buffer, fileName }
 // headlessExport 通过 module.exports.exportDingtalkSpreadsheet 调用,允许测试注入 mock
-async function headlessExport(spreadsheetUrl, cookieHeader) {
+async function headlessExport(spreadsheetUrl, cookieHeader, browserSessionManager) {
   if (!cookieHeader) {
     throw dingtalkError("钉钉在线表格导出需要登录 cookie(请先在钉钉文档登录窗口登录)", "DINGTALK_DENTRY_KEY_NOT_FOUND");
   }
-  return await module.exports.exportDingtalkSpreadsheet(spreadsheetUrl, cookieHeader);
-}
-
-function findChrome() {
-  for (const p of KNOWN_CHROME_PATHS) {
-    try { fs.accessSync(p); return p; } catch (_) {}
-  }
-  return null;
-}
-
-// 选取空闲端口:启动临时 server 拿 port 后立即关闭
-function pickPort() {
-  return new Promise((resolve, reject) => {
-    const srv = http.createServer();
-    srv.on("error", reject);
-    srv.listen(0, "127.0.0.1", () => {
-      const port = srv.address().port;
-      srv.close(() => resolve(port));
-    });
-  });
-}
-
-// 轮询 /json/list 直到返回第一个 page tab(Chrome 启动需要时间)
-async function findPageTab(port, timeoutMs = 5_000) {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    try {
-      const resp = await fetch(`http://127.0.0.1:${port}/json/list`);
-      const tabs = await resp.json();
-      const page = tabs.find((t) => t.type === "page" && t.webSocketDebuggerUrl);
-      if (page) return page;
-    } catch (_) {}
-    await new Promise((r) => setTimeout(r, 500));
-  }
-  throw new Error("无头 Chrome 未在超时内暴露调试 page tab");
-}
-
-// CDP 连接:封装 send/onmessage,返回 { send, ev, close }
-function connectCdp(ws) {
-  let mid = 0;
-  const pending = new Map();
-  ws.onmessage = (e) => {
-    const m = JSON.parse(e.data);
-    if (m.id && pending.has(m.id)) {
-      const { ok, no } = pending.get(m.id);
-      pending.delete(m.id);
-      m.error ? no(new Error(m.error.message)) : ok(m.result);
-    }
-  };
-  const send = (method, params = {}) => new Promise((ok, no) => {
-    const id = ++mid;
-    pending.set(id, { ok, no });
-    ws.send(JSON.stringify({ id, method, params }));
-  });
-  const ev = (expr) => send("Runtime.evaluate", { expression: expr, awaitPromise: true, returnByValue: true })
-    .then((r) => r?.result?.value);
-  return { send, ev, close: () => ws.close() };
+  return await module.exports.exportDingtalkSpreadsheet(spreadsheetUrl, cookieHeader, browserSessionManager);
 }
 
 // 页面内导出脚本:webpack hack → store → controller → serialize → handleUpload → 页面内下载 → base64
@@ -333,53 +266,43 @@ const EXPORT_SCRIPT = `(async function(){
   } catch(e) { return JSON.stringify({err: (e && e.message) || String(e)}); }
 })()`;
 
-// 导出钉钉在线表格为 xlsx buffer。返回 { buffer, fileName }。
-async function exportDingtalkSpreadsheet(url, cookieHeader) {
-  const chromePath = findChrome();
-  if (!chromePath) {
-    const err = new Error("未找到系统 Chrome,无法导出钉钉在线表格(请安装 Google Chrome)");
-    err.code = "DINGTALK_DOCS_UNREACHABLE";
-    throw err;
-  }
-  const port = await pickPort();
-  const proc = childProcess.spawn(chromePath, [
-    `--headless=new`, `--remote-debugging-port=${port}`,
-    `--user-data-dir=${TMP_PROFILE}`, "--disable-gpu",
-    "--no-first-run", "--no-default-browser-check", "--disable-extensions",
-  ], { stdio: ["pipe", "pipe", "pipe"] });
+// CDP evaluate 简写:Runtime.evaluate 返回 result.result.value(自研与 browserclip 两种 client 通用)
+async function cdpEvaluate(client, expression) {
+  const result = await client.send("Runtime.evaluate", { expression, awaitPromise: true, returnByValue: true });
+  return result?.result?.value;
+}
 
-  let ws, cdp;
+// 把 "name=val; name2=val2" 还原成 CDP cookie 并逐个注入(domain .dingtalk.com)
+async function injectDingtalkCookies(client, cookieHeader) {
+  const cookies = String(cookieHeader || "").split("; ").map((pair) => {
+    const idx = pair.indexOf("=");
+    if (idx < 0) return null;
+    return { name: pair.slice(0, idx).trim(), value: pair.slice(idx + 1).trim(), domain: ".dingtalk.com", path: "/" };
+  }).filter(Boolean);
+  for (const c of cookies) { try { await client.send("Network.setCookie", c); } catch (_) {} }
+}
+
+// 复用 browserclip 浏览器会话导出(Obsidian 环境已验证的链路:start 带 --remote-allow-origins=*)。
+// 与自研 spawn 链路共享 cookie 注入/导航/EXPORT_SCRIPT/分块取回逻辑,仅浏览器生命周期管理不同。
+async function exportViaSessionManager(url, cookieHeader, manager) {
+  const entry = await manager.start("dingtalk-export", { headless: true, initialUrl: "about:blank" });
+  let client;
   try {
-    await new Promise((r) => setTimeout(r, 3_000));   // 等 Chrome 启动
-    const page = await findPageTab(port);
-    ws = new WebSocket(page.webSocketDebuggerUrl);
-    await new Promise((ok, no) => { ws.onopen = ok; ws.onerror = no; });
-    cdp = connectCdp(ws);
-    await cdp.send("Page.enable");
-    await cdp.send("Network.enable");
-
-    // 注入 cookie(从 cookieHeader "name=val; name2=val2" 还原,domain .dingtalk.com)
-    const cookies = String(cookieHeader || "").split("; ").map((pair) => {
-      const idx = pair.indexOf("=");
-      if (idx < 0) return null;
-      return { name: pair.slice(0, idx).trim(), value: pair.slice(idx + 1).trim(), domain: ".dingtalk.com", path: "/" };
-    }).filter(Boolean);
-    for (const c of cookies) { try { await cdp.send("Network.setCookie", c); } catch (_) {} }
-
+    client = await manager.createPage(entry);
+    await client.send("Page.enable");
+    await client.send("Network.enable");
+    await injectDingtalkCookies(client, cookieHeader);
     // 导航到表格编辑器(等 collab WebSocket 建立)
-    await cdp.send("Page.navigate", { url });
+    await client.send("Page.navigate", { url });
     await new Promise((r) => setTimeout(r, NAV_WAIT_MS));
-
     // 登录态检测:被跳到登录页说明 cookie 失效
-    const title = String(await cdp.ev("document.title") || "");
+    const title = String(await cdpEvaluate(client, "document.title") || "");
     if (/login|登录|扫码/i.test(title)) {
       const err = new Error("钉钉 cookie 已过期,请重新在钉钉文档登录窗口登录");
       err.code = "DINGTALK_DENTRY_KEY_NOT_FOUND";
       throw err;
     }
-
-    // 页面内执行导出脚本
-    const dlResult = await cdp.ev(EXPORT_SCRIPT);
+    const dlResult = await cdpEvaluate(client, EXPORT_SCRIPT);
     const dlParsed = JSON.parse(dlResult);
     if (!dlParsed.ok) {
       const err = new Error(`钉钉在线表格导出失败:${dlParsed.err || "未知错误"}`);
@@ -391,25 +314,39 @@ async function exportDingtalkSpreadsheet(url, cookieHeader) {
       err.code = "DINGTALK_DOCS_API_ERROR";
       throw err;
     }
-
     // 分块取回 base64 → Buffer
     const b64Len = dlParsed.b64Len;
     const chunks = Math.ceil(b64Len / CHUNK_SIZE);
     let b64 = "";
     for (let i = 0; i < chunks; i++) {
-      const chunk = await cdp.ev(`window.__exportB64.slice(${i * CHUNK_SIZE}, ${Math.min((i + 1) * CHUNK_SIZE, b64Len)})`);
+      const chunk = await cdpEvaluate(client, `window.__exportB64.slice(${i * CHUNK_SIZE}, ${Math.min((i + 1) * CHUNK_SIZE, b64Len)})`);
       b64 += chunk;
     }
     const buffer = Buffer.from(b64, "base64");
-
-    // 文件名:从 URL 路径段取 dentryKey,默认 xlsx
     const dentryKeyMatch = url.match(/spreadsheetv2\/([^/?]+)/);
     const fileName = `${dentryKeyMatch ? dentryKeyMatch[1] : "dingtalk-spreadsheet"}.xlsx`;
-    return { buffer, fileName };
+    return { buffer, fileName, title };
   } finally {
-    try { if (cdp) cdp.close(); } catch (_) {}
-    try { proc.kill("SIGTERM"); } catch (_) {}
+    try { if (client) client.close(); } catch (_) {}
+    if (entry.owned) { try { entry.child.kill("SIGTERM"); } catch (_) {} }
   }
+}
+
+// 导出钉钉在线表格为 xlsx buffer。返回 { buffer, fileName, title }。
+// 浏览器生命周期一律复用 browserclip 会话(Obsidian 环境已验证;带 --remote-allow-origins=*)。
+async function exportDingtalkSpreadsheet(url, cookieHeader, browserSessionManager) {
+  if (!browserSessionManager || typeof browserSessionManager.start !== "function" || typeof browserSessionManager.createPage !== "function") {
+    const err = new Error("钉钉在线表格导出需要浏览器会话管理器(内部错误:webSessionManager 缺失)");
+    err.code = "DINGTALK_DOCS_UNREACHABLE";
+    throw err;
+  }
+  return await exportViaSessionManager(url, cookieHeader, browserSessionManager);
+}
+
+// 生成 xlsx 文件名:"中间层表基础信息.axls" → "中间层表基础信息.xlsx";去编辑器 title 的 " - xxx" 尾巴与非法文件名字符
+function spreadsheetFileName(raw) {
+  const base = String(raw || "").split(" - ")[0].replace(/\.axls$/i, "").replace(/[\\/:*?"<>|]/g, "").trim();
+  return base ? `${base}.xlsx` : "";
 }
 
 // 从 /i/nodes/{nodeId} URL 提取 dentryUuid(nodeId),用于 list_brothers 查询文档类型
@@ -513,11 +450,12 @@ async function extractDingtalkDoc(url, { webSessionManager, fetchImpl = globalTh
   // 在线表格(/spreadsheetv2/):无头 Chrome 导出 xlsx,抛 DINGTALK_BINARY_DOC 带 buffer(复用附件落盘)
   const spreadsheet = parseSpreadsheetUrl(url);
   if (spreadsheet) {
-    const { buffer, fileName } = await headlessExport(spreadsheet.editorUrl, cookieHeader || jarHeader(jar));
-    const error = new Error(`钉钉在线表格(${fileName}),已导出 xlsx`);
+    const { buffer, fileName, title } = await headlessExport(spreadsheet.editorUrl, cookieHeader || jarHeader(jar), webSessionManager);
+    const finalName = spreadsheetFileName(title) || fileName;
+    const error = new Error(`钉钉在线表格(${finalName}),已导出 xlsx`);
     error.code = "DINGTALK_BINARY_DOC";
     error.buffer = buffer;
-    error.fileName = fileName;
+    error.fileName = finalName;
     error.meta = { extension: "xlsx", mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" };
     throw error;
   }
@@ -528,12 +466,12 @@ async function extractDingtalkDoc(url, { webSessionManager, fetchImpl = globalTh
     if (info.extension === "axls") {
       const sheetKey = info.dentryKey || await resolveDentryKey(url, jar, fetchImpl);
       const editorUrl = `${DINGTALK_ORIGIN}/spreadsheetv2/${sheetKey}/edit?dentryKey=${encodeURIComponent(sheetKey)}`;
-      const { buffer } = await headlessExport(editorUrl, cookieHeader || jarHeader(jar));
-      const fileName = `${sheetKey}.xlsx`;
-      const error = new Error(`钉钉在线表格(${fileName}),已导出 xlsx`);
+      const { buffer, fileName, title } = await headlessExport(editorUrl, cookieHeader || jarHeader(jar), webSessionManager);
+      const finalName = spreadsheetFileName(info.name) || spreadsheetFileName(title) || fileName;
+      const error = new Error(`钉钉在线表格(${finalName}),已导出 xlsx`);
       error.code = "DINGTALK_BINARY_DOC";
       error.buffer = buffer;
-      error.fileName = fileName;
+      error.fileName = finalName;
       error.meta = { extension: "xlsx", mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" };
       throw error;
     }
@@ -547,4 +485,4 @@ async function extractDingtalkDoc(url, { webSessionManager, fetchImpl = globalTh
   return { title, html, author, publishedAt, cookieHeader, imageHeaders };
 }
 
-module.exports = { resolveDentryKey, fetchDocumentData, packageToHtml, extractDingtalkDoc, parseAttachmentUrl, fetchDownloadUrl, parseSpreadsheetUrl, headlessExport, parseNodeDentryUuid, fetchDentryInfo, exportDingtalkSpreadsheet, findChrome, pickPort };
+module.exports = { resolveDentryKey, fetchDocumentData, packageToHtml, extractDingtalkDoc, parseAttachmentUrl, fetchDownloadUrl, parseSpreadsheetUrl, headlessExport, parseNodeDentryUuid, fetchDentryInfo, exportDingtalkSpreadsheet, spreadsheetFileName };
