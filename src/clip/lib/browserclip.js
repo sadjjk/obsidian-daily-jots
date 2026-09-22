@@ -481,7 +481,10 @@ class WebSessionManager {
     let client;
     try {
       client = await CdpClient.connect(entry.browserWebSocketDebuggerUrl, 2_000);
-      const result = await client.send("Storage.getCookies", {}, 8_000).catch(() => ({ cookies: [] }));
+      // Network.getAllCookies 返回浏览器全量 cookie(含 httpOnly 的 doc_atoken);
+      // Storage.getCookies 在部分上下文下漏 httpOnly,导致钉钉表格导出缺登录态。
+      await client.send("Network.enable", {}, 8_000).catch(() => {});
+      const result = await client.send("Network.getAllCookies", {}, 8_000).catch(() => ({ cookies: [] }));
       const cookies = (result.cookies || []).filter((cookie) => {
         if (!suffix) return true;
         return cookie.domain === suffix || cookie.domain === `.${suffix}` || cookie.domain.endsWith(`.${suffix}`);
@@ -693,8 +696,9 @@ class WebSessionManager {
       await client.send("Page.enable");
       await client.send("Runtime.enable");
       await this.configurePage(client);
+      await client.send("Network.enable", {}, 8_000).catch(() => {});
       const readCookies = async () => {
-        const result = await client.send("Storage.getCookies", {}, 10_000).catch(() => ({ cookies: [] }));
+        const result = await client.send("Network.getAllCookies", {}, 10_000).catch(() => ({ cookies: [] }));
         return (result.cookies || [])
           .filter((cookie) => cookie.domain === suffix || cookie.domain === `.${suffix}` || cookie.domain.endsWith(`.${suffix}`))
           .map((cookie) => `${cookie.name}=${cookie.value}`)
