@@ -190,6 +190,17 @@ function formatCaptureReceipt(result, locale = "zh-CN", preview = null) {
   }
 
 
+  if (result.systemNotice) {
+    if (locale === "en") {
+      lines.push("⚠️ Could not save: WeCom file leak-prevention restricts the bot from obtaining the file.");
+      for (const detail of clipFailureDetails) lines.push(`Reason: ${failureReason(detail)}`);
+    } else {
+      lines.push("⚠️ 未能保存：企业微信文件防泄漏限制，机器人无法获取文件内容");
+      for (const detail of clipFailureDetails) lines.push(`原因：${failureReason(detail)}`);
+    }
+    return [formatAgentGuide({ ...result, diaryFolder }, locale), "", ...lines].join("\n");
+  }
+
   if (locale === "en") {
     if (!clips.length && !clipFailures) lines.push(`✍️ Saved to today's note in “${diaryFolder}”.`);
     if (savedAttachments) lines.push(`📎 Saved ${savedAttachments} attachment${savedAttachments === 1 ? "" : "s"} to “${chatFolder}”.`);

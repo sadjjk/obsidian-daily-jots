@@ -3,6 +3,10 @@
 const { WSClient } = require("@wecom/aibot-node-sdk");
 const { BaseChannel } = require("./base");
 
+// 企微文件防泄漏受限时,框架下发的说明文本特征(组合判定,防误伤正常聊天)
+const WECOM_RESTRICTED_NOTICE = /限制下载\/?导出|文件防泄漏/;
+const WECOM_RESTRICTED_BOT = /智能机器人.*(无法获取|不能获取)/;
+
 class WeComChannel extends BaseChannel {
   constructor(config, context) {
     super("wecom", config, context);
@@ -40,6 +44,7 @@ class WeComChannel extends BaseChannel {
       const attachment = this.attachment(message.msgtype, message[message.msgtype], message.msgid);
       if (attachment) attachments.push(attachment);
     }
+    const systemNotice = Boolean(text) && WECOM_RESTRICTED_NOTICE.test(text) && WECOM_RESTRICTED_BOT.test(text);
     return {
       id: message.msgid,
       timestamp: new Date(Number(message.create_time || 0) * 1000 || Date.now()),
@@ -48,6 +53,7 @@ class WeComChannel extends BaseChannel {
       chatName: message.chatid || this.t("企业微信私聊", "WeCom direct message"),
       isGroup: message.chattype === "group",
       text,
+      systemNotice,
       attachments,
       reply: async (replyText) => this.client.replyStream(frame, `diary-${message.msgid}`, replyText, true),
       replyFile: async (file) => {

@@ -114,6 +114,18 @@ class DiaryService {
     const messageKey = this.messageKey(envelope);
     if (this.isDuplicate(envelope)) return { ignored: "duplicate", messageKey, pendingReceipt: this.pendingReceipt(messageKey) };
 
+    // 企微文件防泄漏受限消息:不写 Daily,返回失败 result 让 router 提示,而非「已保存」
+    if (envelope.systemNotice) {
+      return {
+        systemNotice: true,
+        diaryFolder: settings.storage.diaryFolder,
+        clips: [],
+        clipFailures: ["企业微信文件防泄漏限制，机器人无法获取文件内容"],
+        attachmentFailures: [],
+        messageKey,
+      };
+    }
+
     const date = localDateParts(envelope.timestamp || new Date());
     const diaryPath = `${settings.storage.diaryFolder}/${date.day}.md`;
     const attachmentFolder = `${settings.storage.attachmentFolder}/Chat/${date.day}/${envelope.channel}`;
