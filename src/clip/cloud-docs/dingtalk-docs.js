@@ -425,6 +425,10 @@ async function fetchDentryInfo(dentryUuid, jar = new Map(), fetchImpl = globalTh
   const apiUrl = `${DINGTALK_ORIGIN}/box/api/v2/dentry/list_brothers?dentryUuid=${encodeURIComponent(dentryUuid)}&orderType=SORT_KEY&sortType=desc&prevPageSize=1&nextPageSize=1`;
   const response = await fetchImpl(apiUrl, { headers: requestHeaders(jarHeader(jar)) });
   if (!response.ok) {
+    // 401/403 是登录态失效,视为登录错误让 webclip 提示重新登录,而非回落渲染登录页正文
+    if (response.status === 401 || response.status === 403) {
+      throw dingtalkError("钉钉 cookie 已过期或权限不足(请重新在钉钉文档登录窗口登录)", "DINGTALK_DENTRY_KEY_NOT_FOUND");
+    }
     throw dingtalkError(`钉钉 list_brothers 返回 HTTP ${response.status}`, "DINGTALK_DOCS_UNREACHABLE");
   }
   mergeCookieJar(jar, response);
