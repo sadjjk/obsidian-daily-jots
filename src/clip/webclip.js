@@ -11,6 +11,7 @@ const { extractDingtalkDoc } = require("./cloud-docs/dingtalk-docs");
 const { extractFeishuDoc, extractFeishuFile, isFeishuFileUrl } = require("./cloud-docs/feishu-docs");
 const { extractTencentDoc, stripTencentChrome, tencentHostForUrl, tencentSiteNameForUrl } = require("./cloud-docs/tencent-docs");
 const { extractWecomDoc } = require("./cloud-docs/wecom-docs");
+const { extractWpsDoc } = require("./cloud-docs/wps-docs");
 const { extractXStatus } = require("./social-media/xclip");
 const { extractBilibili, isBilibiliUrl, isBilibiliVideoUrl } = require("./social-media/biliclip");
 const { extractXiaohongshu, isXiaohongshuUrl, isXhsNoteUrl } = require("./social-media/xhsclip");
@@ -757,6 +758,39 @@ class WebClipper {
         // 接口拿不到(无会话/结构变化/非文档页)一律回落渲染提取,不中断剪藏
       }
     }
+    if (documentServiceForUrl(url) === "wps") {
+      // WPS:优先 open/otl 接口拿结构化正文(会话 cookie + 自造协议参数),失败回落 ProseMirror 渲染
+      try {
+        const doc = await extractWpsDoc(url, {
+          collectSessionCookies: this.collectSessionCookies.bind(this),
+          fetchImpl: async (target, init) => {
+            const result = await this.fetch(target, init);
+            return result && result.response !== undefined ? result.response : result;
+          },
+        });
+        if (doc.markdown && doc.markdown.trim().length > 60) {
+          return {
+            url,
+            canonicalUrl: url,
+            identityUrl: url,
+            title: doc.title || "WPS文档",
+            byline: doc.author || "",
+            excerpt: doc.markdown.replace(/\s+/g, " ").slice(0, 200),
+            siteName: DOCUMENT_SERVICES.wps?.name || "WPS文档",
+            markdown: doc.markdown,
+            images: doc.images || [],
+            // 图片 CDN(shapes 返回的 url)下载可能要求会话,cookie 从 wps 会话带来
+            ...(doc.imageHeaders ? { imageHeaders: doc.imageHeaders } : {}),
+            contentChars: doc.markdown.length,
+            extractionMethod: "wps-otl",
+            extractionStatus: "complete",
+            publishedAt: doc.publishedAt || "",
+          };
+        }
+      } catch (_) {
+        // 接口拿不到(无会话/结构变化/非文档页)一律回落渲染提取,不中断剪藏
+      }
+    }
     if (documentServiceForUrl(url) === "dingtalk") {
       const dingtalk = await extractDingtalkDoc(url, {
         webSessionManager: this.sessionManager,
@@ -804,6 +838,16 @@ class WebClipper {
           publishedAt: rendered.publishedTime,
           extractionMethod: documentServiceForUrl(rendered.url) ? `${renderService}-rendered-document` : `${renderService}-rendered-community-comments`,
         });
+        // 飞书内存块直取:extractFeishuDoc 已产结构化 markdown(比虚拟滚动 DOM 完整),
+        // 直接采用并标注,不受渲染 DOM 正文长短(可能触发 partial)影响
+        if (rendered.extractionMethod === "feishu-block-map" && rendered.markdown && rendered.markdown.trim()) {
+          article.markdown = rendered.markdown;
+          article.extractionMethod = "feishu-block-map";
+          article.extractionStatus = "complete";
+          article.contentChars = rendered.markdown.length;
+          if (rendered.imageHeaders) article.imageHeaders = rendered.imageHeaders;
+          return { ...article, commentCount: Number(rendered.commentCount) || 0 };
+        }
         if (article.extractionStatus === "complete") {
           // 旧版文档被管理员升级为新智能文档:渲染页只有升级横幅,提示去剪新链接而不是产噪音笔记
           if (tencentHostForUrl(url) && /文档已不再使用|升级为新的智能文档/.test(rendered.text || "")) {

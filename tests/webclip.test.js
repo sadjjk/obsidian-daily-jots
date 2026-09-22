@@ -389,6 +389,69 @@ test("Feishu rendered docs bridge session cookies for image localization", async
   assert.equal(article.images.length, 1);
 });
 
+test("feishu memory block map wins over rendered DOM and labels feishu-block-map", async () => {
+  const clientvar = JSON.stringify({ data: { block_map: {
+    root: { data: { type: "page", children: ["h", "p"] } },
+    h: { data: { type: "heading1", children: [], text: { apool: { numToAttrib: {} }, initialAttributedTexts: { attribs: { "0": "" }, text: { "0": "内存块标题" } } } } },
+    p: { data: { type: "text", children: [], text: { apool: { numToAttrib: {} }, initialAttributedTexts: { attribs: { "0": "" }, text: { "0": "正文段落,内存直取比虚拟滚动 DOM 完整得多,应当被优先采用作为最终 markdown。" } } } } },
+  } } });
+  const rendered = {
+    // 渲染 DOM 正文很短(虚拟滚动只出首屏),不足以触发 complete,但内存直取应覆盖
+    html: `<!doctype html><html><body><div class="doc-content"><p>短</p></div></body></html>`,
+    url: "https://my.feishu.cn/docx/KsWjdmlguoa5WCxliKKcpTfXn8N",
+    title: "内存块标题", author: "", text: "短", extraValue: clientvar,
+  };
+  const clipper = new WebClipper({}, dingtalkTestSettings(), {
+    fetch: async () => ({ response: fakeHtmlResponse("", 403), finalUrl: rendered.url }),
+    sessionManager: { collectCookies: async () => "feishu_session=tok", extract: async () => rendered },
+  });
+  const article = await clipper.extract("https://my.feishu.cn/docx/KsWjdmlguoa5WCxliKKcpTfXn8N");
+  assert.equal(article.extractionMethod, "feishu-block-map");
+  assert.equal(article.extractionStatus, "complete");
+  assert.match(article.markdown, /## 内存块标题/);
+  assert.match(article.markdown, /正文段落/);
+  assert.deepEqual(article.imageHeaders, { cookie: "feishu_session=tok" });
+});
+
+test("WPS clips through the open/otl API and labels wps-otl", async () => {
+  const otl = { content: { type: "logic_block", content: [{ type: "block_tile", content: [
+    { type: "outline-title", content: [{ type: "text", text: "外卖红包" }] },
+    { type: "heading", attrs: { level: 1 }, content: [{ type: "text", text: "美团外卖" }] },
+    { type: "paragraph", attrs: {}, content: [{ type: "text", text: "正文内容需要超过六十字符的阈值才会被 WPS 直取分支采用作为最终结果返回给调用方使用。" }] },
+  ] }] } };
+  const fetchCalls = [];
+  const clipper = new WebClipper({}, dingtalkTestSettings(), {
+    fetch: async (target, init) => {
+      fetchCalls.push({ target, method: init?.method });
+      return { response: { status: 200, json: async () => otl }, finalUrl: target };
+    },
+    sessionManager: { collectCookies: async () => "csrf=abc123; s=1", extract: async () => ({ html: "", url: "", text: "" }) },
+  });
+  const article = await clipper.extract("https://www.kdocs.cn/l/ck1mE4vgjirr");
+  assert.equal(article.extractionMethod, "wps-otl");
+  assert.equal(article.title, "外卖红包");
+  assert.match(article.markdown, /## 美团外卖/);
+  assert.equal(fetchCalls[0].target, "https://www.kdocs.cn/api/v3/office/file/ck1mE4vgjirr/open/otl");
+  assert.equal(fetchCalls[0].method, "POST");
+  assert.deepEqual(article.imageHeaders, { cookie: "csrf=abc123; s=1" });
+});
+
+test("WPS falls back to rendered extraction when open/otl fails", async () => {
+  const rendered = {
+    html: `<!doctype html><html><body><div class="doc-content"><p>${"WPS 会话渲染出的文档正文,长度需要超过完整性阈值才能通过校验并作为兜底结果。".repeat(5)}</p></div></body></html>`,
+    url: "https://www.kdocs.cn/l/ck1mE4vgjirr", title: "外卖红包", author: "",
+    text: "WPS 会话渲染出的文档正文,长度需要超过完整性阈值才能通过校验并作为兜底结果。".repeat(5),
+  };
+  const clipper = new WebClipper({}, dingtalkTestSettings(), {
+    // open/otl 返回 401 → extractWpsDoc 抛错 → 回落渲染
+    fetch: async () => ({ response: { status: 401, json: async () => ({}) }, finalUrl: rendered.url }),
+    sessionManager: { collectCookies: async () => "csrf=abc", extract: async () => rendered },
+  });
+  const article = await clipper.extract("https://www.kdocs.cn/l/ck1mE4vgjirr");
+  assert.match(article.extractionMethod, /wps-rendered/);
+  assert.match(article.markdown, /WPS 会话渲染出的文档正文/);
+});
+
 test("feishu rendered payload forwards author and publishedTime into the article", async () => {
   const rendered = {
     html: `<!doctype html><html><body><div class="doc-content"><p>${"飞书会话渲染出的文档正文,长度需要超过完整性阈值才能通过校验。".repeat(6)}</p></div></body></html>`,
