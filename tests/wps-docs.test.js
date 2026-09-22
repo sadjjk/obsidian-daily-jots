@@ -109,17 +109,19 @@ test("extractWpsDoc picks open/md for office_type md and labels wps-md", async (
   assert.match(result.publishedAt, /^2026-/);
 });
 
-test("extractWpsDoc throws WPS_DOCS_UNREACHABLE for unsupported office_type (et/wps/wpp)", async () => {
+test("extractWpsDoc throws WPS_DOCS_BINARY with downloadUrl for unsupported office_type (et/wps/wpp)", async () => {
   const fileInfo = { file: { name: "表格.xls", office_type: "s", create_time: 0, creator: {} } };
+  const dlResp = { download_url: "https://cdn.wps.cn/dl/xxx", url: "https://cdn.wps.cn/dl/xxx" };
   await assert.rejects(
     extractWpsDoc("https://www.kdocs.cn/l/abc123", {
       collectSessionCookies: async () => "csrf=t",
       fetchImpl: async (target) => {
         if (/\/file\/abc123$/.test(target)) return { status: 200, json: async () => fileInfo };
+        if (/\/download$/.test(target)) return { status: 200, json: async () => dlResp };
         return { status: 200, json: async () => ({}) };
       },
     }),
-    (error) => error.code === "WPS_DOCS_UNREACHABLE" && /et|wps|wpp|pdf/.test(error.message) === false && /暂不支持/.test(error.message),
+    (error) => error.code === "WPS_DOCS_BINARY" && error.downloadUrl === "https://cdn.wps.cn/dl/xxx" && error.fileName === "表格.xls",
   );
 });
 

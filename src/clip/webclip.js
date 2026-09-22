@@ -11,7 +11,7 @@ const { extractDingtalkDoc } = require("./cloud-docs/dingtalk-docs");
 const { extractFeishuDoc, extractFeishuFile, isFeishuFileUrl } = require("./cloud-docs/feishu-docs");
 const { extractTencentDoc, stripTencentChrome, tencentHostForUrl, tencentSiteNameForUrl } = require("./cloud-docs/tencent-docs");
 const { extractWecomDoc } = require("./cloud-docs/wecom-docs");
-const { extractWpsDoc, fetchFileInfo } = require("./cloud-docs/wps-docs");
+const { extractWpsDoc, fetchFileInfo, wpsDocToken } = require("./cloud-docs/wps-docs");
 const { extractXStatus } = require("./social-media/xclip");
 const { extractBilibili, isBilibiliUrl, isBilibiliVideoUrl } = require("./social-media/biliclip");
 const { extractXiaohongshu, isXiaohongshuUrl, isXhsNoteUrl } = require("./social-media/xhsclip");
@@ -798,7 +798,35 @@ class WebClipper {
             publishedAt: doc.publishedAt || "",
           };
         }
-      } catch (_) {
+      } catch (wpsError) {
+        // 二进制文档(et/wps/wpp/pdf 等)API 直取拿到 download_url → 下载为附件保存(参考飞书附件逻辑)
+        if (wpsError?.code === "WPS_DOCS_BINARY" && wpsError.downloadUrl) {
+          const maxBytes = Math.max(1, Number(this.settings.capture.maxFileMb) || 20) * 1024 * 1024;
+          const downloaded = await this.download(wpsError.downloadUrl, {
+            headers: {},
+            maxBytes,
+            timeoutMs: 60_000,
+            requestAttempts: 1,
+            fileName: wpsError.fileName,
+          });
+          const fileName = wpsError.fileName || downloaded.fileName || `${wpsDocToken(url)}.bin`;
+          return {
+            url,
+            canonicalUrl: url,
+            identityUrl: url,
+            title: fileName,
+            byline: wpsError.meta?.author || "",
+            excerpt: `WPS ${wpsError.meta?.officeType || "二进制"}文档,已作为附件保存`,
+            siteName: DOCUMENT_SERVICES.wps?.name || "WPS文档",
+            markdown: "",
+            images: [],
+            contentChars: 0,
+            extractionMethod: "wps-file-attachment",
+            extractionStatus: "complete",
+            publishedAt: wpsError.meta?.publishedAt || "",
+            binaryFiles: [{ buffer: downloaded.buffer, fileName, mimeType: downloaded.mimeType }],
+          };
+        }
         // 接口拿不到(无会话/结构变化/非文档页)一律回落渲染提取,不中断剪藏
       }
     }

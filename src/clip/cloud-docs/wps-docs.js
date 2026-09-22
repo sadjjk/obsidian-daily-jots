@@ -208,17 +208,43 @@ async function fetchFileInfo(token, cookie, fetchImpl) {
   } catch (_) { return { author: "", publishedAt: "", title: "", officeType: "" }; }
 }
 
+// 二进制文档(et/wps/wpp/pdf)下载:GET /api/v3/office/file/{token}/download → {download_url}
+// 返回带签名的 CDN 直链,webclip 用 downloadRemoteFile 下载为附件保存
+async function fetchDownloadUrl(token, cookie, fetchImpl) {
+  try {
+    const response = await fetchImpl(`${WPS_ORIGIN}/api/v3/office/file/${token}/download`, {
+      headers: {
+        "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36 Edg/132",
+        origin: WPS_ORIGIN,
+        accept: "application/json",
+        referer: `${WPS_ORIGIN}/l/${token}`,
+        ...(cookie ? { cookie } : {}),
+      },
+    });
+    const payload = await responseJson(response);
+    return { downloadUrl: payload?.download_url || "", fileName: "" };
+  } catch (_) { return { downloadUrl: "", fileName: "" }; }
+}
+
 async function extractWpsDoc(url, { collectSessionCookies, fetchImpl = globalThis.fetch } = {}) {
   const token = wpsDocToken(url);
   if (!token) throw wpsError("无法从链接解析 WPS 文档 token", "WPS_DOCS_INVALID_URL");
   const cookie = collectSessionCookies ? await collectSessionCookies("wps", `${WPS_ORIGIN}/`) : "";
 
-  // 先拿 file 接口元信息 + office_type,据此选 open 端点后缀(otl/md 直取,其他走渲染兜底)
+  // 先拿 file 接口元信息 + office_type,据此选 open 端点后缀(otl/md 直取,其他走附件下载)
   const meta = await fetchFileInfo(token, cookie, fetchImpl);
   const suffix = OFFICE_TYPE_TO_SUFFIX[meta.officeType] || "";
-  // office_type 不在直取白名单(et/wps/wpp/pdf 等返回二进制) → 抛错让 webclip 走渲染兜底
+  // office_type 不在直取白名单(et/wps/wpp/pdf 等返回二进制) → 调 download 接口拿 CDN 直链,
+  // 抛 WPS_DOCS_BINARY 错误带 downloadUrl + fileName,webclip 下载为附件保存
   if (!suffix) {
-    throw wpsError(`WPS 文档类型 "${meta.officeType}" 暂不支持 API 直取,走渲染兜底`, "WPS_DOCS_UNREACHABLE");
+    const { downloadUrl } = await fetchDownloadUrl(token, cookie, fetchImpl);
+    const fileName = meta.title || `${token}.bin`;
+    const error = new Error(`WPS 二进制文档(${meta.office_type}),已获取下载链接`);
+    error.code = "WPS_DOCS_BINARY";
+    error.downloadUrl = downloadUrl;
+    error.fileName = fileName;
+    error.meta = meta;
+    throw error;
   }
 
   const { url: openUrl, init } = openRequest(token, cookie, suffix);
@@ -259,4 +285,4 @@ async function extractWpsDoc(url, { collectSessionCookies, fetchImpl = globalThi
   };
 }
 
-module.exports = { extractWpsDoc, otlToMarkdown, otlTitle, wpsDocToken, applyMarks, fetchFileInfo, OFFICE_TYPE_TO_SUFFIX };
+module.exports = { extractWpsDoc, otlToMarkdown, otlTitle, wpsDocToken, applyMarks, fetchFileInfo, fetchDownloadUrl, OFFICE_TYPE_TO_SUFFIX };

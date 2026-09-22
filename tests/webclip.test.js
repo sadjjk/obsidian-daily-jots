@@ -458,6 +458,29 @@ test("WPS falls back to rendered extraction when open/otl fails", async () => {
   assert.match(article.markdown, /WPS 会话渲染出的文档正文/);
 });
 
+test("WPS binary document (et/wps/wpp) downloads as attachment via download_url", async () => {
+  const fileInfo = { file: { name: "表格.xls", office_type: "s", create_time: 1788759635, creator: { name: "WPS_user" } } };
+  const dlResp = { download_url: "https://cdn.wps.cn/dl/tableau.xls", url: "https://cdn.wps.cn/dl/tableau.xls" };
+  const clipper = new WebClipper({}, dingtalkTestSettings(), {
+    fetch: async (target) => {
+      if (/\/file\/chFxPtxBbEk3$/.test(target)) return { response: { status: 200, json: async () => fileInfo }, finalUrl: target };
+      if (/\/download$/.test(target)) return { response: { status: 200, json: async () => dlResp }, finalUrl: target };
+      return { response: { status: 200, json: async () => ({}) }, finalUrl: target };
+    },
+    download: async () => ({ buffer: Buffer.from("fake-xls-content"), fileName: "表格.xls", mimeType: "application/vnd.ms-excel" }),
+    sessionManager: { collectCookies: async () => "csrf=abc", extract: async () => ({ html: "", url: "", text: "" }) },
+  });
+  const article = await clipper.extract("https://www.kdocs.cn/l/chFxPtxBbEk3");
+  assert.equal(article.extractionMethod, "wps-file-attachment");
+  assert.equal(article.title, "表格.xls");
+  assert.equal(article.byline, "WPS_user");
+  assert.equal(article.markdown, "");
+  assert.equal(article.binaryFiles.length, 1);
+  assert.equal(article.binaryFiles[0].fileName, "表格.xls");
+  assert.equal(article.binaryFiles[0].mimeType, "application/vnd.ms-excel");
+  assert.match(article.publishedAt, /^2026-/);
+});
+
 test("WPS login redirect page surfaces DOCUMENT_LOGIN_REQUIRED instead of clipping the login shell", async () => {
   const loginUrl = "https://account.kdocs.cn/passport/singlesign?cb=https%3A%2F%2Fwww.kdocs.cn%2Fl%2FcmWNSE8HVadT&appid=375024576&f=c";
   const clipper = new WebClipper({}, dingtalkTestSettings(), {
