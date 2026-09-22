@@ -2,7 +2,7 @@
 
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { resolveDentryKey, fetchDocumentData, packageToHtml, extractDingtalkDoc } = require("../src/clip/cloud-docs/dingtalk-docs");
+const { resolveDentryKey, fetchDocumentData, packageToHtml, extractDingtalkDoc, parseSpreadsheetUrl } = require("../src/clip/cloud-docs/dingtalk-docs");
 const { localIso } = require("../src/core/util");
 
 test("resolveDentryKey takes the key straight from note/preview URL params", async () => {
@@ -205,4 +205,19 @@ test("responses without text/json (safeFetch shape) are read via the body stream
   assert.match(doc.imageHeaders.cookie, /cna=xyz/);
   assert.match(doc.imageHeaders.cookie, /visitor=9/);
   assert.equal(doc.imageHeaders["a-dentry-key"], "nmbmj1wmconnN80l");
+});
+
+test("parseSpreadsheetUrl detects /spreadsheetv2/ and extracts dentryKey+docId", () => {
+  const r = parseSpreadsheetUrl("https://alidocs.dingtalk.com/spreadsheetv2/bQ0O0KO0c1XKJNVb/edit?docId=1wvqre5dm5PGMnak&dentryKey=bQ0O0KO0c1XKJNVb");
+  assert.equal(r.dentryKey, "bQ0O0KO0c1XKJNVb");
+  assert.equal(r.docId, "1wvqre5dm5PGMnak");
+  assert.match(r.editorUrl, /\/spreadsheetv2\/bQ0O0KO0c1XKJNVb\/edit/);
+  assert.match(r.editorUrl, /docId=1wvqre5dm5PGMnak/);
+});
+
+test("parseSpreadsheetUrl returns null for non-spreadsheet URLs", () => {
+  assert.equal(parseSpreadsheetUrl("https://alidocs.dingtalk.com/i/nodes/abc"), null);
+  assert.equal(parseSpreadsheetUrl("https://alidocs.dingtalk.com/uni-preview?previewAtta=1&dentryUuid=x"), null);
+  assert.equal(parseSpreadsheetUrl("https://example.com/other"), null);
+  assert.equal(parseSpreadsheetUrl("not-a-url"), null);
 });
