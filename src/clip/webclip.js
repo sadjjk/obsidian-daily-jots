@@ -11,7 +11,7 @@ const { extractDingtalkDoc } = require("./cloud-docs/dingtalk-docs");
 const { extractFeishuDoc, extractFeishuFile, isFeishuFileUrl } = require("./cloud-docs/feishu-docs");
 const { extractTencentDoc, stripTencentChrome, tencentHostForUrl, tencentSiteNameForUrl } = require("./cloud-docs/tencent-docs");
 const { extractWecomDoc } = require("./cloud-docs/wecom-docs");
-const { extractWpsDoc } = require("./cloud-docs/wps-docs");
+const { extractWpsDoc, fetchFileInfo } = require("./cloud-docs/wps-docs");
 const { extractXStatus } = require("./social-media/xclip");
 const { extractBilibili, isBilibiliUrl, isBilibiliVideoUrl } = require("./social-media/biliclip");
 const { extractXiaohongshu, isXiaohongshuUrl, isXhsNoteUrl } = require("./social-media/xhsclip");
@@ -868,6 +868,20 @@ class WebClipper {
           // 飞书正文图片是 internal-api-drive-stream 内部流,下载需登录 cookie(实测匿名失败):
           // cookie 桥接在 extractFeishuDoc 内完成,imageHeaders 仅在拿到会话 cookie 时存在
           if (rendered.imageHeaders) article.imageHeaders = rendered.imageHeaders;
+          // WPS 渲染兜底(OTL 直取失败时):file 接口若可用则补 author/publishedAt
+          if (renderService === "wps") {
+            const wpsToken = (rendered.url.match(/kdocs\.cn\/(?:l|view\/l|w)\/([A-Za-z0-9]+)/i) || [])[1] || "";
+            if (wpsToken) {
+              const cookie = this.collectSessionCookies ? await this.collectSessionCookies("wps", "https://www.kdocs.cn/") : "";
+              const meta = await fetchFileInfo(wpsToken, cookie, async (target, init) => {
+                const result = await this.fetch(target, init);
+                return result && result.response !== undefined ? result.response : result;
+              }).catch(() => ({}));
+              if (meta.author) article.byline = meta.author;
+              if (meta.publishedAt) article.publishedAt = meta.publishedAt;
+              if (!article.title || article.title === wpsToken) article.title = meta.title || article.title;
+            }
+          }
           return { ...article, commentCount: Number(rendered.commentCount) || 0 };
         }
         if (tencentHostForUrl(url) || documentServiceForUrl(url) === "wps") {

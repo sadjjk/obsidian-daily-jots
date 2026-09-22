@@ -231,4 +231,4 @@ async function extractWpsDoc(url, { collectSessionCookies, fetchImpl = globalThi
   };
 }
 
-module.exports = { extractWpsDoc, otlToMarkdown, otlTitle, wpsDocToken, applyMarks };
+module.exports = { extractWpsDoc, otlToMarkdown, otlTitle, wpsDocToken, applyMarks, fetchFileInfo };
