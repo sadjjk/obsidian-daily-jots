@@ -7,9 +7,11 @@
 // 参数矩阵:原样/去 reuse/仅 front_ver/仅 group/group 自造/无 connid 均 200;
 // OTL 结构:content(根)>logic_block>block_tile>(outline-title|paragraph|heading|picture),
 //   text 节点 {text, marks?:[{type,attrs}]},heading.attrs.level,emoji.attrs.emoji,picture.attrs.sourceKey;
-// 图片 URL 走 /api/v3/office/file/{token}/attachment/shapes(返回 {data:{sourceKey:{url}}});
+// 图片 URL 走 POST /api/v3/office/file/{token}/attachment/shapes(请求体 {objects:[{attachment_id,max_edge,source}]},返回 {data:{sourceKey:{url}}});
+// 文档元信息(作者/创建时间)走 GET /api/v3/office/file/{token}(返回 {file:{name,create_time,modify_time,creator:{name}}});
 // 内存模型路线不成立(无飞书式数据全局),兜底走 ProseMirror DOM(.ProseMirror.otl-main-editor)。
 const crypto = require("node:crypto");
+const { localIso } = require("../../core/util");
 const { readLimitedBody } = require("../../core/network");
 
 const WPS_ORIGIN = "https://www.kdocs.cn";
@@ -159,10 +161,20 @@ function otlRequest(token, cookie) {
   };
 }
 
-async function fetchShapeUrls(token, cookie, fetchImpl) {
+async function fetchShapeUrls(token, cookie, sourceKeys, fetchImpl) {
+  if (!sourceKeys?.length) return {};
   try {
     const response = await fetchImpl(`${WPS_ORIGIN}/api/v3/office/file/${token}/attachment/shapes`, {
-      headers: { accept: "application/json", referer: `${WPS_ORIGIN}/l/${token}`, ...(cookie ? { cookie } : {}) },
+      method: "POST",
+      headers: {
+        "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36 Edg/132",
+        origin: WPS_ORIGIN,
+        accept: "application/json",
+        "content-type": "application/json;charset=UTF-8",
+        referer: `${WPS_ORIGIN}/l/${token}`,
+        ...(cookie ? { cookie } : {}),
+      },
+      body: JSON.stringify({ objects: sourceKeys.map((key) => ({ attachment_id: key, max_edge: 1180, source: "" })) }),
     });
     const payload = await responseJson(response);
     const data = payload?.data || {};
@@ -170,6 +182,24 @@ async function fetchShapeUrls(token, cookie, fetchImpl) {
     for (const [key, value] of Object.entries(data)) if (value?.url) map[key] = value.url;
     return map;
   } catch (_) { return {}; }
+}
+
+// 文档元信息:GET /api/v3/office/file/{token} → {file:{name,create_time,creator:{name}}}
+async function fetchFileInfo(token, cookie, fetchImpl) {
+  try {
+    const response = await fetchImpl(`${WPS_ORIGIN}/api/v3/office/file/${token}`, {
+      headers: {
+        "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36 Edg/132",
+        origin: WPS_ORIGIN,
+        accept: "application/json",
+        referer: `${WPS_ORIGIN}/l/${token}`,
+        ...(cookie ? { cookie } : {}),
+      },
+    });
+    const file = (await responseJson(response))?.file || {};
+    const publishedAt = Number(file.create_time) > 0 ? localIso(new Date(Number(file.create_time) * 1000)) : "";
+    return { author: file.creator?.name || "", publishedAt, title: file.name || "" };
+  } catch (_) { return { author: "", publishedAt: "", title: "" }; }
 }
 
 async function extractWpsDoc(url, { collectSessionCookies, fetchImpl = globalThis.fetch } = {}) {
@@ -183,14 +213,18 @@ async function extractWpsDoc(url, { collectSessionCookies, fetchImpl = globalThi
     throw wpsError(`WPS open/otl 返回 HTTP ${status}(私有文档需先在「浏览器会话」面板登录 WPS)`, "WPS_DOCS_UNREACHABLE");
   }
   const otl = await responseJson(response);
-  const imageUrls = collectPictureKeys(otl).length ? await fetchShapeUrls(token, cookie, fetchImpl) : {};
+  const pictureKeys = collectPictureKeys(otl);
+  const [imageUrls, meta] = await Promise.all([
+    pictureKeys.length ? fetchShapeUrls(token, cookie, pictureKeys, fetchImpl) : {},
+    fetchFileInfo(token, cookie, fetchImpl),
+  ]);
   const markdown = otlToMarkdown(otl, imageUrls);
   if (!markdown.trim()) throw wpsError("WPS OTL 数据为空", "WPS_DOCS_EMPTY");
   return {
-    title: otlTitle(otl) || token,
+    title: otlTitle(otl) || meta.title || token,
     markdown,
-    author: "",
-    publishedAt: "",
+    author: meta.author,
+    publishedAt: meta.publishedAt,
     extractionMethod: "wps-otl",
     images: Object.values(imageUrls),
     imageHeaders: cookie ? { cookie } : undefined,

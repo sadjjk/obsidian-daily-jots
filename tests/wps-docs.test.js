@@ -61,14 +61,17 @@ test("otlToMarkdown degrades unknown leaf to text and title falls back", () => {
   assert.equal(otlTitle(doc), "");
 });
 
-test("extractWpsDoc posts open/otl with csrf from cookie and labels wps-otl", async () => {
+test("extractWpsDoc posts open/otl with csrf, fetches file meta, and labels wps-otl", async () => {
   const calls = [];
   const doc = otl([{ type: "outline-title", content: [textNode("标题文档")] }, para("正文")]);
+  const fileInfo = { file: { name: "标题文档.otl", create_time: 1747930231, creator: { name: "未命名" } } };
   const result = await extractWpsDoc("https://www.kdocs.cn/l/ck1mE4vgjirr", {
     collectSessionCookies: async (service, origin) => { calls.push([service, origin]); return "csrf=my-csrf-token; other=1"; },
     fetchImpl: async (target, init) => {
       calls.push({ target, method: init.method, headers: init.headers });
-      return { status: 200, json: async () => doc };
+      if (/\/open\/otl$/.test(target)) return { status: 200, json: async () => doc };
+      if (/\/file\/ck1mE4vgjirr$/.test(target)) return { status: 200, json: async () => fileInfo };
+      return { status: 200, json: async () => ({}) };
     },
   });
   assert.deepEqual(calls[0], ["wps", "https://www.kdocs.cn/"]);
@@ -80,7 +83,36 @@ test("extractWpsDoc posts open/otl with csrf from cookie and labels wps-otl", as
   assert.equal(result.extractionMethod, "wps-otl");
   assert.equal(result.title, "标题文档");
   assert.match(result.markdown, /正文/);
+  assert.equal(result.author, "未命名");
+  assert.match(result.publishedAt, /^2025-/);
   assert.deepEqual(result.imageHeaders, { cookie: "csrf=my-csrf-token; other=1" });
+});
+
+test("extractWpsDoc fetches picture URLs via POST shapes with attachment_id objects", async () => {
+  const doc = otl([
+    { type: "outline-title", content: [textNode("图文档")] },
+    { type: "picture", attrs: { sourceKey: "KEY1" } },
+    para("图后正文"),
+  ]);
+  const shapes = { data: { KEY1: { url: "https://cdn.wps/img1.jpeg" } } };
+  const result = await extractWpsDoc("https://www.kdocs.cn/l/abc123", {
+    collectSessionCookies: async () => "csrf=t",
+    fetchImpl: async (target, init) => {
+      if (/\/open\/otl$/.test(target)) return { status: 200, json: async () => doc };
+      if (/\/file\/abc123$/.test(target)) return { status: 200, json: async () => ({ file: { name: "图文档", create_time: 0, creator: {} } }) };
+      if (/\/attachment\/shapes$/.test(target)) {
+        const body = JSON.parse(init.body);
+        assert.equal(init.method, "POST");
+        assert.deepEqual(body.objects, [{ attachment_id: "KEY1", max_edge: 1180, source: "" }]);
+        return { status: 200, json: async () => shapes };
+      }
+      return { status: 200, json: async () => ({}) };
+    },
+  });
+  assert.match(result.markdown, /!\[\]\(<https:\/\/cdn\.wps\/img1\.jpeg>\)/);
+  assert.deepEqual(result.images, ["https://cdn.wps/img1.jpeg"]);
+  assert.equal(result.author, "");
+  assert.equal(result.publishedAt, "");
 });
 
 test("extractWpsDoc throws WPS_DOCS_UNREACHABLE on non-2xx (fallback handled by caller)", async () => {
