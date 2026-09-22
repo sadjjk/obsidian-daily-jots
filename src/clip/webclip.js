@@ -747,7 +747,7 @@ class WebClipper {
           canonicalUrl: url,
           identityUrl: url,
           title: fileName,
-          byline: "",
+          byline: tencentExportError.meta?.author || "",
           excerpt: `腾讯文档(${padType === "slide" ? "幻灯" : "表格"}),已作为附件保存`,
           siteName: tencentSiteNameForUrl(url),
           markdown: "",
@@ -755,7 +755,7 @@ class WebClipper {
           contentChars: 0,
           extractionMethod: "tencent-file-export",
           extractionStatus: "complete",
-          publishedAt: "",
+          publishedAt: tencentExportError.meta?.publishedAt || "",
           binaryFiles: [{ buffer: tencentExportError.buffer, fileName, mimeType: tencentExportError.meta?.mimeType }],
         };
       }

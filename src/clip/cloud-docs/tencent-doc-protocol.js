@@ -413,6 +413,27 @@ async function extractTencentFileExport(url, { sessionService, siteName, collect
     throw error;
   }
 
+  // ①b 文档元信息(作者/创建时间):POST /v2/drive/file/desc,file_id 取 globalPadId 的 padId 段;
+  // 失败静默(meta 留空),不阻塞导出
+  let meta = { author: "", publishedAt: "" };
+  try {
+    const padId = globalPadId.includes("$") ? globalPadId.split("$")[1] : globalPadId;
+    const descResp = await fetchImpl(`https://${host}/v2/drive/file/desc`, {
+      method: "POST",
+      headers: { cookie, referer: url, "content-type": "application/json", "x-requested-with": "XMLHttpRequest", "user-agent": TENCENT_EXPORT_UA },
+      body: JSON.stringify({ file_id: padId, xsrf: "" }),
+    });
+    const descText = typeof descResp.text === "function" ? await descResp.text() : (await readLimitedBody(descResp, 1024 * 1024)).toString("utf8");
+    const desc = JSON.parse(descText);
+    const result = desc?.result || {};
+    const createdMs = Number(result.createTime) || 0;
+    meta = {
+      author: result.ownerNick || "",
+      publishedAt: createdMs ? localIso(new Date(createdMs)) : "",
+      title: result.name || "",
+    };
+  } catch (_) {}
+
   // ② 发起导出
   const postResp = await fetchImpl(`https://${host}/v1/export/export_office`, {
     method: "POST",
@@ -467,7 +488,7 @@ async function extractTencentFileExport(url, { sessionService, siteName, collect
   error.code = "TENCENT_DOCS_BINARY";
   error.buffer = buffer;
   error.fileName = fileName;
-  error.meta = { padType, mimeType: exportType.mime };
+  error.meta = { padType, mimeType: exportType.mime, author: meta.author, publishedAt: meta.publishedAt };
   throw error;
 }
 

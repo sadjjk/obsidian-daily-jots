@@ -249,7 +249,7 @@ test("tencent extract requires a session and rejects non-doc links", async () =>
 
 // ==== sheet/slide 导出链(opendoc 换 globalPadId → export_office → 轮询 → COS 下载) ====
 
-function exportMockFetch(opendocPayload, { pollPayloads, downloadBuffer, downloadDisposition } = {}) {
+function exportMockFetch(opendocPayload, { pollPayloads, downloadBuffer, downloadDisposition, descPayload, descFails } = {}) {
   const calls = [];
   let pollCount = 0;
   const fetchImpl = async (target, init = {}) => {
@@ -260,6 +260,10 @@ function exportMockFetch(opendocPayload, { pollPayloads, downloadBuffer, downloa
       body: (async function* () { yield Buffer.from(typeof payload === "string" ? payload : JSON.stringify(payload)); })(),
     });
     if (target.includes("/dop-api/opendoc")) return jsonResponse(opendocPayload);
+    if (target.includes("/v2/drive/file/desc")) {
+      if (descFails) return { ok: false, status: 500, headers: { get: () => "text/html" }, body: (async function* () { yield Buffer.from("boom"); })() };
+      return jsonResponse(descPayload);
+    }
     if (target.includes("/v1/export/export_office")) return jsonResponse({ ret: 0, operationId: "op-1" });
     if (target.includes("/v1/export/query_progress")) {
       const payload = pollPayloads[Math.min(pollCount, pollPayloads.length - 1)];
@@ -289,6 +293,7 @@ test("tencent sheet export downloads xlsx buffer with UTF-8 filename", async () 
     ],
     downloadBuffer,
     downloadDisposition: "attachment; filename=\"t.xlsx\"; filename*=UTF-8''%E6%B5%8B%E8%AF%95%E8%A1%A8%E6%A0%BC.xlsx",
+    descPayload: { ret: 0, result: { ownerNick: "迷住-看报价单专用", createTime: "1735880146444", name: "测试表格" } },
   });
   await assert.rejects(
     extractTencentFileExportForTencent("https://docs.qq.com/sheet/DVnFYSGZ0cFJiZGpM?tab=BB08J2", {
@@ -302,9 +307,14 @@ test("tencent sheet export downloads xlsx buffer with UTF-8 filename", async () 
       assert.equal(error.fileName, "测试表格.xlsx");       // filename* UTF-8 优先于 ASCII fallback
       assert.equal(error.meta.padType, "sheet");
       assert.match(error.meta.mimeType, /spreadsheetml\.sheet/);
+      assert.equal(error.meta.author, "迷住-看报价单专用"); // file/desc 的 ownerNick
+      assert.match(error.meta.publishedAt, /^\d{4}-\d{2}-\d{2}T/); // createTime(ms) → localIso
       return true;
     },
   );
+  // file/desc 请求:JSON body,file_id 为 globalPadId 去前缀的 padId 段
+  const descCall = calls.find((c) => c.target.includes("/v2/drive/file/desc"));
+  assert.deepEqual(JSON.parse(descCall.init.body), { file_id: "ZyCPHyECyGCs", xsrf: "" });
   const postCall = calls.find((c) => c.target.includes("/v1/export/export_office"));
   assert.equal(postCall.init.headers["content-type"], "application/x-www-form-urlencoded");
   assert.equal(postCall.init.headers["x-requested-with"], "XMLHttpRequest");
@@ -316,13 +326,14 @@ test("tencent sheet export downloads xlsx buffer with UTF-8 filename", async () 
   assert.ok(!downloadCall.init.headers.cookie);
 });
 
-test("tencent slide export uses pptx metadata", async () => {
+test("tencent slide export uses pptx metadata and tolerates desc failure", async () => {
   const { fetchImpl } = exportMockFetch(
     { globalPadId: "300000000$ZyCPHyECyGCs", padType: "slide", initialTitle: "演示" },
     {
       pollPayloads: [{ ret: 0, status: "Done", progress: 100, file_url: "https://cos.example/f" }],
       downloadBuffer: Buffer.from("504b0304pptx"),
       downloadDisposition: "attachment; filename=\"12幢架空层提升建议.pptx\"",
+      descFails: true,                                   // file/desc 挂掉也不阻塞导出
     },
   );
   await assert.rejects(
@@ -333,6 +344,8 @@ test("tencent slide export uses pptx metadata", async () => {
     (error) => {
       assert.equal(error.code, "TENCENT_DOCS_BINARY");
       assert.match(error.meta.mimeType, /presentationml\.presentation/);
+      assert.equal(error.meta.author, "");               // desc 失败 → meta 留空
+      assert.equal(error.meta.publishedAt, "");
       return true;
     },
   );
