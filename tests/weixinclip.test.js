@@ -85,3 +85,29 @@ test("rich-text fallback content promotes lazy images from content_noencode", as
   assert.doesNotMatch(data.contentHtml, /data:image\/svg/);
   assert.deepEqual(data.images, ["https://mmbiz.qpic.cn/mmbiz_jpg/x1/640?wx_fmt=jpeg"]);
 });
+
+test("card shell page yields nick_name, create_time and cdn_url cover", async () => {
+  // 非微信环境返回的分享卡片壳(window.cgiDataNew):公众号名/发布时间/封面都在,js_content 不存在。
+  // 防爬形态:数值写成 '0' * 1 表达式,换行是 \x0a 转义。
+  const card = `<html><head><title>虚无的一体两面</title><meta property="og:title" content="虚无的一体两面，既然一切都没有意义，那我不如就此放弃 和 既然一切都没有意义，那我便随心所欲" /></head><body>
+<script>window.cgiDataNew = {
+  base_resp: { ret: '0' * 1, errmsg: 'ok' },
+  user_name: 'gh_463a52c7ed51',
+  nick_name: '风控建模',
+  title: '虚无的一体两面，既然一切都没有意义，那我不如就此放弃 和 既然一切都没有意义，那我便随心所欲',
+  content_noencode: '虚无的一体两面，既然一切都没有意义，那我不如就此放弃 和 既然一切都没有意义，那我便随心所欲。\\x0a\\x0a这大概就是消极的虚无主义和积极的虚无主义吧。',
+  create_time: '2026-09-19 00:19',
+  cdn_url: 'http://mmbiz.qpic.cn/sz_mmbiz_jpg/cover123/0?wx_fmt=jpeg',
+  link: 'https://mp.weixin.qq.com/s/tqXwXxWF4SS9yh1bjPnKeQ',
+  author: '',
+  type: '9' * 1
+};</script>
+</body></html>`;
+  const data = await extractWeixinArticle(ARTICLE_URL, async () => weixinResponse(card));
+  assert.equal(data.byline, "风控建模");                              // nick_name 替代笼统的"微信公众号"
+  assert.equal(data.publishedAt, "2026-09-19T00:19:00.000+08:00"); // create_time 字符串日期
+  assert.deepEqual(data.images, ["https://mmbiz.qpic.cn/sz_mmbiz_jpg/cover123/0?wx_fmt=jpeg"]); // 封面,http 已升级 https
+  assert.match(data.contentHtml, /消极的虚无主义和积极的虚无主义/);
+  assert.equal(data.extractionMethod, "weixin");
+  assert.equal(data.extractionStatus, "complete");
+});

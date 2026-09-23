@@ -9,6 +9,7 @@
 // 图床 mmbiz.qpic.cn 对带正常 referer 的请求放行,无需特殊处理。
 
 const { readLimitedBody } = require("../../core/network");
+const { localIso } = require("../../core/util");
 const { parseHTML } = require("linkedom");
 
 const WEIXIN_UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36";
@@ -113,7 +114,12 @@ async function extractWeixinArticle(url, fetchImpl = globalThis.fetch, cookieGet
     || document.querySelector("#activity-name")?.textContent
     || "",
   ).trim();
-  const author = String(document.querySelector("#js_name")?.textContent || "").trim();
+  // 壳页无 #js_name,公众号名在 cgiDataNew.nick_name;发布时间 create_time 是 'YYYY-MM-DD HH:mm' 字符串。
+  const nickName = String(document.querySelector("#js_name")?.textContent || "").trim() || extractCgiString(html, "nick_name");
+  const cardCreateTime = extractCgiString(html, "create_time");
+  const cardPublishTime = cardCreateTime && /^\d{4}-\d{2}-\d{2}/.test(cardCreateTime) && !Number.isNaN(new Date(cardCreateTime.replace(" ", "T")).getTime())
+    ? localIso(new Date(cardCreateTime.replace(" ", "T")))
+    : "";
   const container = document.querySelector("#js_content");
   let contentHtml = "";
   let images = [];
@@ -127,15 +133,19 @@ async function extractWeixinArticle(url, fetchImpl = globalThis.fetch, cookieGet
       throw new Error("WeChat rate-limited this request (cooldown verification page); retry in a bit");
     }
     images = fallback.images;
+    // 卡片壳的封面在 cgiDataNew.cdn_url(不在正文里),本地化管线会抓取;http 升级 https 防混合内容。
+    const cover = extractCgiString(html, "cdn_url").replace(/^http:\/\//, "https://");
+    if (/^https:\/\/mmbiz\.qpic\.cn/.test(cover)) images.unshift(cover);
     contentHtml = `<article class="weixin-article">${fallback.contentHtml}</article>`;
   }
 
   return {
     title: title || "微信文章",
-    byline: author || "微信公众号",
+    byline: nickName || "微信公众号",
     siteName: "mp.weixin.qq.com",
     contentHtml,
     images,
+    publishedAt: cardPublishTime,
     extractionMethod: "weixin",
     url: String(url),
     canonicalUrl: String(url),

@@ -586,6 +586,7 @@ class WebClipper {
             canonicalUrl: data.canonicalUrl,
             identityUrl: data.identityUrl,
             images: data.images,
+            publishedAt: data.publishedAt,
             extractionStatus: data.extractionStatus,
           };
         }
