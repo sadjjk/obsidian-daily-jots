@@ -118,7 +118,7 @@ test("render requests sharing one browser profile are serialized", async () => {
   assert.equal(peak, 1);
 });
 
-test("session cookie persistence writes, reads and survives corrupt files", () => {
+test("session cookie persistence writes, reads and survives corrupt files", async () => {
   const os = require("node:os");
   const path = require("node:path");
   const fs = require("node:fs");
@@ -131,4 +131,8 @@ test("session cookie persistence writes, reads and survives corrupt files", () =
   // 文件损坏时静默返回空,不阻塞剪藏
   fs.writeFileSync(path.join(root, "dingtalk", "omni-session-cookies.json"), "{broken");
   assert.equal(manager.readPersistedCookies("dingtalk"), "");
+  // clearSession:目录与会话文件一并删除;重复调用幂等(close 无运行会话不抛错)
+  await assert.doesNotReject(() => manager.clearSession("dingtalk"));
+  assert.equal(fs.existsSync(path.join(root, "dingtalk")), false);
+  await assert.doesNotReject(() => manager.clearSession("dingtalk"));
 });

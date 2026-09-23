@@ -764,6 +764,25 @@ class DiarySettingTab extends PluginSettingTab {
         this.render();
       }, "is-danger-quiet");
     }
+    const sessions = parent.createDiv({ cls: "od-panel" });
+    sessions.createEl("h3", { text: this.tr("清除文档登录会话", "Clear document login sessions") });
+    sessions.createEl("p", { text: this.tr(
+      "删除对应平台在 .channel-data 下的浏览器会话与 Cookie（彻底退出登录）。仅覆盖有登录入口的文档平台；社区平台为游客 Cookie，不在列。",
+      "Deletes the platform's browser session and cookies under .channel-data (full logout). Only document platforms with a sign-in entry are listed; community platforms use guest cookies and are not listed.",
+    ) });
+    const sessionGrid = sessions.createDiv({ cls: "od-clear-grid" });
+    for (const [service, config] of Object.entries(DOCUMENT_SERVICES)) {
+      const hasSession = this.plugin.webSessionManager.hasSessionData(service);
+      const button = iconButton(sessionGrid, config.name, "log-out", async () => {
+        await this.plugin.webSessionManager.clearSession(service);
+        new Notice(this.tr("{name} 会话已清除", "Session cleared for {name}", { name: config.name }));
+        this.render();
+      }, "is-danger-quiet");
+      if (!hasSession) {
+        button.disabled = true;
+        button.setAttr("title", this.tr("尚无本地会话", "No local session yet"));
+      }
+    }
   }
 
   refreshStatuses(statuses) {

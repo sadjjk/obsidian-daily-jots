@@ -670,6 +670,12 @@ class WebSessionManager {
     await Promise.all([...this.active.keys()].map((service) => this.close(service)));
   }
 
+  // 清除平台会话:先停运行中的 Chrome(释放 profile 文件占用),再递归删整个会话目录(profile + Cookie)
+  async clearSession(service) {
+    await this.close(service);
+    await fs.promises.rm(path.join(this.rootPath, service), { recursive: true, force: true });
+  }
+
   /**
    * Launch (or reuse) the service's persistent headless profile and return the
    * site's cookies as a Cookie header string. Order:
