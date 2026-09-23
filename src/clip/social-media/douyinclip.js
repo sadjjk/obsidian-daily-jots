@@ -10,6 +10,12 @@
 const { readLimitedBody } = require("../../core/network");
 
 const DOUYIN_UA = "Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.5 Mobile/15E148 Safari/604.1";
+// detail API 是桌面 webapp 端点,须配桌面 Chrome UA + douyin.com/video/{id} referer;移动 UA 会 403
+const DOUYIN_DESKTOP_UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36";
+// 2026-09-23 抓包+实测:该接口无需 a_bogus/msToken 签名与设备指纹(带 uifid 反而被 Argus 拦 403),
+// cookie 只需 share 页自种的 ttwid 一个;裸 query 即可,多余参数已裁剪。
+const DOUYIN_DETAIL_API = "https://www.douyin.com/aweme/v1/web/aweme/detail/";
+const DOUYIN_DETAIL_QUERY = "device_platform=webapp&aid=6383&channel=channel_pc_web&version_code=190500&version_name=19.5.0&cookie_enabled=true&screen_width=1600&screen_height=900&browser_language=zh-CN&browser_platform=MacIntel&browser_name=Chrome&browser_version=151.0.0.0&browser_online=true&os_name=Mac%20OS&os_version=10.15.7&platform=PC";
 
 function douyinAwemeId(value) {
   const raw = String(value || "");
@@ -99,6 +105,26 @@ function douyinItemHtml(item) {
   return `<section class="douyin-item"><h3 class="douyin-item-author">${author}</h3>${meta}${douyinTextHtml(item)}${coverHtml}${playLink}</section>`;
 }
 
+// detail API:share 页 SSR 已无视频数据(2026-09 改版为纯客户端渲染),此接口是唯一数据源。
+// cookie 仅需 ttwid(share 页自种);字段结构与原 item_list[0] 同族,douyinItemHtml 直接复用。
+async function fetchDouyinDetail(awemeId, ttwid, fetchImpl) {
+  const { response } = await fetchImpl(`${DOUYIN_DETAIL_API}?${DOUYIN_DETAIL_QUERY}&aweme_id=${encodeURIComponent(awemeId)}`, {
+    accept: "application/json, text/plain, */*",
+    headers: {
+      "user-agent": DOUYIN_DESKTOP_UA,
+      "accept-language": "zh-CN,zh;q=0.9",
+      referer: `https://www.douyin.com/video/${awemeId}`,
+      ...(ttwid ? { cookie: `ttwid=${ttwid}` } : {}),
+    },
+    timeoutMs: 30_000,
+  });
+  if (!response.ok) throw new Error(`Douyin detail API returned HTTP ${response.status}`);
+  const text = (await readLimitedBody(response, 5 * 1024 * 1024)).toString("utf8");
+  let json; try { json = JSON.parse(text); } catch (_) { return null; }
+  if (json.status_code !== 0 || !json.aweme_detail) return null;
+  return json.aweme_detail;
+}
+
 async function extractDouyin(url, fetchImpl = globalThis.fetch) {
   // 第一跳:safeFetch 自动跟随短链 302 到落地页;从 finalUrl 解析 aweme_id。
   // 落地页响应正常会 Set-Cookie 种下 ttwid 访客票,但命中 CDN 缓存时不带——
@@ -107,8 +133,8 @@ async function extractDouyin(url, fetchImpl = globalThis.fetch) {
   let item = parseItem(first.html);
   const awemeId = String(douyinAwemeId(first.finalUrl) || douyinAwemeId(url) || item?.aweme_id || "");
   const shareUrl = awemeId ? `https://www.iesdouyin.com/share/video/${awemeId}/` : String(url);
+  let ttwid = cookieValue(first.setCookie, "ttwid");
   if (!item) {
-    let ttwid = cookieValue(first.setCookie, "ttwid");
     if (!ttwid) {
       // 领票:请求裸 share 页收 Set-Cookie(不校验内容)。
       const seed = await fetchDouyinPage(shareUrl, fetchImpl, "");
@@ -116,13 +142,19 @@ async function extractDouyin(url, fetchImpl = globalThis.fetch) {
       item = item || parseItem(seed.html);
     }
     if (!item) {
-      if (!ttwid) throw new Error("Douyin share page did not issue a visitor ticket (ttwid); retry once");
-      const second = await fetchDouyinPage(shareUrl, fetchImpl, `ttwid=${ttwid}`);
-      item = parseItem(second.html);
+      // 主路径:detail API(桌面端点 + ttwid)——share 页 SSR 已无数据,这里才有完整视频详情
+      if (awemeId) item = await fetchDouyinDetail(awemeId, ttwid, fetchImpl);
+      // 降级:share 页带票解析(历史路径,SSR 恢复时零成本命中)
+      if (!item && ttwid) {
+        const second = await fetchDouyinPage(shareUrl, fetchImpl, `ttwid=${ttwid}`);
+        item = parseItem(second.html);
+      }
     }
   }
   if (!item) {
-    throw new Error("Douyin returned no video data even with the visitor ticket; the page may be rate-limited");
+    throw new Error(ttwid
+      ? "Douyin returned no video data (detail API and share page both empty); the page may be rate-limited"
+      : "Douyin did not issue a visitor ticket (ttwid) and no video data was found; retry once");
   }
   const author = String(item?.author?.nickname || "抖音用户");
   const cover = item?.video?.cover?.url_list?.find(Boolean) || item?.video?.dynamic_cover?.url_list?.find(Boolean) || "";
@@ -143,4 +175,4 @@ async function extractDouyin(url, fetchImpl = globalThis.fetch) {
   };
 }
 
-module.exports = { DOUYIN_UA, douyinAwemeId, douyinTitle, extractDouyin, isDouyinUrl, parseItem };
+module.exports = { DOUYIN_UA, DOUYIN_DESKTOP_UA, douyinAwemeId, douyinTitle, extractDouyin, fetchDouyinDetail, isDouyinUrl, parseItem };
