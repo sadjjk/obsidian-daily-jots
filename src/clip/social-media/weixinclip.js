@@ -133,9 +133,13 @@ async function extractWeixinArticle(url, fetchImpl = globalThis.fetch, cookieGet
       throw new Error("WeChat rate-limited this request (cooldown verification page); retry in a bit");
     }
     images = fallback.images;
-    // 卡片壳的封面在 cgiDataNew.cdn_url(不在正文里),本地化管线会抓取;http 升级 https 防混合内容。
+    // 卡片壳的封面在 cgiDataNew.cdn_url(不在正文里):前置 img 标签进正文——本地化管线
+    // 下载后会把正文里的 src 重写为 vault 路径,md 才有引用(只进 images 列表不会出现在 md)。
     const cover = extractCgiString(html, "cdn_url").replace(/^http:\/\//, "https://");
-    if (/^https:\/\/mmbiz\.qpic\.cn/.test(cover)) images.unshift(cover);
+    if (/^https:\/\/mmbiz\.qpic\.cn/.test(cover)) {
+      images.unshift(cover);
+      fallback.contentHtml = `<p class="weixin-card-cover"><img src="${cover}" alt="封面" /></p>` + fallback.contentHtml;
+    }
     contentHtml = `<article class="weixin-article">${fallback.contentHtml}</article>`;
   }
 

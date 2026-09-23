@@ -107,6 +107,7 @@ test("card shell page yields nick_name, create_time and cdn_url cover", async ()
   assert.equal(data.byline, "风控建模");                              // nick_name 替代笼统的"微信公众号"
   assert.equal(data.publishedAt, "2026-09-19T00:19:00.000+08:00"); // create_time 字符串日期
   assert.deepEqual(data.images, ["https://mmbiz.qpic.cn/sz_mmbiz_jpg/cover123/0?wx_fmt=jpeg"]); // 封面,http 已升级 https
+  assert.match(data.contentHtml, /<p class="weixin-card-cover"><img src="https:\/\/mmbiz\.qpic\.cn\/sz_mmbiz_jpg\/cover123\/0\?wx_fmt=jpeg" alt="封面" \/><\/p>/); // 封面前置进正文,本地化后 md 才有引用
   assert.match(data.contentHtml, /消极的虚无主义和积极的虚无主义/);
   assert.equal(data.extractionMethod, "weixin");
   assert.equal(data.extractionStatus, "complete");
