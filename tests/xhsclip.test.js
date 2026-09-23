@@ -54,6 +54,14 @@ test("note URLs cover share short links and note pages only", () => {
   assert.equal(isXhsNoteUrl("https://example.com/explore/note123"), false);
 });
 
+test("video notes expose the h264 stream link in the note body", () => {
+  // 视频笔记:type=video,流地址在 video.media.stream(h264/h265 多码率数组)
+  const state = `{"note":{"currentNoteId":"noteV","noteDetailMap":{"noteV":{"note":{"noteId":"noteV","type":"video","title":"蛋糕视频","desc":"视频测评正文。","time":1788253336000,"user":{"nickname":"Alice"},"imageList":[{"urlDefault":"https:\\u002F\\u002Fsns-webpic-qc.xhscdn.com\\u002Fcover"}],"video":{"media":{"stream":{"h264":[{"masterUrl":"https:\\u002F\\u002Fsns-video-hw.xhscdn.com\\u002Fstream\\u002Fvideo_1000k.mp4?X-Orig-Expires=1790180000"}],"h265":[{"masterUrl":"https:\\u002F\\u002Fsns-video-hw.xhscdn.com\\u002Fstream\\u002Fvideo_1000k_265.mp4"}]}}}}}}}}`;
+  const html = `<!doctype html><html><body><script>window.__INITIAL_STATE__=${state}</script></body></html>`;
+  const data = xiaohongshuDataFromHtml(html, SOURCE_URL);
+  assert.match(data.contentHtml, /<p class="xhs-video"><a href="https:\/\/sns-video-hw\.xhscdn\.com\/stream\/video_1000k\.mp4\?X-Orig-Expires=1790180000">视频<\/a><\/p>/);
+});
+
 function fakeHtmlResponse(html, status = 200) {
   return {
     ok: status >= 200 && status < 300,

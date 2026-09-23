@@ -132,6 +132,15 @@ function noteImages(note) {
   return output;
 }
 
+// 视频笔记(note.type==="video")的流地址在 video.media.stream:h264/h265 各多档码率,
+// 取 h264 首档(兼容性最好)。URL 是 xhscdn 时效签名直链,过期后需回原页重新获取。
+function noteVideo(note) {
+  if (String(note?.type || "") !== "video") return "";
+  const stream = note?.video?.media?.stream || {};
+  const candidates = stream.h264?.length ? stream.h264 : stream.h265 || [];
+  return normalizedImageUrl(candidates[0]?.masterUrl || note?.video?.media?.stream?.h264?.[0]?.fallbackUrl || "");
+}
+
 function publishedAt(value) {
   const numeric = Number(value);
   if (!Number.isFinite(numeric) || numeric <= 0) return "";
@@ -152,8 +161,10 @@ function xiaohongshuDataFromHtml(html, finalUrl) {
     .replace(/\s+/g, " ").trim().slice(0, 160);
   const description = String(note.desc || "").trim();
   const images = noteImages(note);
+  const videoUrl = noteVideo(note);
   const body = escapeHtml(description).replace(/\r?\n/g, "<br>");
   const figures = images.map((url, index) => `<figure><img src="${escapeHtml(url)}" alt="小红书图片 ${index + 1}"></figure>`).join("");
+  const videoLink = videoUrl ? `<p class="xhs-video"><a href="${escapeHtml(videoUrl)}">视频</a></p>` : "";
   const canonicalUrl = `https://www.xiaohongshu.com/explore/${encodeURIComponent(note.noteId)}`;
   return {
     url: finalUrl,
@@ -163,7 +174,7 @@ function xiaohongshuDataFromHtml(html, finalUrl) {
     byline,
     excerpt: description.slice(0, 240),
     siteName: "小红书 / REDnote",
-    contentHtml: `<article class="xiaohongshu-note"><h1>${escapeHtml(title)}</h1><p>${body}</p>${figures}</article>`,
+    contentHtml: `<article class="xiaohongshu-note"><h1>${escapeHtml(title)}</h1><p>${body}</p>${figures}${videoLink}</article>`,
     plainText: `${title}\n${description}`,
     images,
     publishedAt: publishedAt(note.time),
