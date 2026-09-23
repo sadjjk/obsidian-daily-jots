@@ -110,6 +110,30 @@ class DingTalkChannel extends BaseChannel {
     this.assertFields(["clientId", "clientSecret"]);
     this.running = true;
     this.client = new DWClient({ clientId: this.config.clientId, clientSecret: this.config.clientSecret, keepAlive: true, debug: false });
+    // SDK 的 getEndpoint 用 axios 发请求,在 Obsidian 渲染进程(app://obsidian.md)会触发 CORS 预检,
+    // 被钉钉网关拦截 → endpoint 永远拿不到 → SDK 静默重连 → 渠道显示假在线且收不到任何消息。
+    // 用插件 safeFetch(Node https 栈,不受 CORS 限制)覆盖实例方法,复刻 SDK 的请求体与 dw_url 构造。
+    const client = this.client;
+    client.getEndpoint = async () => {
+      const { response } = await safeFetch("https://api.dingtalk.com/v1.0/gateway/connections/open", {
+        method: "POST",
+        headers: { accept: "application/json", "content-type": "application/json" },
+        body: JSON.stringify({
+          clientId: client.config.clientId,
+          clientSecret: client.config.clientSecret,
+          ua: client.config.ua || "",
+          subscriptions: client.config.subscriptions,
+        }),
+        accept: "application/json",
+        timeoutMs: 20_000,
+      });
+      const result = JSON.parse((await readLimitedBody(response, 1024 * 1024)).toString("utf8"));
+      const { endpoint, ticket } = result || {};
+      if (!endpoint || !ticket) throw new Error(`钉钉网关 endpoint 获取失败：${JSON.stringify(result).slice(0, 200)}`);
+      client.config.endpoint = result;
+      client.dw_url = `${endpoint}?ticket=${ticket}`;
+      return client;
+    };
     this.client.registerCallbackListener(TOPIC_ROBOT, (frame) => void this.onMessage(frame));
     this.client.on("error", (error) => this.setState("error", error?.message || String(error)));
     this.setState("connecting", this.t("正在建立 Stream 连接", "Starting Stream connection"));
