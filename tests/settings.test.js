@@ -15,7 +15,7 @@ test("saved values are merged, folders normalized, and unknown inherited keys dr
     schemaVersion: 1,
     storage: { diaryFolder: "/Notes\\Diary/" },
     capture: {
-      maxFileMb: 500, maxWebImages: 999, maxWebImageTotalMb: 999, webClipBudgetSeconds: 2,
+      maxFileMb: 500, maxWebImages: 999, webClipBudgetSeconds: 2,
     },
     channels: { telegram: { enabled: true, botToken: "secret" } },
     inheritedLegacyKey: "must disappear",
@@ -23,7 +23,6 @@ test("saved values are merged, folders normalized, and unknown inherited keys dr
   assert.equal(settings.storage.diaryFolder, "Notes/Diary");
   assert.equal(settings.capture.maxFileMb, 100);
   assert.equal(settings.capture.maxWebImages, 100);
-  assert.equal(settings.capture.maxWebImageTotalMb, 500);
   assert.equal(settings.capture.webClipBudgetSeconds, 15);
   assert.equal(settings.channels.telegram.botToken, "secret");
   assert.equal(settings.inheritedLegacyKey, undefined);
@@ -62,7 +61,6 @@ test("clipping type rules keep unknown families out and sanitize subfolders", ()
 test("new web clipping limits default to a bounded message budget", () => {
   const settings = normalizeSettings({ schemaVersion: 1 });
   assert.equal(settings.capture.maxWebImages, 30);
-  assert.equal(settings.capture.maxWebImageTotalMb, 50);
   assert.equal(settings.capture.webClipBudgetSeconds, 75);
 });
 

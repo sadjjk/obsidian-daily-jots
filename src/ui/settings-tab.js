@@ -544,7 +544,7 @@ class DiarySettingTab extends PluginSettingTab {
         "A space is required: 查 关键词 → 确认 1,3, or search keyword → confirm 1,3. Results expire after 2 hours. Up to 10 results are shown, 20 notes can be packed, and the packed file is limited to 20MB.",
       ) });
     }
-    new Setting(rules).setName(this.tr("单个附件上限", "Per-attachment limit")).setDesc("1–100 MB").addText((input) => {
+    new Setting(rules).setName(this.tr("单个附件上限（不含视频）", "Per-attachment limit (videos excluded)")).setDesc("1–100 MB").addText((input) => {
       input.inputEl.setAttr("type", "number"); input.inputEl.setAttr("min", "1"); input.inputEl.setAttr("max", "100");
       input.setValue(String(this.plugin.settings.capture.maxFileMb)).onChange(async (value) => {
         this.plugin.settings.capture.maxFileMb = Math.min(100, Math.max(1, Number(value) || 20)); await this.plugin.saveSettings();
@@ -557,12 +557,6 @@ class DiarySettingTab extends PluginSettingTab {
       input.inputEl.setAttr("type", "number"); input.inputEl.setAttr("min", "1"); input.inputEl.setAttr("max", "100");
       input.setValue(String(this.plugin.settings.capture.maxWebImages)).onChange(async (value) => {
         this.plugin.settings.capture.maxWebImages = Math.min(100, Math.max(1, Number(value) || 30)); await this.plugin.saveSettings();
-      });
-    });
-    new Setting(rules).setName(this.tr("每篇网页图片总量上限", "Total image budget per clipping")).setDesc("1–500 MB").addText((input) => {
-      input.inputEl.setAttr("type", "number"); input.inputEl.setAttr("min", "1"); input.inputEl.setAttr("max", "500");
-      input.setValue(String(this.plugin.settings.capture.maxWebImageTotalMb)).onChange(async (value) => {
-        this.plugin.settings.capture.maxWebImageTotalMb = Math.min(500, Math.max(1, Number(value) || 50)); await this.plugin.saveSettings();
       });
     });
     new Setting(rules).setName(this.tr("单条消息网页处理预算", "Web-processing budget per message")).setDesc(this.tr(

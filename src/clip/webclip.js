@@ -1124,9 +1124,7 @@ class WebClipper {
       const maxImages = Math.max(1, Number(this.settings.capture.maxWebImages) || 30);
       const allImages = [...new Set(article.images || [])];
       const selectedImages = allImages.slice(0, maxImages);
-      const maxTotalBytes = Math.max(1, Number(this.settings.capture.maxWebImageTotalMb) || 50) * 1024 * 1024;
       const deadline = Number(options.deadline) || Date.now() + (Math.max(10, Number(this.settings.capture.webClipBudgetSeconds) || 75) * 1000);
-      let reservedBytes = 0;
       for (const imageUrl of allImages.slice(maxImages)) skippedImages.push(imageUrl);
       const localized = await mapWithConcurrency(selectedImages, 4, async (imageUrl, index) => {
         try {
@@ -1135,7 +1133,7 @@ class WebClipper {
           const downloaded = await this.download(imageUrl, {
             referrer: article.url,
             ...(article.imageHeaders ? { headers: article.imageHeaders } : {}),
-            maxBytes: Math.min((Number(this.settings.capture.maxFileMb) || 20) * 1024 * 1024, maxTotalBytes),
+            maxBytes: (Number(this.settings.capture.maxFileMb) || 20) * 1024 * 1024,
             timeoutMs: Math.min(10_000, remaining),
             requestAttempts: 2,
             shouldRetry: (error) => error?.code === "ECONNRESET",
@@ -1143,15 +1141,8 @@ class WebClipper {
             fileName: `${stem}-img-${String(index + 1).padStart(2, "0")}`,
           });
           if (!downloaded.mimeType.startsWith("image/")) throw new Error(`not an image (${downloaded.mimeType})`);
-          if (reservedBytes + downloaded.buffer.length > maxTotalBytes) throw new Error(`skipped because the article image budget is ${this.settings.capture.maxWebImageTotalMb || 50} MB`);
-          reservedBytes += downloaded.buffer.length;
-          try {
-            const localPath = await this.writer.saveBinary(assetFolder, downloaded.fileName, downloaded.buffer, downloaded.mimeType);
-            return { imageUrl, localPath };
-          } catch (error) {
-            reservedBytes -= downloaded.buffer.length;
-            throw error;
-          }
+          const localPath = await this.writer.saveBinary(assetFolder, downloaded.fileName, downloaded.buffer, downloaded.mimeType);
+          return { imageUrl, localPath };
         } catch (error) {
           return { imageUrl, error: error?.message || String(error) };
         }
@@ -1180,7 +1171,7 @@ class WebClipper {
       "",
     ].join("\n");
     const warningParts = [];
-    if (skippedImages.length) warningParts.push(`${skippedImages.length} 张图片超出单篇上限,已保留远程地址`);
+    if (skippedImages.length) warningParts.push(`${skippedImages.length} 张图片超出张数上限,已保留远程地址`);
     if (failures.length) warningParts.push(`${failures.length} 张图片未能本地保存,正文中保留远程地址`);
     if (fileFailures.length) warningParts.push(`${fileFailures.length} 个原文件未能本地保存`);
     const report = warningParts.length ? `\n\n> [!warning] ${warningParts.join("；")}。` : "";

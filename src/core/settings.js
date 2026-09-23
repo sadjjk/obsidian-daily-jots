@@ -57,7 +57,6 @@ const DEFAULT_SETTINGS = {
     downloadChatAttachments: true,
     maxFileMb: 20,
     maxWebImages: 30,
-    maxWebImageTotalMb: 50,
     webClipBudgetSeconds: 75,
     receiptPreview: true,
     receiptPreviewChars: 200,
@@ -106,7 +105,6 @@ function normalizeSettings(saved) {
   value.storage.attachmentFolder = sanitizeFolder(value.storage.attachmentFolder, DEFAULT_SETTINGS.storage.attachmentFolder);
   value.capture.maxFileMb = Math.min(100, Math.max(1, Number(value.capture.maxFileMb) || 20));
   value.capture.maxWebImages = Math.min(100, Math.max(1, Number(value.capture.maxWebImages) || 30));
-  value.capture.maxWebImageTotalMb = Math.min(500, Math.max(1, Number(value.capture.maxWebImageTotalMb) || 50));
   value.capture.webClipBudgetSeconds = Math.min(180, Math.max(15, Number(value.capture.webClipBudgetSeconds) || 75));
   value.capture.receiptPreview = value.capture.receiptPreview !== false;
   value.capture.receiptPreviewChars = Math.min(1000, Math.max(20, Number(value.capture.receiptPreviewChars) || 200));
@@ -147,7 +145,6 @@ function migrateLegacySettings(saved) {
       downloadChatAttachments: legacySettings.saveVoiceAudio !== false,
       maxFileMb: Number(legacySettings.webClipMaxTotalImageMb) || DEFAULT_SETTINGS.capture.maxFileMb,
       maxWebImages: Number(legacySettings.webClipMaxImages) || DEFAULT_SETTINGS.capture.maxWebImages,
-      maxWebImageTotalMb: Number(legacySettings.webClipMaxTotalImageMb) || DEFAULT_SETTINGS.capture.maxWebImageTotalMb,
       webClipBudgetSeconds: DEFAULT_SETTINGS.capture.webClipBudgetSeconds,
       clipRules: defaultClipRules(),
     },

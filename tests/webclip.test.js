@@ -182,7 +182,7 @@ test("WeChat long URLs ignore volatile parameters and match short links when pag
 test("web image localization is concurrent, bounded, and reuses the stable clipping path", async () => {
   const settings = {
     storage: { clippingFolder: "Clippings", attachmentFolder: "Attachments" },
-    capture: { downloadWebImages: true, maxFileMb: 20, maxWebImages: 3, maxWebImageTotalMb: 1, webClipBudgetSeconds: 75 },
+    capture: { downloadWebImages: true, maxFileMb: 20, maxWebImages: 3, webClipBudgetSeconds: 75 },
   };
   let existingPath = "";
   let active = 0;
@@ -225,15 +225,15 @@ test("web image localization is concurrent, bounded, and reuses the stable clipp
   assert.notEqual(second.notePath, first.notePath);
   assert.match(first.notePath, /2026-08-31/);
   assert.match(second.notePath, /2026-09-01/);
-  assert.equal(first.savedImages, 2);
-  // 第 3 张超出 maxWebImageTotalMb=1MB 预算(真失败),第 4、5 张超出 maxWebImages=3 上限(保留原链)
+  assert.equal(first.savedImages, 3);
+  // 第 4、5 张超出 maxWebImages=3 上限(保留原链);总量预算已移除,单文件 400KB 均在 maxFileMb 内
   assert.equal(first.imageSkipped.length, 2);
-  assert.equal(first.imageFailures.length, 1);
+  assert.equal(first.imageFailures.length, 0);
   assert.equal(peak > 1 && peak <= 4, true);
   assert.equal(writes.length, 2);
   assert.ok(trashed.includes(first.notePath));
   const oldImages = trashed.filter((p) => p.startsWith("Attachments/Web/2026-08-31/"));
-  assert.equal(oldImages.length, 2);
+  assert.equal(oldImages.length, 3);
   assert.equal(trashed.includes(second.notePath), false);
 });
 
