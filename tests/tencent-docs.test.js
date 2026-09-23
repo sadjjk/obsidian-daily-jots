@@ -3,6 +3,7 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const { extractTencentDoc, extractTencentFileExportForTencent, parseTencentDocPayload, stripTencentChrome, tencentDocApiUrl, tencentDocToMarkdown, tencentHostForUrl, tencentSessionServiceForUrl, tencentSiteNameForUrl } = require("../src/clip/cloud-docs/tencent-docs");
+const { extractWecomDoc, extractWecomFileExport } = require("../src/clip/cloud-docs/wecom-docs");
 const { localIso } = require("../src/core/util");
 
 test("tencent rendered chrome lines are stripped while body lines survive", () => {
@@ -366,5 +367,50 @@ test("tencent export rejects missing session and unsupported pad types", async (
       fetchImpl,
     }),
     (error) => error.code === "TENCENT_DOCS_EXPORT_UNSUPPORTED",
+  );
+});
+
+test("wecomdoc sheet export posts form with captcha placeholders and timestamp polling", async () => {
+  const cookieCalls = [];
+  const { fetchImpl, calls } = exportMockFetch(
+    null,
+    {
+      pollPayloads: [
+        { ret: 0, status: "Processing", progress: 40 },
+        { ret: 0, status: "Done", progress: 100, file_url: "https://wedoc-cos.example/export/sse/xlsx/e3_x/file.xlsx" },
+      ],
+      downloadBuffer: Buffer.from("504b0304wecom-xlsx"),
+      downloadDisposition: "attachment; filename=\"特征及样本已迁移的表.xlsx\"",
+    },
+  );
+  await assert.rejects(
+    extractWecomFileExport("https://doc.weixin.qq.com/sheet/e3_AXMA8gbzAFMCNaVZkdhWKSHyehvk7?scode=ADsAHgeCAAsgJH0WdEAXMA8gbzAFM&tab=78j3ml", {
+      collectSessionCookies: async (service, target) => { cookieCalls.push({ service, target }); return "WEDOC_SID=tok"; },
+      fetchImpl,
+    }),
+    (error) => {
+      assert.equal(error.code, "TENCENT_DOCS_BINARY");
+      assert.equal(error.fileName, "特征及样本已迁移的表.xlsx");
+      assert.equal(error.meta.padType, "sheet");
+      assert.match(error.meta.mimeType, /spreadsheetml\.sheet/);
+      assert.equal(error.meta.author, "");          // 企微无 file/desc,meta 留空
+      return true;
+    },
+  );
+  assert.deepEqual(cookieCalls[0], { service: "wecomdoc", target: "https://doc.weixin.qq.com/" });
+  const postCall = calls.find((c) => c.target.includes("/v1/export/export_office"));
+  assert.match(postCall.target, /wedoc_xsrf=1/);    // 企微 xsrf 走 query 参数
+  assert.equal(postCall.init.body, "docId=e3_AXMA8gbzAFMCNaVZkdhWKSHyehvk7&version=2&captchaTicket=&captchaRandstr=");
+  // 企微不需要 opendoc 换 globalPadId,也没有 file/desc 元信息接口
+  assert.equal(calls.filter((c) => c.target.includes("/dop-api/opendoc")).length, 0);
+  assert.equal(calls.filter((c) => c.target.includes("/v2/drive/file/desc")).length, 0);
+  const pollCall = calls.find((c) => c.target.includes("/v1/export/query_progress"));
+  assert.match(pollCall.target, /timestamp=\d+/);   // 企微轮询带 timestamp 防缓存
+});
+
+test("wecomdoc export requires wecomdoc session", async () => {
+  await assert.rejects(
+    extractWecomFileExport("https://doc.weixin.qq.com/sheet/e3_AXMA8gbzAFMCNaVZkdhWKSHyehvk7", { collectSessionCookies: async () => "" }),
+    (error) => error.code === "DOCUMENT_LOGIN_REQUIRED",
   );
 });
