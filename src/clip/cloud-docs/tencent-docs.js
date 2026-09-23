@@ -69,6 +69,12 @@ async function exportTencentFile(url, { collectSessionCookies, fetchImpl = globa
   const postText = typeof postResp.text === "function" ? await postResp.text() : (await readLimitedBody(postResp, 1024 * 1024)).toString("utf8");
   let postJson; try { postJson = JSON.parse(postText); } catch (_) { postJson = {}; }
   if (postJson.ret !== 0 || !postJson.operationId) {
+    // captcha 类失败(频控/风控)无法自动绕过 → 透传提示而非静默回落渲染
+    if (postJson.ret === 520112 || /captcha/i.test(postJson.msg || "")) {
+      const error = new Error("腾讯文档导出触发验证码风控:请几小时后重试,或在浏览器打开文档手动下载后拖入 Obsidian");
+      error.code = "DOCS_EXPORT_CAPTCHA";
+      throw error;
+    }
     const error = new Error(`腾讯文档导出请求失败(ret=${postJson.ret ?? "未知"})`);
     error.code = "TENCENT_DOCS_EXPORT_FAILED";
     throw error;

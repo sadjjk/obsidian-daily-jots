@@ -6,7 +6,7 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const { extractWecomFileExport } = require("../src/clip/cloud-docs/wecom-docs");
 
-function wecomMockFetch({ pollPayloads, downloadBuffer, downloadDisposition }) {
+function wecomMockFetch({ pollPayloads, downloadBuffer, downloadDisposition, captcha }) {
   const calls = [];
   let pollCount = 0;
   const fetchImpl = async (target, init = {}) => {
@@ -16,7 +16,9 @@ function wecomMockFetch({ pollPayloads, downloadBuffer, downloadDisposition }) {
       headers: { get: () => "application/json" },
       body: (async function* () { yield Buffer.from(JSON.stringify(payload)); })(),
     });
-    if (target.includes("/v1/export/export_office")) return jsonResponse({ ret: 0, operationId: "wecom-op-1" });
+    if (target.includes("/v1/export/export_office")) {
+      return captcha ? jsonResponse({ ret: 520112, msg: "captcha required" }) : jsonResponse({ ret: 0, operationId: "wecom-op-1" });
+    }
     if (target.includes("/v1/export/query_progress")) {
       const payload = pollPayloads[Math.min(pollCount, pollPayloads.length - 1)];
       pollCount += 1;
@@ -70,6 +72,27 @@ test("wecomdoc export requires wecomdoc session", async () => {
   await assert.rejects(
     extractWecomFileExport("https://doc.weixin.qq.com/sheet/e3_AXMA8gbzAFMCNaVZkdhWKSHyehvk7", { collectSessionCookies: async () => "" }),
     (error) => error.code === "DOCUMENT_LOGIN_REQUIRED",
+  );
+});
+
+test("wecomdoc export surfaces captcha rate-limit as explicit error", async () => {
+  // ret 520112 "captcha required":服务端导出频控 → DOCS_EXPORT_CAPTCHA 透传,而非静默回落
+  const { fetchImpl } = wecomMockFetch({
+    pollPayloads: [],
+    downloadBuffer: Buffer.from(""),
+    downloadDisposition: "",
+    captcha: true,
+  });
+  await assert.rejects(
+    extractWecomFileExport("https://doc.weixin.qq.com/sheet/e3_AXMA8gbzAFMCNaVZkdhWKSHyehvk7", {
+      collectSessionCookies: async () => "WEDOC_SID=tok",
+      fetchImpl,
+    }),
+    (error) => {
+      assert.equal(error.code, "DOCS_EXPORT_CAPTCHA");
+      assert.match(error.message, /验证码|风控/);
+      return true;
+    },
   );
 });
 

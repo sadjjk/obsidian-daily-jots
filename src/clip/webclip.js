@@ -739,6 +739,10 @@ class WebClipper {
       } catch (exportError) {
         tencentExportError = exportError;
       }
+      // captcha 风控(520112):无法自动绕过,透传明确提示,不静默渲染空壳
+      if (tencentExportError?.code === "DOCS_EXPORT_CAPTCHA") {
+        throw tencentExportError;
+      }
       if ((tencentExportError?.code === "TENCENT_DOCS_BINARY" || tencentExportError?.code === "WECOM_DOCS_BINARY") && tencentExportError.buffer) {
         const fileName = tencentExportError.fileName || "tencent-doc.bin";
         const padType = tencentExportError.meta?.padType || "";
