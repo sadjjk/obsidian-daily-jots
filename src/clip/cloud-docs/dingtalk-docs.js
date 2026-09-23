@@ -285,7 +285,7 @@ async function injectDingtalkCookies(client, cookieHeader) {
 // 复用 browserclip 浏览器会话导出(Obsidian 环境已验证的链路:start 带 --remote-allow-origins=*)。
 // 与自研 spawn 链路共享 cookie 注入/导航/EXPORT_SCRIPT/分块取回逻辑,仅浏览器生命周期管理不同。
 async function exportViaSessionManager(url, cookieHeader, manager) {
-  const entry = await manager.start("dingtalk-export", { headless: true, initialUrl: "about:blank" });
+  const entry = await manager.start("dingtalk", { headless: true, initialUrl: "about:blank" });
   let client;
   try {
     client = await manager.createPage(entry);
