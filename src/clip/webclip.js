@@ -739,7 +739,7 @@ class WebClipper {
       } catch (exportError) {
         tencentExportError = exportError;
       }
-      if (tencentExportError?.code === "TENCENT_DOCS_BINARY" && tencentExportError.buffer) {
+      if ((tencentExportError?.code === "TENCENT_DOCS_BINARY" || tencentExportError?.code === "WECOM_DOCS_BINARY") && tencentExportError.buffer) {
         const fileName = tencentExportError.fileName || "tencent-doc.bin";
         const padType = tencentExportError.meta?.padType || "";
         return {

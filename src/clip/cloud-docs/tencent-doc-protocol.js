@@ -361,173 +361,71 @@ function fencedCode(code) {
   return `${fence}\n${code}\n${fence}`;
 }
 
-// —— sheet/slide 等二进制类型导出 ——
-// opendoc 的 mutations 协议只覆盖 docx 文档;表格(sheet)/幻灯(slide)走导出链:
-// opendoc 换服务端 globalPadId(URL localId 与之不同) → POST export_office → 轮询 query_progress → COS 预签名直链下载。
-// 2026-09-22 按真实抓包实测:exportType=0 对 sheet 出 xlsx、对 slide 出 pptx;file_url 在轮询响应顶层(下划线命名)。
-const TENCENT_EXPORT_PAD_TYPES = {
+
+// —— 腾讯系 sheet/slide 二进制导出共享件(仅两平台完全公用的部分) ——
+// 腾讯文档(docs.qq.com)与企微文档(doc.weixin.qq.com)导出协议同源(export_office → query_progress → COS 直链),
+// 轮询/下载/文件名解析在此共享;请求构造差异(如何拿 docId、form 体、xsrf 方式)在各自 tencent-docs.js / wecom-docs.js。
+// 错误码两平台各自分离(TENCENT_DOCS_* / WECOM_DOCS_*),由调用方经参数传入。
+const EXPORT_PAD_TYPES = {
   sheet: { ext: "xlsx", mime: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" },
   slide: { ext: "pptx", mime: "application/vnd.openxmlformats-officedocument.presentationml.presentation" },
 };
-const TENCENT_EXPORT_POLL_INTERVAL_MS = 1_500;
-const TENCENT_EXPORT_POLL_MAX = 45;            // 45×1.5s ≈ 67s,实测大文件(47MB)2~3 次即完成
-const TENCENT_EXPORT_MAX_BYTES = 256 * 1024 * 1024;
-const TENCENT_EXPORT_UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36";
+const EXPORT_POLL_INTERVAL_MS = 1_500;
+const EXPORT_POLL_MAX = 45;            // 45×1.5s ≈ 67s,实测大文件(47MB)2~3 次即完成
+const EXPORT_MAX_BYTES = 256 * 1024 * 1024;
+const EXPORT_UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36";
 
-// 共享轮询:响应扁平 {ret,status,progress,file_url},file_url 出现即完成;企微需带 timestamp 防缓存
-async function tencentPollExportFileUrl(host, operationId, referer, cookie, fetchImpl, siteName, { withTimestamp = false } = {}) {
-  for (let i = 0; i < TENCENT_EXPORT_POLL_MAX; i++) {
-    await new Promise((r) => setTimeout(r, TENCENT_EXPORT_POLL_INTERVAL_MS));
+// 轮询 query_progress:响应扁平 {ret,status,progress,file_url},file_url 出现即完成;企微需带 timestamp 防缓存
+async function pollExportFileUrl(host, operationId, referer, cookie, fetchImpl, siteName, { withTimestamp = false, failedCode, timeoutCode }) {
+  for (let i = 0; i < EXPORT_POLL_MAX; i++) {
+    await new Promise((r) => setTimeout(r, EXPORT_POLL_INTERVAL_MS));
     const ts = withTimestamp ? `&timestamp=${Date.now()}` : "";
     const qResp = await fetchImpl(`https://${host}/v1/export/query_progress?operationId=${encodeURIComponent(operationId)}${ts}`, {
-      headers: { cookie, referer, "user-agent": TENCENT_EXPORT_UA },
+      headers: { cookie, referer, "user-agent": EXPORT_UA },
     });
     const qText = typeof qResp.text === "function" ? await qResp.text() : (await readLimitedBody(qResp, 1024 * 1024)).toString("utf8");
     let q; try { q = JSON.parse(qText); } catch (_) { q = {}; }
     if (q.ret !== 0) {
       const error = new Error(`${siteName}导出进度查询失败(ret=${q.ret})`);
-      error.code = "TENCENT_DOCS_EXPORT_FAILED";
+      error.code = failedCode;
       throw error;
     }
     if (q.file_url) return q.file_url;
     if (String(q.status).toLowerCase() === "failed") {
       const error = new Error(`${siteName}导出失败(服务端 status=Failed)`);
-      error.code = "TENCENT_DOCS_EXPORT_FAILED";
+      error.code = failedCode;
       throw error;
     }
   }
-  const error = new Error(`${siteName}导出超时(${Math.round((TENCENT_EXPORT_POLL_MAX * TENCENT_EXPORT_POLL_INTERVAL_MS) / 1000)}s 无结果)`);
-  error.code = "TENCENT_DOCS_EXPORT_TIMEOUT";
-  throw error;
-}
-
-// 共享下载 + 组装 TENCENT_DOCS_BINARY(COS 预签名直链,无需会话 cookie)
-async function tencentDownloadExportBuffer(fileUrl, fetchImpl, siteName, { padType, exportType, initialTitle, localId, author, publishedAt }) {
-  const dlResp = await fetchImpl(fileUrl, { headers: { "user-agent": TENCENT_EXPORT_UA } });
-  if (!dlResp.ok) throw new Error(`${siteName}导出文件下载失败 HTTP ${dlResp.status}`);
-  const buffer = typeof dlResp.arrayBuffer === "function"
-    ? Buffer.from(await dlResp.arrayBuffer())
-    : await readLimitedBody(dlResp, TENCENT_EXPORT_MAX_BYTES);
-  const disposition = typeof dlResp.headers?.get === "function" ? dlResp.headers.get("content-disposition") : (dlResp.headers?.["content-disposition"] || "");
-  const fileName = tencentExportFileName(disposition, initialTitle, localId, exportType.ext);
-  const error = new Error(`腾讯系文档(${padType}),已导出 ${exportType.ext}`);
-  error.code = "TENCENT_DOCS_BINARY";
-  error.buffer = buffer;
-  error.fileName = fileName;
-  error.meta = { padType, mimeType: exportType.mime, author: author || "", publishedAt: publishedAt || "" };
+  const error = new Error(`${siteName}导出超时(${Math.round((EXPORT_POLL_MAX * EXPORT_POLL_INTERVAL_MS) / 1000)}s 无结果)`);
+  error.code = timeoutCode;
   throw error;
 }
 
 // 解析 COS content-disposition:优先 filename*(UTF-8 完整名),兜底 filename="(ASCII)"
-function tencentExportFileName(disposition, initialTitle, localId, ext) {
+function parseExportFileName(disposition, initialTitle, localId, ext) {
   const utf8 = disposition?.match(/filename\*=UTF-8''([^;]+)/)?.[1];
   const ascii = disposition?.match(/filename="([^"]+)"/)?.[1];
   const fromHeader = decodeURIComponent(utf8 || ascii || "").trim();
-  const base = (fromHeader || initialTitle || localId || "tencent-doc").replace(/[\\/:*?"<>|]/g, "").trim() || "tencent-doc";
+  const base = (fromHeader || initialTitle || localId || "docs-export").replace(/[\\/:*?"<>|]/g, "").trim() || "docs-export";
   return /\.[A-Za-z0-9]+$/.test(base) ? base : `${base}.${ext}`;
 }
 
-async function extractTencentFileExport(url, { sessionService, siteName, collectSessionCookies, fetchImpl = globalThis.fetch } = {}) {
-  const host = tencentHostForUrl(url);
-  if (!host) throw new Error("不是腾讯文档链接");
-  const cookie = collectSessionCookies ? await collectSessionCookies(sessionService, `https://${host}/`) : "";
-  if (!cookie) {
-    const error = new Error(`${siteName}表格/幻灯导出需要登录会话:先在浏览器会话中登录${siteName}后重试`);
-    error.code = "DOCUMENT_LOGIN_REQUIRED";
-    throw error;
-  }
-  // 企微文档导出协议不同:docId 直接用 URL localId(e3_ 前缀,无需 opendoc),form 体带 captcha 占位
-  if (host === "doc.weixin.qq.com") {
-    return await exportWecomFile(url, cookie, fetchImpl, siteName);
-  }
-  const parsed = new URL(url);
-  const localId = parsed.searchParams.get("id") || parsed.pathname.split("/").filter(Boolean).pop();
-  if (!localId) throw new Error("无法从链接解析腾讯文档 ID");
-
-  // ① opendoc 换 globalPadId/padType/标题(URL localId ≠ 服务端 padId,直接用会导错文档)
-  const metaUrl = `https://${host}/dop-api/opendoc?id=${encodeURIComponent(localId)}&normal=1&noEscape=1&outformat=1&doc_chunk_flag=1&t=${Date.now()}`;
-  const metaResp = await fetchImpl(metaUrl, { headers: { accept: "*/*", cookie, referer: `https://${host}/`, "user-agent": TENCENT_EXPORT_UA } });
-  if (!metaResp.ok) throw new Error(`${siteName} opendoc 返回 HTTP ${metaResp.status}`);
-  const metaText = typeof metaResp.text === "function"
-    ? await metaResp.text()
-    : (await readLimitedBody(metaResp, 32 * 1024 * 1024)).toString("utf8");
-  const globalPadId = metaText.match(/"globalPadId"\s*:\s*"([^"]+)"/)?.[1];
-  const padType = metaText.match(/"padType"\s*:\s*"([^"]+)"/)?.[1];
-  const initialTitle = (metaText.match(/"initialTitle"\s*:\s*"([^"]+)"/)?.[1] || "").replace(/\\u([0-9a-fA-F]{4})/g, (_, h) => String.fromCharCode(parseInt(h, 16)));
-  const exportType = TENCENT_EXPORT_PAD_TYPES[padType];
-  if (!globalPadId || !exportType) {
-    const error = new Error(`${siteName}暂不支持导出该类型(${padType || "未知"})`);
-    error.code = "TENCENT_DOCS_EXPORT_UNSUPPORTED";
-    throw error;
-  }
-
-  // ①b 文档元信息(作者/创建时间):POST /v2/drive/file/desc,file_id 取 globalPadId 的 padId 段;
-  // 失败静默(meta 留空),不阻塞导出
-  let meta = { author: "", publishedAt: "" };
-  try {
-    const padId = globalPadId.includes("$") ? globalPadId.split("$")[1] : globalPadId;
-    const descResp = await fetchImpl(`https://${host}/v2/drive/file/desc`, {
-      method: "POST",
-      headers: { cookie, referer: url, "content-type": "application/json", "x-requested-with": "XMLHttpRequest", "user-agent": TENCENT_EXPORT_UA },
-      body: JSON.stringify({ file_id: padId, xsrf: "" }),
-    });
-    const descText = typeof descResp.text === "function" ? await descResp.text() : (await readLimitedBody(descResp, 1024 * 1024)).toString("utf8");
-    const desc = JSON.parse(descText);
-    const result = desc?.result || {};
-    const createdMs = Number(result.createTime) || 0;
-    meta = {
-      author: result.ownerNick || "",
-      publishedAt: createdMs ? localIso(new Date(createdMs)) : "",
-      title: result.name || "",
-    };
-  } catch (_) {}
-
-  // ② 发起导出
-  const postResp = await fetchImpl(`https://${host}/v1/export/export_office`, {
-    method: "POST",
-    headers: { cookie, referer: url, "content-type": "application/x-www-form-urlencoded", "x-requested-with": "XMLHttpRequest", "user-agent": TENCENT_EXPORT_UA },
-    body: `exportType=0&switches=${encodeURIComponent(JSON.stringify({ embedFonts: false }))}&exportSource=client&docId=${encodeURIComponent(globalPadId)}&version=2`,
-  });
-  const postText = typeof postResp.text === "function" ? await postResp.text() : (await readLimitedBody(postResp, 1024 * 1024)).toString("utf8");
-  let postJson;
-  try { postJson = JSON.parse(postText); } catch (_) { postJson = {}; }
-  if (postJson.ret !== 0 || !postJson.operationId) {
-    const error = new Error(`${siteName}导出请求失败(ret=${postJson.ret ?? "未知"})`);
-    error.code = "TENCENT_DOCS_EXPORT_FAILED";
-    throw error;
-  }
-
-  // ③④ 轮询 + 下载(与企微流共享 helper)
-  const fileUrl = await tencentPollExportFileUrl(host, postJson.operationId, url, cookie, fetchImpl, siteName);
-  await tencentDownloadExportBuffer(fileUrl, fetchImpl, siteName, { padType, exportType, initialTitle, localId, author: meta.author, publishedAt: meta.publishedAt });
-}
-
-// 企微文档(doc.weixin.qq.com)sheet/slide 导出:与腾讯的差异——docId 直接用 URL localId(e3_ 前缀,无需 opendoc 换取)、
-// query 带 wedoc_xsrf=1(sid 可省)、form 体带 captcha 占位、轮询带 timestamp。2026-09-22 实测 27MB xlsx 一次通过。
-async function exportWecomFile(url, cookie, fetchImpl, siteName) {
-  const parsed = new URL(url);
-  const localId = parsed.pathname.split("/").filter(Boolean).pop();
-  const padType = (parsed.pathname.match(/\/(sheet|slide)\//) || [])[1];
-  const exportType = TENCENT_EXPORT_PAD_TYPES[padType];
-  if (!localId || !exportType) {
-    const error = new Error(`${siteName}暂不支持导出该类型(${padType || "未知"})`);
-    error.code = "TENCENT_DOCS_EXPORT_UNSUPPORTED";
-    throw error;
-  }
-  const postResp = await fetchImpl("https://doc.weixin.qq.com/v1/export/export_office?wedoc_xsrf=1", {
-    method: "POST",
-    headers: { cookie, referer: url, "content-type": "application/x-www-form-urlencoded", "x-requested-with": "XMLHttpRequest", "user-agent": TENCENT_EXPORT_UA },
-    body: `docId=${encodeURIComponent(localId)}&version=2&captchaTicket=&captchaRandstr=`,
-  });
-  const postText = typeof postResp.text === "function" ? await postResp.text() : (await readLimitedBody(postResp, 1024 * 1024)).toString("utf8");
-  let postJson; try { postJson = JSON.parse(postText); } catch (_) { postJson = {}; }
-  if (postJson.ret !== 0 || !postJson.operationId) {
-    const error = new Error(`${siteName}导出请求失败(ret=${postJson.ret ?? "未知"})`);
-    error.code = "TENCENT_DOCS_EXPORT_FAILED";
-    throw error;
-  }
-  const fileUrl = await tencentPollExportFileUrl("doc.weixin.qq.com", postJson.operationId, url, cookie, fetchImpl, siteName, { withTimestamp: true });
-  await tencentDownloadExportBuffer(fileUrl, fetchImpl, siteName, { padType, exportType, initialTitle: "", localId, author: "", publishedAt: "" });
+// 下载 COS 预签名直链(无需会话 cookie)并组装 binary 错误抛出
+async function downloadExportBuffer(fileUrl, fetchImpl, siteName, { padType, exportType, initialTitle, localId, author, publishedAt, binaryCode }) {
+  const dlResp = await fetchImpl(fileUrl, { headers: { "user-agent": EXPORT_UA } });
+  if (!dlResp.ok) throw new Error(`${siteName}导出文件下载失败 HTTP ${dlResp.status}`);
+  const buffer = typeof dlResp.arrayBuffer === "function"
+    ? Buffer.from(await dlResp.arrayBuffer())
+    : await readLimitedBody(dlResp, EXPORT_MAX_BYTES);
+  const disposition = typeof dlResp.headers?.get === "function" ? dlResp.headers.get("content-disposition") : (dlResp.headers?.["content-disposition"] || "");
+  const fileName = parseExportFileName(disposition, initialTitle, localId, exportType.ext);
+  const error = new Error(`${siteName}(${padType}),已导出 ${exportType.ext}`);
+  error.code = binaryCode;
+  error.buffer = buffer;
+  error.fileName = fileName;
+  error.meta = { padType, mimeType: exportType.mime, author: author || "", publishedAt: publishedAt || "" };
+  throw error;
 }
 
 // 会话 cookie 拉取 opendoc 并解析;任何失败抛错,由调用方回落渲染提取
@@ -562,7 +460,10 @@ async function extractDoc(url, { sessionService, siteName, collectSessionCookies
 
 module.exports = {
   extractDoc,
-  extractTencentFileExport,
+  EXPORT_PAD_TYPES,
+  EXPORT_UA,
+  pollExportFileUrl,
+  downloadExportBuffer,
   parseTencentDocPayload,
   stripTencentChrome,
   tencentDocApiUrl,
