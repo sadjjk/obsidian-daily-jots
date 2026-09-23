@@ -587,6 +587,7 @@ class WebClipper {
             identityUrl: data.identityUrl,
             images: data.images,
             publishedAt: data.publishedAt,
+            videoUrl: data.videoUrl || "",
             extractionStatus: data.extractionStatus,
           };
         }
@@ -640,6 +641,7 @@ class WebClipper {
             identityUrl: data.identityUrl,
             images: data.images,
             publishedAt: data.publishedAt,
+            videoUrl: data.videoUrl || "",
             extractionStatus: data.extractionStatus,
           };
         }
@@ -1154,6 +1156,27 @@ class WebClipper {
         } else failures.push(`${result.imageUrl}: ${result.error}`);
       }
     }
+    let videoNotice = "";
+    if (this.settings.capture.downloadWebVideos && article.videoUrl) {
+      try {
+        const videoDeadline = Number(options.deadline) || Date.now() + (Math.max(10, Number(this.settings.capture.webClipBudgetSeconds) || 75) * 1000);
+        const remainingVideo = videoDeadline - Date.now();
+        if (remainingVideo <= 0) throw new Error("skipped because the article time budget was exhausted");
+        const downloaded = await this.download(article.videoUrl, {
+          referrer: article.url,
+          maxBytes: (Number(this.settings.capture.maxVideoMb) || 100) * 1024 * 1024,
+          timeoutMs: Math.min(60_000, remainingVideo),
+          requestAttempts: 2,
+          shouldRetry: (error) => error?.code === "ECONNRESET",
+          fileName: `${stem}-video`,
+        });
+        if (!downloaded.mimeType.startsWith("video/")) throw new Error(`not a video (${downloaded.mimeType})`);
+        const localPath = await this.writer.saveBinary(assetFolder, downloaded.fileName, downloaded.buffer, downloaded.mimeType);
+        markdown = markdown.split(article.videoUrl).join(encodeURI(localPath));
+      } catch (error) {
+        videoNotice = `视频未保存到本地(${error?.message || error}),已保留远程链接`;
+      }
+    }
     const frontmatter = [
       "---",
       `title: ${yamlString(title)}`,
@@ -1171,6 +1194,7 @@ class WebClipper {
       "",
     ].join("\n");
     const warningParts = [];
+    if (videoNotice) warningParts.push(videoNotice);
     if (skippedImages.length) warningParts.push(`${skippedImages.length} 张图片超出张数上限,已保留远程地址`);
     if (failures.length) warningParts.push(`${failures.length} 张图片未能本地保存,正文中保留远程地址`);
     if (fileFailures.length) warningParts.push(`${fileFailures.length} 个原文件未能本地保存`);

@@ -559,6 +559,20 @@ class DiarySettingTab extends PluginSettingTab {
         this.plugin.settings.capture.maxWebImages = Math.min(100, Math.max(1, Number(value) || 30)); await this.plugin.saveSettings();
       });
     });
+    new Setting(rules).setName(this.tr("保存网页视频", "Save web videos")).setDesc(this.tr(
+      "开启后剪藏时下载视频到网页附件目录（小红书/抖音等已支持提取的平台）；超限或失败保留远程链接。",
+      "Downloads videos into the web-attachment folder when clipping (Xiaohongshu/Douyin supported); keeps the remote link when over limit or failed.",
+    )).addToggle((toggle) => toggle
+      .setValue(this.plugin.settings.capture.downloadWebVideos === true)
+      .onChange(async (value) => {
+        this.plugin.settings.capture.downloadWebVideos = value; await this.plugin.saveSettings();
+      }));
+    new Setting(rules).setName(this.tr("单个视频上限", "Per-video limit")).setDesc("1–500 MB").addText((input) => {
+      input.inputEl.setAttr("type", "number"); input.inputEl.setAttr("min", "1"); input.inputEl.setAttr("max", "500");
+      input.setValue(String(this.plugin.settings.capture.maxVideoMb)).onChange(async (value) => {
+        this.plugin.settings.capture.maxVideoMb = Math.min(500, Math.max(1, Number(value) || 100)); await this.plugin.saveSettings();
+      });
+    });
     new Setting(rules).setName(this.tr("单条消息网页处理预算", "Web-processing budget per message")).setDesc(this.tr(
       "15–180 秒，默认 75 秒；到时后保存已完成的正文和图片，其余项目明确标记失败。",
       "15–180 seconds, default 75. Completed text and images are kept; unfinished items are reported explicitly.",

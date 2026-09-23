@@ -237,6 +237,60 @@ test("web image localization is concurrent, bounded, and reuses the stable clipp
   assert.equal(trashed.includes(second.notePath), false);
 });
 
+test("web video download is opt-in, replaces the link, and degrades softly", async () => {
+  const baseSettings = (over = {}) => ({
+    storage: { clippingFolder: "Clippings", attachmentFolder: "Attachments" },
+    capture: { downloadWebImages: false, maxFileMb: 20, maxWebImages: 3, webClipBudgetSeconds: 75, ...over },
+  });
+  const writer = {
+    findTextBySuffix: () => "",
+    saveBinary: async (folder, name, buffer, mime) => `${folder}/${name}${mime === "video/mp4" ? ".mp4" : ".bin"}`,
+    upsertText: async (path, content) => { writes.push({ path, content }); },
+  };
+  const videoArticle = (videoUrl) => ({
+    url: "https://www.xiaohongshu.com/explore/noteV",
+    identityUrl: "https://www.xiaohongshu.com/explore/noteV",
+    title: "Video note",
+    siteName: "小红书 / REDnote",
+    byline: "Alice",
+    markdown: `[视频](${videoUrl})`,
+    images: [],
+    videoUrl,
+    extractionMethod: "xiaohongshu-initial-state",
+    extractionStatus: "complete",
+  });
+  const writes = [];
+
+  // ① 默认关闭:不发起视频下载,链接原样保留
+  let videoDownloads = 0;
+  const off = new WebClipper(writer, baseSettings(), {
+    download: async () => { videoDownloads += 1; return { buffer: Buffer.alloc(8), mimeType: "video/mp4", fileName: "v" }; },
+  });
+  const offResult = await off.saveArticle(videoArticle("https://sns-video-qc.xhscdn.com/v.mp4?sign=1"), { timestamp: new Date("2026-09-23T00:00:00Z") });
+  assert.equal(videoDownloads, 0);
+  assert.match(writes.at(-1).content, /https:\/\/sns-video-qc\.xhscdn\.com\/v\.mp4\?sign=1/);
+
+  // ② 开启+下载成功:正文链接替换为本地 mp4
+  const on = new WebClipper(writer, baseSettings({ downloadWebVideos: true, maxVideoMb: 100 }), {
+    download: async () => { videoDownloads += 1; return { buffer: Buffer.alloc(1024), mimeType: "video/mp4", fileName: "Video note-video" }; },
+  });
+  const onResult = await on.saveArticle(videoArticle("https://sns-video-qc.xhscdn.com/v2.mp4?sign=2"), { timestamp: new Date("2026-09-23T00:00:00Z") });
+  assert.equal(videoDownloads, 1);
+  assert.match(writes.at(-1).content, /Attachments\/Web\/2026-09-23\/.*-video\.mp4/);
+  assert.doesNotMatch(writes.at(-1).content, /sign=2/);
+  assert.doesNotMatch(writes.at(-1).content, /视频未保存到本地/);
+
+  // ③ 超过单个视频上限:软降级,保留远程链接并 warning
+  const over = new WebClipper(writer, baseSettings({ downloadWebVideos: true, maxVideoMb: 1 }), {
+    download: async () => { videoDownloads += 1; const e = new Error("Remote file exceeds 1048576 bytes"); throw e; },
+  });
+  const overResult = await over.saveArticle(videoArticle("https://sns-video-qc.xhscdn.com/v3.mp4?sign=3"), { timestamp: new Date("2026-09-23T00:00:00Z") });
+  assert.equal(videoDownloads, 2);
+  assert.match(writes.at(-1).content, /视频未保存到本地/);
+  assert.match(writes.at(-1).content, /https:\/\/sns-video-qc\.xhscdn\.com\/v3\.mp4\?sign=3/);
+
+});
+
 test("unknown forum engines and generic comment markup receive a conversation fallback", () => {
   const html = `<!doctype html><html><head><meta name="generator" content="Flarum"></head><body><main><article><h1>Extensible forum</h1><p>${"Main technical discussion. ".repeat(12)}</p></article><div class="comment"><strong>Alice</strong><p>First useful reply with enough detail.</p></div><div class="comment"><strong>Bob</strong><p>Second useful reply with another perspective.</p></div></main></body></html>`;
   assert.equal(detectCommunityPage(html, "https://forum.example.org/d/123"), true);
