@@ -292,7 +292,7 @@ class DiarySettingTab extends PluginSettingTab {
     enabled.createSpan({ text: this.locale() === "en" ? "" : " 个" });
     const local = metrics.createDiv({ cls: "od-metric od-metric-wide" });
     local.createSpan({ cls: "od-metric-label", text: this.tr("日记目录", "Daily notes folder") });
-    local.createEl("code", { text: this.plugin.settings.storage.diaryFolder });
+    local.createEl("code", { text: `${this.plugin.settings.storage.rootFolder}/${this.plugin.settings.storage.diaryFolder}` });
 
     const star = parent.createDiv({ cls: "od-star-card" });
     const starIcon = star.createSpan({ cls: "od-star-icon" });
@@ -449,15 +449,20 @@ class DiarySettingTab extends PluginSettingTab {
     ));
     const storage = parent.createDiv({ cls: "od-panel" });
     storage.createEl("h3", { text: this.tr("Vault 目录", "Vault folders") });
-    for (const [key, name, desc] of (this.locale() === "en" ? [
-      ["diaryFolder", "Daily notes", "Creates YYYY-MM-DD.md using the local date"],
-      ["clippingFolder", "Web clippings root", "Root folder; each clipping type below can use its own subfolder"],
-      ["attachmentFolder", "Local attachments", "Stores chat attachments and web images in separate subfolders"],
+    const folderRows = (this.locale() === "en" ? [
+      ["rootFolder", "Root folder", "Everything below is stored relative to this folder; change it here and the whole layout moves"],
+      ["diaryFolder", "Daily notes", "Creates YYYY-MM-DD.md under the root using the local date"],
+      ["clippingFolder", "Web clippings", "Under the root; each clipping type below can use its own subfolder"],
+      ["chatAttachmentFolder", "Chat attachments", "Under the root; stores chat images, files, audio and video"],
+      ["webAttachmentFolder", "Web attachments", "Under the root; stores clipped images, videos and exported files"],
     ] : [
-      ["diaryFolder", "每日笔记", "按本地日期生成 YYYY-MM-DD.md"],
-      ["clippingFolder", "网页剪藏根目录", "总目录；下面每种剪藏类型可再设子目录"],
-      ["attachmentFolder", "本地附件", "聊天附件与网页图片分目录保存"],
-    ])) {
+      ["rootFolder", "根目录", "以下各项均相对此目录保存；改这里一处生效，整体目录随之移动"],
+      ["diaryFolder", "每日笔记", "相对根目录；按本地日期生成 YYYY-MM-DD.md"],
+      ["clippingFolder", "网页剪藏", "相对根目录；下面每种剪藏类型可再设子目录"],
+      ["chatAttachmentFolder", "聊天附件", "相对根目录；保存聊天图片、文件、音频和视频"],
+      ["webAttachmentFolder", "网页附件", "相对根目录；保存剪藏图片、视频和导出文件"],
+    ]);
+    for (const [key, name, desc] of folderRows) {
       new Setting(storage).setName(name).setDesc(desc).addText((input) => input.setValue(this.plugin.settings.storage[key]).onChange(async (value) => {
         this.plugin.settings.storage[key] = value.trim(); await this.plugin.saveSettings();
       }));

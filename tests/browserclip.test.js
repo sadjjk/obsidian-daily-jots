@@ -55,7 +55,7 @@ test("WebClipper uses an injected persistent renderer for dynamic documents", as
     };
   } };
   const settings = {
-    storage: { clippingFolder: "Clips", attachmentFolder: "Assets" },
+    storage: { rootFolder: "Omnichannel Diary", clippingFolder: "Clips", chatAttachmentFolder: "Assets/Chat", webAttachmentFolder: "Assets/Web" },
     capture: { renderDynamicPages: true, downloadWebImages: false, maxFileMb: 20 },
   };
   const clipper = new WebClipper({}, settings, { sessionManager, fetch: async () => { throw new Error("offline"); } });
@@ -74,7 +74,7 @@ test("WebClipper never falls back to a short static page after virtual document 
     throw error;
   } };
   const settings = {
-    storage: { clippingFolder: "Clips", attachmentFolder: "Assets" },
+    storage: { rootFolder: "Omnichannel Diary", clippingFolder: "Clips", chatAttachmentFolder: "Assets/Chat", webAttachmentFolder: "Assets/Web" },
     capture: { renderDynamicPages: true, downloadWebImages: false, maxFileMb: 20 },
   };
   const clipper = new WebClipper({}, settings, { sessionManager });
@@ -92,7 +92,7 @@ test("tencent documents that render without content ask the user to log in", asy
     text: "登录后查看文档",
   }) };
   const settings = {
-    storage: { clippingFolder: "Clips", attachmentFolder: "Assets" },
+    storage: { rootFolder: "Omnichannel Diary", clippingFolder: "Clips", chatAttachmentFolder: "Assets/Chat", webAttachmentFolder: "Assets/Web" },
     capture: { renderDynamicPages: true, downloadWebImages: false, maxFileMb: 20 },
   };
   const clipper = new WebClipper({}, settings, { sessionManager, fetch: async () => { throw new Error("offline"); } });

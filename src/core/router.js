@@ -1,7 +1,7 @@
 "use strict";
 
 const { translate } = require("./i18n");
-const { extractUrls } = require("./util");
+const { extractUrls, joinRoot } = require("./util");
 const { getChannelMeta } = require("./settings");
 const {
   formatRemoteAckText,
@@ -278,7 +278,7 @@ class CaptureRouter {
     const storage = this.getStorage() || {};
     const remote = this.getRemoteSearch() || {};
     return {
-      diaryFolder: storage.diaryFolder,
+      diaryFolder: joinRoot(storage.rootFolder, storage.diaryFolder),
       remoteSearchEnabled: remote.enabled === true,
       remoteExportFormat: remote.exportFormat || "md",
     };

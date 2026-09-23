@@ -48,6 +48,15 @@ function localIso(input = new Date()) {
   return localDateParts(input).iso;
 }
 
+// 相对根目录拼接:rootFolder("Omnichannel Diary") + relative("Daily") → "Omnichannel Diary/Daily";
+// relative 为空时返回根本身;双方斜杠均归一,避免重复 "/"。
+function joinRoot(rootFolder, relative) {
+  const root = String(rootFolder || "").replace(/\/+$/, "");
+  const rel = String(relative || "").replace(/^\/+|\/+$/g, "");
+  if (!rel) return root;
+  return root ? `${root}/${rel}` : rel;
+}
+
 function extractUrls(text) {
   const matches = String(text || "").match(/https?:\/\/[^\s<>"'）)\]]+/gi) || [];
   return [...new Set(matches.map((url) => url.replace(/[.,;!?，。；！？]+$/, "")))];
@@ -135,4 +144,4 @@ function toErrorMessage(error) {
   return String(error?.message || error || "Unknown error");
 }
 
-module.exports = { assertSafeRemoteUrl, encodeMultipart, exportMimeType, extractUrls, isPrivateHost, localDateParts, localIso, markdownEscape, mimeExtension, safeFileName, shortHash, toErrorMessage, yamlString };
+module.exports = { assertSafeRemoteUrl, encodeMultipart, exportMimeType, extractUrls, isPrivateHost, joinRoot, localDateParts, localIso, markdownEscape, mimeExtension, safeFileName, shortHash, toErrorMessage, yamlString };

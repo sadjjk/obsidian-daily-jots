@@ -181,7 +181,7 @@ test("WeChat long URLs ignore volatile parameters and match short links when pag
 
 test("web image localization is concurrent, bounded, and reuses the stable clipping path", async () => {
   const settings = {
-    storage: { clippingFolder: "Clippings", attachmentFolder: "Attachments" },
+    storage: { rootFolder: "Omnichannel Diary", clippingFolder: "Clippings", chatAttachmentFolder: "Attachments/Chat", webAttachmentFolder: "Attachments/Web" },
     capture: { downloadWebImages: true, maxFileMb: 20, maxWebImages: 3, webClipBudgetSeconds: 75 },
   };
   let existingPath = "";
@@ -232,14 +232,14 @@ test("web image localization is concurrent, bounded, and reuses the stable clipp
   assert.equal(peak > 1 && peak <= 4, true);
   assert.equal(writes.length, 2);
   assert.ok(trashed.includes(first.notePath));
-  const oldImages = trashed.filter((p) => p.startsWith("Attachments/Web/2026-08-31/"));
+  const oldImages = trashed.filter((p) => p.startsWith("Omnichannel Diary/Attachments/Web/2026-08-31/"));
   assert.equal(oldImages.length, 3);
   assert.equal(trashed.includes(second.notePath), false);
 });
 
 test("web video download is opt-in, replaces the link, and degrades softly", async () => {
   const baseSettings = (over = {}) => ({
-    storage: { clippingFolder: "Clippings", attachmentFolder: "Attachments" },
+    storage: { rootFolder: "Omnichannel Diary", clippingFolder: "Clippings", chatAttachmentFolder: "Attachments/Chat", webAttachmentFolder: "Attachments/Web" },
     capture: { downloadWebImages: false, maxFileMb: 20, maxWebImages: 3, webClipBudgetSeconds: 75, ...over },
   });
   const writer = {
@@ -302,7 +302,7 @@ test("unknown forum engines and generic comment markup receive a conversation fa
 
 function xhsTestSettings() {
   return {
-    storage: { clippingFolder: "Clippings", attachmentFolder: "Attachments" },
+    storage: { rootFolder: "Omnichannel Diary", clippingFolder: "Clippings", chatAttachmentFolder: "Attachments/Chat", webAttachmentFolder: "Attachments/Web" },
     capture: { renderDynamicPages: true, webClipBudgetSeconds: 75, downloadWebImages: false },
   };
 }
@@ -348,7 +348,7 @@ test("Xiaohongshu notes clip through the injected fetch without browser sessions
 });
 
 function zhihuTestSettings() {
-  return { storage: { clippingFolder: "Clippings", attachmentFolder: "Attachments" }, capture: { renderDynamicPages: true, webClipBudgetSeconds: 75, downloadWebImages: false } };
+  return { storage: { rootFolder: "Omnichannel Diary", clippingFolder: "Clippings", chatAttachmentFolder: "Attachments/Chat", webAttachmentFolder: "Attachments/Web" }, capture: { renderDynamicPages: true, webClipBudgetSeconds: 75, downloadWebImages: false } };
 }
 
 function zhihuAnswerHtml() {
@@ -633,7 +633,7 @@ test("stealth evasions ship as a non-empty bundled script", () => {
 });
 
 function dingtalkTestSettings() {
-  return { storage: { clippingFolder: "Clippings", attachmentFolder: "Attachments" }, capture: { renderDynamicPages: true, webClipBudgetSeconds: 75, downloadWebImages: true } };
+  return { storage: { rootFolder: "Omnichannel Diary", clippingFolder: "Clippings", chatAttachmentFolder: "Attachments/Chat", webAttachmentFolder: "Attachments/Web" }, capture: { renderDynamicPages: true, webClipBudgetSeconds: 75, downloadWebImages: true } };
 }
 
 function dingtalkPackageJson() {

@@ -42,7 +42,7 @@ test("URLs are classified by source family before they are saved", () => {
 
 test("document service clip labels the platform in filename and YAML platform", async () => {
   const settings = {
-    storage: { clippingFolder: "Clippings", attachmentFolder: "Attachments" },
+    storage: { rootFolder: "Omnichannel Diary", clippingFolder: "Clippings", chatAttachmentFolder: "Attachments/Chat", webAttachmentFolder: "Attachments/Web" },
     capture: { downloadWebImages: false, clipRules: defaultClipRules() },
   };
   const writes = [];
@@ -63,7 +63,7 @@ test("document service clip labels the platform in filename and YAML platform", 
     extractionMethod: "rendered-document-browser",
     extractionStatus: "complete",
   }, { timestamp: new Date("2026-09-18T00:00:00Z") });
-  assert.match(saved.notePath, /^Clippings\/Documents\/2026-09-18\/2026-09-18-飞书文档-AI鹊桥-/);
+  assert.match(saved.notePath, /^Omnichannel Diary\/Clippings\/Documents\/2026-09-18\/2026-09-18-飞书文档-AI鹊桥-/);
   assert.doesNotMatch(saved.notePath, /普通网页/);
   assert.match(writes[0].content, /platform: "飞书文档"/);
 });
@@ -71,7 +71,7 @@ test("document service clip labels the platform in filename and YAML platform", 
 test("disabled clipping types stay in the daily note and skip extraction", async () => {
   const value = normalizeSettings({
     schemaVersion: 1,
-    storage: { diaryFolder: "日记", clippingFolder: "剪藏", attachmentFolder: "附件" },
+    storage: { rootFolder: "Omnichannel Diary", diaryFolder: "日记", clippingFolder: "剪藏", chatAttachmentFolder: "附件/Chat", webAttachmentFolder: "附件/Web" },
     capture: { autoClipLinks: true, clipRules: { articles: { enabled: false } } },
   });
   const writes = [];
@@ -95,7 +95,7 @@ test("disabled clipping types stay in the daily note and skip extraction", async
 
 test("enabled clipping types write into typed subfolders under the clipping root", async () => {
   const settings = {
-    storage: { clippingFolder: "Clippings", attachmentFolder: "Attachments" },
+    storage: { rootFolder: "Omnichannel Diary", clippingFolder: "Clippings", chatAttachmentFolder: "Attachments/Chat", webAttachmentFolder: "Attachments/Web" },
     capture: { downloadWebImages: false, clipRules: defaultClipRules() },
   };
   const writes = [];
@@ -115,16 +115,16 @@ test("enabled clipping types write into typed subfolders under the clipping root
     extractionMethod: "readability",
     extractionStatus: "complete",
   }, { timestamp: new Date("2026-09-02T00:00:00Z") });
-  assert.match(saved.notePath, /^Clippings\/Articles\/2026-09-02\/2026-09-02-普通网页-Example-/);
+  assert.match(saved.notePath, /^Omnichannel Diary\/Clippings\/Articles\/2026-09-02\/2026-09-02-普通网页-Example-/);
   assert.match(writes[0].content, /platform: "普通网页"/);
   assert.equal(isClipFamilyEnabled(settings, "articles"), true);
-  assert.equal(resolveClipFolder(settings, "social"), "Clippings/Social");
+  assert.equal(resolveClipFolder(settings, "social"), "Omnichannel Diary/Clippings/Social");
   assert.equal(normalizeClipRules({ articles: { folder: " /News\\\\Blogs/ " } }).articles.folder, "News/Blogs");
 });
 
 test("mapped source lands in Social with source label in filename and platform", async () => {
   const settings = {
-    storage: { clippingFolder: "Clippings", attachmentFolder: "Attachments" },
+    storage: { rootFolder: "Omnichannel Diary", clippingFolder: "Clippings", chatAttachmentFolder: "Attachments/Chat", webAttachmentFolder: "Attachments/Web" },
     capture: { downloadWebImages: true, clipRules: defaultClipRules() },
   };
   const writes = [];
@@ -148,10 +148,10 @@ test("mapped source lands in Social with source label in filename and platform",
     extractionMethod: "readability",
     extractionStatus: "complete",
   }, { timestamp: new Date("2026-09-02T00:00:00Z") });
-  assert.match(saved.notePath, /^Clippings\/Social\/2026-09-02\/2026-09-02-IT之家-IT之家新闻-/);
+  assert.match(saved.notePath, /^Omnichannel Diary\/Clippings\/Social\/2026-09-02\/2026-09-02-IT之家-IT之家新闻-/);
   assert.match(writes[0].content, /platform: "IT之家"/);
   assert.equal(binaries.length, 1);
   assert.match(binaries[0].name, /^IT之家新闻-img-01$/);
-  assert.match(binaries[0].folder, /^Attachments\/Web\/2026-09-02\/2026-09-02-IT之家-IT之家新闻-[0-9a-f]+$/);
+  assert.match(binaries[0].folder, /^Omnichannel Diary\/Attachments\/Web\/2026-09-02\/2026-09-02-IT之家-IT之家新闻-[0-9a-f]+$/);
   assert.ok(writes[0].content.includes(encodeURI(binaries[0].folder + "/" + binaries[0].name + ".png")));
 });

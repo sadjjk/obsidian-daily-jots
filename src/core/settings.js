@@ -45,9 +45,11 @@ const DEFAULT_SETTINGS = {
   schemaVersion: 1,
   ui: { language: "auto" },
   storage: {
-    diaryFolder: "Omnichannel Diary/Daily",
-    clippingFolder: "Omnichannel Diary/Clippings",
-    attachmentFolder: "Omnichannel Diary/Attachments",
+    rootFolder: "Omnichannel Diary",
+    diaryFolder: "Daily",
+    clippingFolder: "Clippings",
+    chatAttachmentFolder: "Attachments/Chat",
+    webAttachmentFolder: "Attachments/Web",
     addSourceMetadata: true,
   },
   capture: {
@@ -102,9 +104,25 @@ function sanitizeFolder(value, fallback) {
 function normalizeSettings(saved) {
   const source = saved?.schemaVersion === 1 ? saved : migrateLegacySettings(saved || {});
   const value = deepMerge(DEFAULT_SETTINGS, source);
-  value.storage.diaryFolder = sanitizeFolder(value.storage.diaryFolder, DEFAULT_SETTINGS.storage.diaryFolder);
-  value.storage.clippingFolder = sanitizeFolder(value.storage.clippingFolder, DEFAULT_SETTINGS.storage.clippingFolder);
-  value.storage.attachmentFolder = sanitizeFolder(value.storage.attachmentFolder, DEFAULT_SETTINGS.storage.attachmentFolder);
+  // 旧配置迁移:storage 各项曾含根前缀(如 "Omnichannel Diary/Daily"),统一剥离转为相对值;
+  // attachmentFolder 派生 chat/web 附件路径后删除。deepMerge 以 defaults 键为基准,旧键需从原始输入直取。
+  const legacyRoot = sanitizeFolder(source.storage?.rootFolder, DEFAULT_SETTINGS.storage.rootFolder);
+  const stripLegacyRoot = (raw, fallback) => {
+    const cleaned = sanitizeFolder(raw, fallback);
+    return cleaned === legacyRoot ? "" : cleaned.startsWith(`${legacyRoot}/`) ? cleaned.slice(legacyRoot.length + 1) : cleaned;
+  };
+  if (typeof source.storage?.attachmentFolder === "string" && source.storage.attachmentFolder.trim()) {
+    const legacyAttachment = stripLegacyRoot(source.storage.attachmentFolder, "");
+    value.storage.chatAttachmentFolder = legacyAttachment ? `${legacyAttachment}/Chat` : DEFAULT_SETTINGS.storage.chatAttachmentFolder;
+    value.storage.webAttachmentFolder = legacyAttachment ? `${legacyAttachment}/Web` : DEFAULT_SETTINGS.storage.webAttachmentFolder;
+  } else {
+    value.storage.chatAttachmentFolder = stripLegacyRoot(value.storage.chatAttachmentFolder, DEFAULT_SETTINGS.storage.chatAttachmentFolder);
+    value.storage.webAttachmentFolder = stripLegacyRoot(value.storage.webAttachmentFolder, DEFAULT_SETTINGS.storage.webAttachmentFolder);
+  }
+  value.storage.rootFolder = legacyRoot;
+  value.storage.diaryFolder = stripLegacyRoot(source.storage?.diaryFolder ?? value.storage.diaryFolder, DEFAULT_SETTINGS.storage.diaryFolder);
+  value.storage.clippingFolder = stripLegacyRoot(source.storage?.clippingFolder ?? value.storage.clippingFolder, DEFAULT_SETTINGS.storage.clippingFolder);
+  delete value.storage.attachmentFolder;
   value.capture.maxFileMb = Math.min(100, Math.max(1, Number(value.capture.maxFileMb) || 20));
   value.capture.maxWebImages = Math.min(100, Math.max(1, Number(value.capture.maxWebImages) || 30));
   value.capture.downloadWebVideos = value.capture.downloadWebVideos === true;
@@ -137,9 +155,11 @@ function migrateLegacySettings(saved) {
     schemaVersion: 1,
     ui: { language: "auto" },
     storage: {
+      rootFolder: DEFAULT_SETTINGS.storage.rootFolder,
       diaryFolder: legacySettings.diaryFolder || DEFAULT_SETTINGS.storage.diaryFolder,
       clippingFolder: legacySettings.webClipFolder || DEFAULT_SETTINGS.storage.clippingFolder,
-      attachmentFolder: DEFAULT_SETTINGS.storage.attachmentFolder,
+      chatAttachmentFolder: DEFAULT_SETTINGS.storage.chatAttachmentFolder,
+      webAttachmentFolder: DEFAULT_SETTINGS.storage.webAttachmentFolder,
       addSourceMetadata: legacySettings.includeChannelLabel !== false,
     },
     capture: {

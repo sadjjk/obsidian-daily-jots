@@ -115,6 +115,29 @@ test("legacy data keeps user folders and WeChat authorization while removing obs
   assert.equal(JSON.stringify(settings).includes("unused"), false);
 });
 
+test("root-relative migration strips the legacy root prefix and derives split attachment folders", () => {
+  const settings = normalizeSettings({
+    schemaVersion: 1,
+    storage: {
+      diaryFolder: "Omnichannel Diary/Daily",
+      clippingFolder: "Omnichannel Diary/Clippings",
+      attachmentFolder: "Omnichannel Diary/Attachments",
+    },
+  });
+  assert.equal(settings.storage.rootFolder, "Omnichannel Diary");
+  assert.equal(settings.storage.diaryFolder, "Daily");
+  assert.equal(settings.storage.clippingFolder, "Clippings");
+  assert.equal(settings.storage.chatAttachmentFolder, "Attachments/Chat");
+  assert.equal(settings.storage.webAttachmentFolder, "Attachments/Web");
+  assert.equal(settings.storage.attachmentFolder, undefined);
+  // 自定义根目录时,含自定义前缀的旧值同样剥离(拼接后路径不变:MyNotes/Journal)
+  const custom = normalizeSettings({
+    schemaVersion: 1,
+    storage: { rootFolder: "MyNotes", diaryFolder: "MyNotes/Journal" },
+  });
+  assert.equal(custom.storage.diaryFolder, "Journal");
+});
+
 test("channels with incomplete required credentials are not left enabled", () => {
   const settings = normalizeSettings({
     schemaVersion: 1,

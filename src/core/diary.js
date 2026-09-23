@@ -2,7 +2,7 @@
 
 const { downloadRemoteFile, decodeDataUrl } = require("./network");
 const { WebClipper } = require("../clip/webclip");
-const { extractUrls, localDateParts, markdownEscape, safeFileName, shortHash } = require("./util");
+const { extractUrls, joinRoot, localDateParts, markdownEscape, safeFileName, shortHash } = require("./util");
 const { classifyClipFamily, isClipFamilyEnabled } = require("../clip/lib/clip-rules");
 
 function normalizeDiaryMessage(value) {
@@ -118,7 +118,7 @@ class DiaryService {
     if (envelope.systemNotice) {
       return {
         systemNotice: true,
-        diaryFolder: settings.storage.diaryFolder,
+        diaryFolder: joinRoot(settings.storage.rootFolder, settings.storage.diaryFolder),
         clips: [],
         clipFailures: ["企业微信文件防泄漏限制，机器人无法获取文件内容"],
         attachmentFailures: [],
@@ -127,8 +127,9 @@ class DiaryService {
     }
 
     const date = localDateParts(envelope.timestamp || new Date());
-    const diaryPath = `${settings.storage.diaryFolder}/${date.day}.md`;
-    const attachmentFolder = `${settings.storage.attachmentFolder}/Chat/${date.day}/${envelope.channel}`;
+    const diaryFolder = joinRoot(settings.storage.rootFolder, settings.storage.diaryFolder);
+    const diaryPath = `${diaryFolder}/${date.day}.md`;
+    const attachmentFolder = `${joinRoot(settings.storage.rootFolder, settings.storage.chatAttachmentFolder)}/${date.day}/${envelope.channel}`;
     const attachmentLines = [];
     const attachmentFailures = [];
     const clips = [];
@@ -207,13 +208,13 @@ class DiaryService {
     return {
       file,
       diaryPath,
-      diaryFolder: settings.storage.diaryFolder,
-      clippingFolder: settings.storage.clippingFolder,
+      diaryFolder,
+      clippingFolder: joinRoot(settings.storage.rootFolder, settings.storage.clippingFolder),
       clips,
       savedAttachments: attachmentLines.length,
       attachmentFailures,
       clipFailures,
-      attachmentChatFolder: `${settings.storage.attachmentFolder}/Chat`,
+      attachmentChatFolder: joinRoot(settings.storage.rootFolder, settings.storage.chatAttachmentFolder),
       messageKey,
     };
   }

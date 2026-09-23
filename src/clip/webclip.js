@@ -4,7 +4,7 @@ const { Readability } = require("@mozilla/readability");
 const { parseHTML } = require("linkedom");
 const { extractCommunityPost } = require("./social-media/communityclip");
 const { decodeHtmlBuffer, downloadRemoteFile, readLimitedBody, safeFetch } = require("../core/network");
-const { localDateParts, localIso, safeFileName, shortHash, yamlString } = require("../core/util");
+const { joinRoot, localDateParts, localIso, safeFileName, shortHash, yamlString } = require("../core/util");
 const { extractRedditPost, parseRedditUrl } = require("./social-media/redditclip");
 const { COMMUNITY_SERVICES, DOCUMENT_SERVICES, communityServiceForUrl, documentServiceForUrl, isLikelyPdfUrl, renderServiceForUrl } = require("./lib/web-platforms");
 const { extractDingtalkDoc } = require("./cloud-docs/dingtalk-docs");
@@ -1111,7 +1111,7 @@ class WebClipper {
     let savedImages = 0;
     let savedFiles = 0;
     const savedFilePaths = [];
-    const assetFolder = `${this.settings.storage.attachmentFolder}/Web/${date.day}/${date.day}-${labelForPath}-${stem}-${shortHash(identityUrl)}`;
+    const assetFolder = `${joinRoot(this.settings.storage.rootFolder, this.settings.storage.webAttachmentFolder)}/${date.day}/${date.day}-${labelForPath}-${stem}-${shortHash(identityUrl)}`;
     for (const [index, file] of (article.binaryFiles || []).entries()) {
       try {
         const localPath = await this.writer.saveBinary(assetFolder, file.fileName || `source-${index + 1}`, file.buffer, file.mimeType);
@@ -1209,7 +1209,7 @@ class WebClipper {
         for (const linkMatch of String(previousMarkdown || "").matchAll(/\]\(([^)\s]+)\)/g)) {
           let localPath;
           try { localPath = decodeURI(linkMatch[1] || ""); } catch (_) { localPath = linkMatch[1] || ""; }
-          if (localPath && localPath.startsWith(this.settings.storage.attachmentFolder)) {
+          if (localPath && localPath.startsWith(joinRoot(this.settings.storage.rootFolder, this.settings.storage.webAttachmentFolder))) {
             await this.writer.trashFile(localPath).catch(() => {});
           }
         }

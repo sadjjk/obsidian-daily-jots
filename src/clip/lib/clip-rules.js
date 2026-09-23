@@ -7,6 +7,7 @@ const { isWeiboArticleUrl, isWeiboSearchUrl, isWeiboStatusUrl } = require("../so
 const { isDouyinUrl } = require("../social-media/douyinclip");
 const { sourceNameForUrl } = require("./source-names");
 const { documentServiceForUrl } = require("./web-platforms");
+const { joinRoot } = require("../../core/util");
 
 const CLIP_FAMILY_IDS = ["articles", "social", "documents"];
 
@@ -103,9 +104,10 @@ function isClipFamilyEnabled(settings, family) {
 
 function resolveClipFolder(settings, family) {
   const id = CLIP_FAMILIES[family] ? family : "articles";
-  const root = String(settings?.storage?.clippingFolder || "Omnichannel Diary/Clippings")
-    .replace(/\\/g, "/")
-    .replace(/^\/+|\/+$/g, "");
+  const root = joinRoot(
+    String(settings?.storage?.rootFolder || "Omnichannel Diary"),
+    String(settings?.storage?.clippingFolder || "Clippings"),
+  );
   const subfolder = normalizeClipRules(settings?.capture?.clipRules)[id].folder;
   return subfolder ? `${root}/${subfolder}` : root;
 }

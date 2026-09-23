@@ -7,7 +7,7 @@ const { WeChatChannel } = require("../src/channels/wechat");
 
 function settings() {
   return {
-    storage: { diaryFolder: "日记", clippingFolder: "剪藏", attachmentFolder: "附件", addSourceMetadata: true },
+    storage: { rootFolder: "Omnichannel Diary", diaryFolder: "日记", clippingFolder: "剪藏", chatAttachmentFolder: "附件/Chat", webAttachmentFolder: "附件/Web", addSourceMetadata: true },
     capture: { autoClipLinks: false, downloadWebImages: false, downloadChatAttachments: false, maxFileMb: 20 },
     runtime: { recentMessageIds: [], pendingReceipts: [] },
   };
@@ -104,7 +104,7 @@ test("chat PDF attachments are saved once and linked from the daily note without
   assert.equal(result.savedAttachments, 1);
   assert.equal(result.clips.length, 0);
   assert.equal(writes.length, 1);
-  assert.match(writes[0].content, /\[\[附件\/Chat\/2026-08-31\/feishu\/report\.pdf\]\]/);
+  assert.match(writes[0].content, /\[\[Omnichannel Diary\/附件\/Chat\/2026-08-31\/feishu\/report\.pdf\]\]/);
 });
 
 test("WeChat advances its sync cursor only after every message succeeds", async () => {
