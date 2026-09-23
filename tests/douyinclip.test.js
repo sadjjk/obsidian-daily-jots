@@ -15,7 +15,7 @@ const ITEM = {
   statistics: { digg_count: 965, comment_count: 54, collect_count: 550, share_count: 141 },
   video: {
     cover: { url_list: ["https://p3.douyinpic.com/cover.jpg"] },
-    play_addr: { url_list: ["https://www.douyin.com/aweme/v1/play/?video"] },
+    play_addr: { uri: "v2800fgi0000dap9jqvog65s0srhev1g", url_list: ["https://www.douyin.com/aweme/v1/play/?video"] },
   },
 };
 
@@ -80,7 +80,7 @@ test("two-hop extraction seeds ttwid then fetches detail API with the ticket", a
   assert.match(data.contentHtml, /#抖音前沿科技首发计划 #AI新星计划/);
   assert.doesNotMatch(data.contentHtml, /<a href="https:\/\/www\.douyin\.com\/search/);
   assert.match(data.contentHtml, /<img src="https:\/\/p3\.douyinpic\.com\/cover\.jpg"/);
-  assert.match(data.contentHtml, /<a href="https:\/\/www\.douyin\.com\/aweme\/v1\/play\/\?video">视频<\/a>/);
+  assert.match(data.contentHtml, /<a href="https:\/\/aweme\.snssdk\.com\/aweme\/v1\/playwm\/\?video_id=v2800fgi0000dap9jqvog65s0srhev1g&ratio=720p&line=0">视频<\/a>/);
 });
 
 test("single hop succeeds when the first response already carries data", async () => {

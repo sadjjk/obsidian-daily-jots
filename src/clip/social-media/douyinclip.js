@@ -99,11 +99,21 @@ function douyinItemHtml(item) {
   const parts = [formatDouyinTime(item?.create_time), ...stats];
   const meta = `<p class="douyin-item-meta">${parts.filter(Boolean).join(" · ")}</p>`;
   const cover = item?.video?.cover?.url_list?.find(Boolean) || item?.video?.dynamic_cover?.url_list?.find(Boolean) || "";
-  const play = item?.video?.play_addr?.url_list?.find(Boolean);
+  const play = douyinPermanentPlayUrl(item);
   const playLink = play ? `<p class="douyin-item-video"><a href="${play}">视频</a></p>` : "";
   const coverUrl = cover ? (cover.startsWith("//") ? `https:${cover}` : cover) : "";
   const coverHtml = coverUrl ? `<p class="douyin-item-cover"><img src="${coverUrl}" alt="封面" /></p>` : "";
   return `<section class="douyin-item"><h3 class="douyin-item-author">${author}</h3>${meta}${douyinTextHtml(item)}${coverHtml}${playLink}</section>`;
+}
+
+// 永久视频地址:snssdk playwm 端点按 video_id 实时 302 到新签名 CDN(签名服务端现生成,不过期)。
+// detail API 的 play_addr.url_list[0] 是即时签名直链(实测 ~3h 过期),不能写进笔记;
+// 2026-09-17 剪藏的旧链接 6 天后仍 302→200,端点稳定性已验证。
+function douyinPermanentPlayUrl(item) {
+  const uri = item?.video?.play_addr?.uri
+    || /video_id=([^&]+)/.exec(item?.video?.play_addr?.url_list?.find((u) => String(u).includes("video_id=")) || "")?.[1]
+    || "";
+  return uri ? `https://aweme.snssdk.com/aweme/v1/playwm/?video_id=${uri}&ratio=720p&line=0` : "";
 }
 
 // detail API:share 页 SSR 已无视频数据(2026-09 改版为纯客户端渲染),此接口是唯一数据源。
@@ -159,7 +169,7 @@ async function extractDouyin(url, fetchImpl = globalThis.fetch) {
   }
   const author = String(item?.author?.nickname || "抖音用户");
   const cover = item?.video?.cover?.url_list?.find(Boolean) || item?.video?.dynamic_cover?.url_list?.find(Boolean) || "";
-  const play = item?.video?.play_addr?.url_list?.find(Boolean) || "";
+  const play = douyinPermanentPlayUrl(item);
   const resolvedId = String(item?.aweme_id || awemeId || "");
   return {
     title: douyinTitle(item?.desc),
