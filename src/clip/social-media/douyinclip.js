@@ -8,6 +8,7 @@
 // 视频本体不下载,只留播放链接;话题按微博先例降噪为纯文本。
 
 const { readLimitedBody } = require("../../core/network");
+const { localIso } = require("../../core/util");
 
 const DOUYIN_UA = "Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.5 Mobile/15E148 Safari/604.1";
 // detail API 是桌面 webapp 端点,须配桌面 Chrome UA + douyin.com/video/{id} referer;移动 UA 会 403
@@ -167,6 +168,7 @@ async function extractDouyin(url, fetchImpl = globalThis.fetch) {
     contentHtml: `<article class="douyin-video">${douyinItemHtml(item)}</article>`,
     images: cover ? [cover.startsWith("//") ? `https:${cover}` : cover] : [],
     extractionMethod: "douyin",
+    publishedAt: Number(item.create_time) > 0 ? localIso(new Date(Number(item.create_time) * 1000)) : "",
     url: String(url),
     canonicalUrl: resolvedId ? `https://www.douyin.com/video/${resolvedId}` : String(url),
     identityUrl: `douyin-video:${resolvedId}`,
