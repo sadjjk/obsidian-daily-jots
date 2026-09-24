@@ -112,3 +112,35 @@ test("card shell page yields nick_name, create_time and cdn_url cover", async ()
   assert.equal(data.extractionMethod, "weixin");
   assert.equal(data.extractionStatus, "complete");
 });
+
+test("album posts recover every picture from picture_page_info_list", async () => {
+  // 图集帖(如「9张图讲清」):js_content 缺失,content_noencode 只有文字,图片全在 picture_page_info_list。
+  // cdn_url 值带 \x26amp; 转义与 http 形态;数组外的 watermark_info.cdn_url 不属于图集,不得混入。
+  const album = `<html><head><title>闲鱼卖100元的AI视频神器</title></head><body>
+<script>window.cgiDataNew = {
+  nick_name: 'AI软件设计师',
+  create_time: '2026-09-24 11:00',
+  cdn_url: 'https://mmbiz.qpic.cn/mmbiz_jpg/cover123/0?wx_fmt=jpeg',
+  content_noencode: '这9张图讲清:它到底能复刻什么、安装命令和版权风险。',
+  picture_page_info_list: [
+    { cdn_url: 'https://mmbiz.qpic.cn/mmbiz_png/pic01/0?wx_fmt=png\\x26amp;from=appmsg', width: '1080' * 1, height: '1440' * 1 },
+    { cdn_url: 'http://mmbiz.qpic.cn/sz_mmbiz_png/pic02/0?wx_fmt=png\\x26amp;from=appmsg', width: '1080' * 1, height: '1440' * 1 },
+    { cdn_url: 'https://mmbiz.qpic.cn/mmbiz_png/pic01/0?wx_fmt=png\\x26amp;from=appmsg', width: '1080' * 1, height: '1440' * 1 }
+  ],
+  watermark_info: { cdn_url: 'http://mmbiz.qpic.cn/sz_mmbiz_png/watermark/0' },
+  type: '25' * 1
+};</script>
+</body></html>`;
+  const data = await extractWeixinArticle(ARTICLE_URL, async () => weixinResponse(album));
+  // 图集图全部拼进正文(去重、http 升级 https、\x26amp; 还原),本地化管线才能下载并重写 md 引用
+  assert.match(data.contentHtml, /<p><img src="https:\/\/mmbiz\.qpic\.cn\/mmbiz_png\/pic01\/0\?wx_fmt=png&from=appmsg" alt="图集-1" \/><\/p>/);
+  assert.match(data.contentHtml, /<p><img src="https:\/\/mmbiz\.qpic\.cn\/sz_mmbiz_png\/pic02\/0\?wx_fmt=png&from=appmsg" alt="图集-2" \/><\/p>/);
+  assert.match(data.contentHtml, /这9张图讲清/);
+  assert.doesNotMatch(data.contentHtml, /watermark/);
+  // images 返回与正文一致:封面 + 去重后的图集图
+  assert.deepEqual(data.images, [
+    "https://mmbiz.qpic.cn/mmbiz_jpg/cover123/0?wx_fmt=jpeg",
+    "https://mmbiz.qpic.cn/mmbiz_png/pic01/0?wx_fmt=png&from=appmsg",
+    "https://mmbiz.qpic.cn/sz_mmbiz_png/pic02/0?wx_fmt=png&from=appmsg",
+  ]);
+});

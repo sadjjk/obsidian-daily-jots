@@ -80,6 +80,33 @@ function normalizeWeixinContent(raw) {
   return raw.split(/\n{2,}/).map((para) => `<p>${para.trim().replace(/\n/g, "<br>")}</p>`).join("");
 }
 
+// 图集帖(无 #js_content 的图片消息,正文自述「N张图」):正文文字在 content_noencode 里没有 img,
+// 图片清单在 cgiDataNew.picture_page_info_list([{cdn_url, width, height}...]),页面 swiper 由 JS 渲染。
+// 提取全部 cdn_url(值含 \x26amp; 等转义需还原,http 补 https),拼成 img 标签进正文后走本地化管线。
+function extractPicturePageInfoList(html) {
+  const marker = "picture_page_info_list: [";
+  const start = html.indexOf(marker);
+  if (start === -1) return [];
+  const arrayStart = start + marker.length - 1;
+  // 平衡中括号取数组本体(URL 与 theme_color rgb() 均不含方括号),防误吞后续字段的 cdn_url(如水印图)
+  let depth = 0;
+  let end = -1;
+  for (let i = arrayStart; i < html.length && i - arrayStart < 500_000; i++) {
+    if (html[i] === "[") depth += 1;
+    else if (html[i] === "]") { depth -= 1; if (depth === 0) { end = i; break; } }
+  }
+  if (end === -1) return [];
+  const segment = html.slice(arrayStart, end + 1);
+  const urls = [];
+  const re = /cdn_url:\s*(["'])([^"']+)\1/g;
+  let match;
+  while ((match = re.exec(segment)) !== null) {
+    const url = match[2].replace(/\\x26/g, "&").replace(/&amp;/g, "&").replace(/^http:\/\//, "https://");
+    if (/^https:\/\/mmbiz\.qpic\.cn\//.test(url) && !urls.includes(url)) urls.push(url);
+  }
+  return urls;
+}
+
 function extractFallbackContent(html) {
   const raw = extractCgiString(html, "content_noencode");
   if (!raw || !raw.trim()) return { contentHtml: "", images: [] };
@@ -139,6 +166,13 @@ async function extractWeixinArticle(url, fetchImpl = globalThis.fetch, cookieGet
     if (/^https:\/\/mmbiz\.qpic\.cn/.test(cover)) {
       images.unshift(cover);
       fallback.contentHtml = `<p class="weixin-card-cover"><img src="${cover}" alt="封面" /></p>` + fallback.contentHtml;
+    }
+    // 图集帖:封面之外的全部图片在 picture_page_info_list,追加 img 进正文,否则正文只剩封面
+    const albumPics = extractPicturePageInfoList(html);
+    for (const src of albumPics) {
+      if (images.includes(src)) continue;
+      images.push(src);
+      fallback.contentHtml += `<p><img src="${src}" alt="图集-${images.length - 1}" /></p>`;
     }
     contentHtml = `<article class="weixin-article">${fallback.contentHtml}</article>`;
   }
