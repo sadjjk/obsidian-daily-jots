@@ -439,6 +439,28 @@ function articleFromHtml(html, finalUrl, overrides = {}) {
   const markdown = converted.length >= Math.min(120, fallbackText.length) ? converted : fallbackText;
   const contentChars = (fallbackText || normalizedText(articleDocument.body)).length;
   const hostname = new URL(finalUrl).hostname;
+  // C3 通用视频兜底:平台专用提取未提供(overrides 无 videoUrls)时扫描 og:video 与 <video>/<source> 直链。
+  // 在此产出 article 层 videoUrls,社媒分支经 sourceArticle 的回退链保留该产物;相对地址补全为绝对 URL,上限 5。
+  let videoUrls = [];
+  if (Array.isArray(overrides.videoUrls) && overrides.videoUrls.length) {
+    videoUrls = overrides.videoUrls;
+  } else {
+    const found = [];
+    const pushUrl = (value) => {
+      try {
+        const absolute = new URL(String(value), finalUrl).href;
+        if (/^https?:/.test(absolute) && !found.includes(absolute)) found.push(absolute);
+      } catch (_) {}
+    };
+    for (const meta of document.querySelectorAll('meta[property="og:video:secure_url"], meta[property="og:video"], meta[property="og:video:url"]')) {
+      if (meta.content) pushUrl(meta.content);
+    }
+    for (const el of document.querySelectorAll("video[src], video source[src]")) {
+      const src = el.getAttribute("src");
+      if (src) pushUrl(src);
+    }
+    videoUrls = found.slice(0, 5);
+  }
   return {
     url: finalUrl,
     canonicalUrl,
@@ -458,6 +480,7 @@ function articleFromHtml(html, finalUrl, overrides = {}) {
     textless: Boolean(article.textless),
     commentCount,
     publishedAt: article.publishedAt || (hostname.toLowerCase() === "mp.weixin.qq.com" ? publishedWechatTime(rawHtml) : ""),
+    videoUrls,
   };
 }
 

@@ -832,3 +832,27 @@ test("DingTalk spreadsheet (spreadsheetv2) exports xlsx via headless buffer path
     dingtalkDocs.exportDingtalkSpreadsheet = origExport;
   }
 });
+
+test("articleFromHtml falls back to og:video and video tags when no dedicated extraction", () => {
+  const html = `<!doctype html><html><head><meta property="og:video:secure_url" content="https://cdn.example.com/og.mp4"></head><body><main><h1>Blog post</h1><p>${"Content. ".repeat(30)}</p><video src="/videos/local.mp4"></video><video><source src="https://cdn.example.com/source.mp4"></video></main></body></html>`;
+  const article = articleFromHtml(html, "https://blog.example.com/post/1");
+  assert.deepEqual(article.videoUrls, [
+    "https://cdn.example.com/og.mp4",
+    "https://blog.example.com/videos/local.mp4",
+    "https://cdn.example.com/source.mp4",
+  ]);
+});
+
+test("articleFromHtml video fallback caps at five entries", () => {
+  const videos = Array.from({ length: 6 }, (_, i) => `<video src="https://cdn.example.com/v${i}.mp4"></video>`).join("");
+  const html = `<!doctype html><html><body><main><h1>Gallery</h1><p>${"Content. ".repeat(30)}</p>${videos}</main></body></html>`;
+  const article = articleFromHtml(html, "https://blog.example.com/gallery");
+  assert.equal(article.videoUrls.length, 5);
+  assert.equal(article.videoUrls[4], "https://cdn.example.com/v4.mp4");
+});
+
+test("articleFromHtml keeps override videoUrls over the fallback scan", () => {
+  const html = `<!doctype html><html><head><meta property="og:video" content="https://cdn.example.com/og.mp4"></head><body><main><h1>Dedicated</h1><p>${"Content. ".repeat(30)}</p></main></body></html>`;
+  const article = articleFromHtml(html, "https://blog.example.com/dedicated", { videoUrls: ["https://dedicated.example.com/final.mp4"] });
+  assert.deepEqual(article.videoUrls, ["https://dedicated.example.com/final.mp4"]);
+});
