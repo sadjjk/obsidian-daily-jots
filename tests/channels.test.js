@@ -48,3 +48,18 @@ test("failed first-time pairing remains disabled", async () => {
   assert.equal(plugin.settings.channels.wechat.enabled, false);
   assert.equal(manager.getStatuses().wechat.state, "error");
 });
+
+test("qq channel surfaces a friendly error when the open platform is unreachable", async () => {
+  // 预检:token 端点网络层失败时给出可操作的提示(带底层原因),不再甩晦涩的 "Network error"
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => {
+    throw Object.assign(new Error("fetch failed"), { cause: { code: "ENOTFOUND" } });
+  };
+  try {
+    const { QQChannel } = require("../src/channels/qq");
+    const channel = new QQChannel({ appId: "a", appSecret: "b" }, { t: (zh) => zh });
+    await assert.rejects(() => channel.start(), /无法访问 QQ 开放平台\(bots\.qq\.com\):ENOTFOUND/);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
