@@ -124,6 +124,7 @@ test("album posts recover every picture from picture_page_info_list", async () =
   content_noencode: '这9张图讲清:它到底能复刻什么、安装命令和版权风险。',
   picture_page_info_list: [
     { cdn_url: 'https://mmbiz.qpic.cn/mmbiz_png/pic01/0?wx_fmt=png\\x26amp;from=appmsg', width: '1080' * 1, height: '1440' * 1 },
+    { cdn_url: 'http://mmbiz.qpic.cn/sz_mmbiz_png/pic01/640?wx_fmt=png\\x26amp;from=appmsg', is_qr_code: '0' * 1 },
     { cdn_url: 'http://mmbiz.qpic.cn/sz_mmbiz_png/pic02/0?wx_fmt=png\\x26amp;from=appmsg', width: '1080' * 1, height: '1440' * 1 },
     { cdn_url: 'https://mmbiz.qpic.cn/mmbiz_png/pic01/0?wx_fmt=png\\x26amp;from=appmsg', width: '1080' * 1, height: '1440' * 1 }
   ],
@@ -137,6 +138,8 @@ test("album posts recover every picture from picture_page_info_list", async () =
   assert.match(data.contentHtml, /<p><img src="https:\/\/mmbiz\.qpic\.cn\/sz_mmbiz_png\/pic02\/0\?wx_fmt=png&from=appmsg" alt="图集-2" \/><\/p>/);
   assert.match(data.contentHtml, /这9张图讲清/);
   assert.doesNotMatch(data.contentHtml, /watermark/);
+  // 嵌套副本对象(同图 CDN 变体,无 width 元数据)不得混入——否则图集数量翻倍
+  assert.doesNotMatch(data.contentHtml, /pic01\/640/);
   // images 返回与正文一致:封面 + 去重后的图集图
   assert.deepEqual(data.images, [
     "https://mmbiz.qpic.cn/mmbiz_jpg/cover123/0?wx_fmt=jpeg",

@@ -23,8 +23,8 @@ class QQChannel extends BaseChannel {
     } catch (error) {
       const reason = [error?.cause?.code, error?.cause?.message || error?.message || String(error)].filter(Boolean).join(" ");
       throw new Error(this.t(
-        `无法访问 QQ 开放平台(bots.qq.com):${reason}。请检查网络或代理后重试`,
-        `Cannot reach the QQ Open Platform (bots.qq.com): ${reason}. Check network or proxy and retry`,
+        `无法访问 QQ 开放平台(bots.qq.com):${reason}。若系统开启了代理,请将 *.qq.com 加入直连规则或暂时关闭代理后重试`,
+        `Cannot reach the QQ Open Platform (bots.qq.com): ${reason}. If a system proxy is on, add *.qq.com to its direct rules or turn it off and retry`,
       ));
     }
     const { QQBot } = await import("@tencent-connect/qqbot-nodejs");

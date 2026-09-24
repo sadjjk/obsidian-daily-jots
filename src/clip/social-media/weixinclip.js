@@ -97,8 +97,10 @@ function extractPicturePageInfoList(html) {
   }
   if (end === -1) return [];
   const segment = html.slice(arrayStart, end + 1);
+  // 主图判据:对象开头即 cdn_url 且同一对象内带 width 元数据——每条记录还嵌套着
+  // 无尺寸元数据的副本对象(同图不同 CDN 变体),宽松匹配会把图集数量翻倍
   const urls = [];
-  const re = /cdn_url:\s*(["'])([^"']+)\1/g;
+  const re = /\{\s*cdn_url:\s*(["'])([^"']+)\1[^{}]*?width:\s*["']\d+["']/g;
   let match;
   while ((match = re.exec(segment)) !== null) {
     const url = match[2].replace(/\\x26/g, "&").replace(/&amp;/g, "&").replace(/^http:\/\//, "https://");
