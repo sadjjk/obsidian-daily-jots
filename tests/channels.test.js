@@ -63,3 +63,27 @@ test("qq channel surfaces a friendly error when the open platform is unreachable
     globalThis.fetch = originalFetch;
   }
 });
+
+test("cors-free fetch adapter maps requestUrl onto a Response-like object", async () => {
+  const { createCorsFreeFetch } = require("../src/channels/qq");
+  const originalFetchMarker = globalThis.fetch;
+  const calls = [];
+  const requestUrl = async (options) => {
+    calls.push(options);
+    return { status: 200, headers: { "X-Tps-Trace-Id": "trace-1", "content-type": "application/json" }, text: '{"access_token":"tok"}', arrayBuffer: new ArrayBuffer(3) };
+  };
+  const fetchImpl = createCorsFreeFetch(requestUrl);
+  const response = await fetchImpl("https://bots.qq.com/app/getAppAccessToken", { method: "POST", headers: { "content-type": "application/json" }, body: '{"appId":"a"}' });
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].url, "https://bots.qq.com/app/getAppAccessToken");
+  assert.equal(calls[0].method, "POST");
+  assert.equal(calls[0].throw, false);
+  assert.equal(response.ok, true);
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get("x-tps-trace-id"), "trace-1"); // 小写归一化,SDK 读 trace 头不落空
+  assert.equal(await response.text(), '{"access_token":"tok"}');
+  assert.deepEqual(await response.json(), { access_token: "tok" });
+  assert.equal((await response.arrayBuffer()).byteLength, 3);
+  // 无 obsidian 模块的环境(单测)回退原生 fetch 引用
+  assert.equal(createCorsFreeFetch(null, originalFetchMarker), originalFetchMarker);
+});

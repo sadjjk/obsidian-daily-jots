@@ -2,29 +2,86 @@
 
 const { BaseChannel } = require("./base");
 
+// Obsidian 渲染进程的原生 fetch 受 CORS 限制(app://obsidian.md → QQ 端点无 ACAO 头,
+// POST JSON 还触发 preflight,token/gateway 请求必被拦)。requestUrl 走 Electron net
+// 通道无 CORS,包一层 Response-like 适配器供预检与 SDK(裸 fetch 引用全局,patch 生效)使用。
+// 测试环境无 obsidian 模块,回退 globalThis.fetch。
+function createCorsFreeFetch(requestUrl, fallback = globalThis.fetch) {
+  if (!requestUrl) return fallback;
+  return async function corsFreeFetch(input, init = {}) {
+    const url = typeof input === "string" || input instanceof URL ? String(input) : String(input?.url ?? input);
+    const response = await requestUrl({
+      url,
+      method: init.method || "GET",
+      headers: init.headers || undefined,
+      body: init.body ?? undefined,
+      throw: false,
+    });
+    const headerMap = new Map(Object.entries(response.headers || {}).map(([key, value]) => [String(key).toLowerCase(), value]));
+    const text = () => String(response.text ?? "");
+    return {
+      ok: response.status >= 200 && response.status < 300,
+      status: response.status,
+      headers: { get: (name) => headerMap.get(String(name).toLowerCase()) ?? null },
+      text: async () => text(),
+      json: async () => JSON.parse(text()),
+      arrayBuffer: async () => response.arrayBuffer,
+    };
+  };
+}
+
+function loadRequestUrl() {
+  try {
+    return require("obsidian").requestUrl ?? null;
+  } catch {
+    return null;
+  }
+}
+
 class QQChannel extends BaseChannel {
   constructor(config, context) {
     super("qq", config, context);
     this.bot = null;
+    this._originalFetch = null;
+    this._corsFreeFetch = null;
+  }
+
+  installFetch() {
+    if (this._corsFreeFetch) return;
+    this._corsFreeFetch = createCorsFreeFetch(loadRequestUrl());
+    if (this._corsFreeFetch !== globalThis.fetch) {
+      this._originalFetch = globalThis.fetch;
+      globalThis.fetch = this._corsFreeFetch;
+    }
+  }
+
+  restoreFetch() {
+    if (this._corsFreeFetch && this._originalFetch && globalThis.fetch === this._corsFreeFetch) {
+      globalThis.fetch = this._originalFetch;
+    }
+    this._corsFreeFetch = null;
+    this._originalFetch = null;
   }
 
   async start() {
     this.assertFields(["appId", "appSecret"]);
     this.running = true;
-    // 预检 token 端点连通性:区分「网络/代理不可达」与「凭据错误」。
+    this.installFetch();
+    const fetchImpl = this._corsFreeFetch;
+    // 预检 token 端点连通性:区分「网络不可达/被拦」与「凭据错误」。
     // 网络层失败抛出友好提示;业务层响应(如 appid invalid)交由 SDK 正常处理。
     try {
-      await fetch("https://bots.qq.com/app/getAppAccessToken", {
+      await fetchImpl("https://bots.qq.com/app/getAppAccessToken", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ appId: String(this.config.appId).trim(), clientSecret: String(this.config.appSecret).trim() }),
-        signal: AbortSignal.timeout(10_000),
       });
     } catch (error) {
+      this.restoreFetch();
       const reason = [error?.cause?.code, error?.cause?.message || error?.message || String(error)].filter(Boolean).join(" ");
       throw new Error(this.t(
-        `无法访问 QQ 开放平台(bots.qq.com):${reason}。若系统开启了代理,请将 *.qq.com 加入直连规则或暂时关闭代理后重试`,
-        `Cannot reach the QQ Open Platform (bots.qq.com): ${reason}. If a system proxy is on, add *.qq.com to its direct rules or turn it off and retry`,
+        `无法访问 QQ 开放平台(bots.qq.com):${reason}。请检查网络后重试`,
+        `Cannot reach the QQ Open Platform (bots.qq.com): ${reason}. Check your network and retry`,
       ));
     }
     const { QQBot } = await import("@tencent-connect/qqbot-nodejs");
@@ -66,8 +123,9 @@ class QQChannel extends BaseChannel {
     this.running = false;
     this.bot?.stop();
     this.bot = null;
+    this.restoreFetch();
     this.setState("stopped");
   }
 }
 
-module.exports = { QQChannel };
+module.exports = { QQChannel, createCorsFreeFetch };
