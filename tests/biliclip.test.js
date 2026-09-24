@@ -12,6 +12,7 @@ const stateHtml = (videoDataJson) => `<!doctype html><html><head><title>x</title
 const fullState = {
   videoData: {
     bvid: "BV1Dve565ENK",
+    cid: 400000000,
     title: "童年的捕鱼网,依然在我们的手里",
     desc: "每个人心底,都潜藏着名为\"好奇\"的本能。 请遵从内心的指引,用力掷出属于你的谜立方吧!",
     owner: { name: "伊莫官方" },
@@ -56,9 +57,21 @@ test("counts format into the Chinese unit style", () => {
 });
 
 test("Bilibili video pages extract structured metadata from the initial state", async () => {
-  const clipper = await extractBilibili("https://www.bilibili.com/video/BV1Dve565ENK", async () => ({
-    ...fakeHtmlResponse(stateHtml(JSON.stringify(fullState))),
-  }));
+  const clipper = await extractBilibili("https://www.bilibili.com/video/BV1Dve565ENK", async (url) => {
+    if (/x\/player\/playurl/.test(url)) {
+      return {
+        response: {
+          ok: true, status: 200,
+          headers: { get: (name) => (name.toLowerCase() === "content-type" ? "application/json" : null) },
+          body: (async function* () { yield Buffer.from(JSON.stringify({ code: 0, data: { durl: [{ url: "https://upos-sz-mirror08c.bilivideo.com/seg1.mp4" }, { url: "https://upos-sz-mirror08c.bilivideo.com/seg2.mp4" }] } })); })(),
+        },
+        finalUrl: url,
+      };
+    }
+    return {
+      ...fakeHtmlResponse(stateHtml(JSON.stringify(fullState))),
+    };
+  });
   assert.equal(clipper.title, "童年的捕鱼网,依然在我们的手里");
   assert.equal(clipper.byline, "伊莫官方");
   assert.equal(clipper.extractionMethod, "bilibili-initial-state");
@@ -69,6 +82,11 @@ test("Bilibili video pages extract structured metadata from the initial state", 
   assert.match(clipper.markdown, /谜立方/);
   assert.equal(clipper.publishedAt, localIso(new Date(1789457142 * 1000)));
   assert.deepEqual(clipper.images, ["https://i0.hdslb.com/bfs/archive/cover.jpg"]);
+  // playurl durl 直链按序收集(多段保序)
+  assert.deepEqual(clipper.videoUrls, [
+    "https://upos-sz-mirror08c.bilivideo.com/seg1.mp4",
+    "https://upos-sz-mirror08c.bilivideo.com/seg2.mp4",
+  ]);
 });
 
 test("a challenge shell retries once and throws a real error instead of saving an empty note", async () => {
@@ -86,7 +104,14 @@ test("a challenge shell retries once and throws a real error instead of saving a
 
 test("a shell on the first request recovers when the retry serves the full page", async () => {
   let calls = 0;
-  const article = await extractBilibili("https://www.bilibili.com/video/BV1Dve565ENK", async () => {
+  const article = await extractBilibili("https://www.bilibili.com/video/BV1Dve565ENK", async (url) => {
+    if (/x\/player\/playurl/.test(url)) {
+      // playurl 不计入 web 重试计数;返回 500 验证直链失败不影响提取主体
+      return {
+        response: { ok: false, status: 500, headers: { get: () => "application/json" }, body: null },
+        finalUrl: url,
+      };
+    }
     calls += 1;
     return calls === 1
       ? fakeHtmlResponse("<html><body>verify</body></html>")
@@ -99,6 +124,16 @@ test("a shell on the first request recovers when the retry serves the full page"
 test("persistent shells fall back to the public view API", async () => {
   let webCalls = 0;
   const article = await extractBilibili("https://www.bilibili.com/video/BV1Dve565ENK", async (url) => {
+    if (/x\/player\/playurl/.test(url)) {
+      return {
+        response: {
+          ok: true, status: 200,
+          headers: { get: (name) => (name.toLowerCase() === "content-type" ? "application/json" : null) },
+          body: (async function* () { yield Buffer.from(JSON.stringify({ code: 0, data: { durl: [{ url: "https://upos-sz-mirror08c.bilivideo.com/fallback.mp4" }] } })); })(),
+        },
+        finalUrl: url,
+      };
+    }
     if (/api\.bilibili\.com/.test(url)) {
       return {
         response: {
@@ -116,6 +151,7 @@ test("persistent shells fall back to the public view API", async () => {
   assert.equal(article.extractionMethod, "bilibili-initial-state");
   assert.equal(article.title, "童年的捕鱼网,依然在我们的手里");
   assert.equal(article.byline, "伊莫官方");
+  assert.deepEqual(article.videoUrls, ["https://upos-sz-mirror08c.bilivideo.com/fallback.mp4"]);
 });
 
 test("non-video Bilibili pages fall through to the generic extractor", async () => {
@@ -125,4 +161,25 @@ test("non-video Bilibili pages fall through to the generic extractor", async () 
     return redirect;
   });
   assert.equal(article, null);
+});
+
+test("playurl failures degrade to empty videoUrls without breaking extraction", async () => {
+  const article = await extractBilibili("https://www.bilibili.com/video/BV1Dve565ENK", async (url) => {
+    if (/x\/player\/playurl/.test(url)) {
+      return {
+        response: {
+          ok: false, status: 500,
+          headers: { get: (name) => (name.toLowerCase() === "content-type" ? "application/json" : null) },
+          body: null,
+        },
+        finalUrl: url,
+      };
+    }
+    return {
+      ...fakeHtmlResponse(stateHtml(JSON.stringify(fullState))),
+    };
+  });
+  assert.equal(article.extractionMethod, "bilibili-initial-state");
+  assert.equal(article.title, "童年的捕鱼网,依然在我们的手里");
+  assert.deepEqual(article.videoUrls, []);
 });

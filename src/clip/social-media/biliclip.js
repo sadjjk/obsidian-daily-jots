@@ -120,6 +120,7 @@ function videoFromInitialState(state, finalUrl) {
     publishedAt: video.pubdate ? localIso(new Date(Number(video.pubdate) * 1000)) : "",
     extractionMethod: "bilibili-initial-state",
     extractionStatus: desc.length >= 40 ? "complete" : "partial",
+    videoUrls: [],
   };
 }
 
@@ -154,12 +155,32 @@ function videoFromDom(html, finalUrl) {
     publishedAt: "",
     extractionMethod: "bilibili-meta",
     extractionStatus: "partial",
+    videoUrls: [],
   };
 }
 
 function bvidFromUrl(url) {
   const m = String(url || "").match(/\/video\/((?:BV|av)[\w]+)/i);
   return m ? m[1] : "";
+}
+
+// playurl 游客免签名;fnval=0 主动避开 dash(仅 fnval=16 出现),platform=html5 返回 durl mp4 直链。
+// 直链为限时签名、需 bilibili referer(下载链路 referrer: article.url 天然满足);失败返回空数组不阻断剪藏。
+async function withBilibiliVideoUrls(article, url, cid, fetchImpl) {
+  const bvid = bvidFromUrl(url);
+  if (!bvid || !cid) return { ...article, videoUrls: article.videoUrls || [] };
+  try {
+    const query = /^av\d+$/i.test(bvid) ? `aid=${bvid.slice(2)}` : `bvid=${bvid}`;
+    const api = `https://api.bilibili.com/x/player/playurl?${query}&cid=${cid}&qn=64&fnval=0&platform=html5`;
+    const { response } = await fetchImpl(api, { accept: "application/json", timeoutMs: 20_000 });
+    if (!response.ok) return { ...article, videoUrls: [] };
+    const payload = JSON.parse((await readLimitedBody(response, 2 * 1024 * 1024)).toString("utf8"));
+    const durl = Array.isArray(payload?.data?.durl) ? payload.data.durl : [];
+    const videoUrls = [...new Set(durl.map((seg) => seg?.url || seg?.backup_url?.[0]).filter(Boolean))];
+    return { ...article, videoUrls };
+  } catch (_) {
+    return { ...article, videoUrls: [] };
+  }
 }
 
 // The public view API returns the same shape as videoData and does not require
@@ -172,7 +193,12 @@ async function fetchVideoViaApi(bvid, fetchImpl) {
   if (!response.ok) throw new Error(`Bilibili API returned HTTP ${response.status}`);
   const payload = JSON.parse((await readLimitedBody(response, 2 * 1024 * 1024)).toString("utf8"));
   if (payload?.code !== 0 || !payload?.data) throw new Error(`Bilibili API error ${payload?.code ?? "unknown"}`);
-  return videoFromInitialState({ videoData: payload.data, tags: payload.data.tags || [] }, `https://www.bilibili.com/video/${bvid}`);
+  return await withBilibiliVideoUrls(
+    videoFromInitialState({ videoData: payload.data, tags: payload.data.tags || [] }, `https://www.bilibili.com/video/${bvid}`),
+    `https://www.bilibili.com/video/${bvid}`,
+    payload.data.cid,
+    fetchImpl,
+  );
 }
 
 async function extractBilibili(value, fetchImpl = safeFetch) {
@@ -194,7 +220,7 @@ async function extractBilibili(value, fetchImpl = safeFetch) {
       const target = isBilibiliVideoUrl(finalUrl) ? finalUrl : url;
       if (!isBilibiliVideoUrl(target)) return null; // short link to a non-video page: generic path
       const state = jsonAssignmentFromHtml(html, STATE_MARKER);
-      if (state?.videoData?.title) return videoFromInitialState(state, target);
+      if (state?.videoData?.title) return await withBilibiliVideoUrls(videoFromInitialState(state, target), target, state.videoData.cid, fetchImpl);
       const dom = videoFromDom(html, target);
       if (dom) return dom;
       lastError = new Error("Bilibili served a challenge page without video data");
