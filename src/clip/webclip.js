@@ -534,6 +534,7 @@ class WebClipper {
             identityUrl: data.identityUrl,
             images: data.images,
             publishedAt: data.publishedAt,
+            videoUrl: data.videoUrl || "",
             extractionStatus: data.extractionStatus,
           };
         }
