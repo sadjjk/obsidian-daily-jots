@@ -646,6 +646,27 @@ test("WPS document without login surfaces DOCUMENT_LOGIN_REQUIRED when rendered 
   );
 });
 
+test("tencent canvas fallback that only yields a11y help text degrades to an honest partial", async () => {
+  const clipper = new WebClipper({}, dingtalkTestSettings(), {
+    // 导出链与 opendoc 全失败(无会话)→ 渲染兜底只剩无障碍帮助文本(≥120 字符被判 complete)
+    // → C8 质量门命中:丢弃噪声正文,诚实降级 partial
+    fetch: async () => ({ response: { status: 401, json: async () => ({}) }, finalUrl: "https://docs.qq.com/sheet/DQVZZn09" }),
+    sessionManager: {
+      collectCookies: async () => "",
+      extract: async () => ({
+        html: `<html><body><main>${"欢迎使用腾讯文档。请按 Cmd+Opt+SHIFT 切换到表格内容区。重新听取帮助,收听文档内容。".repeat(4)}</main></body></html>`,
+        url: "https://docs.qq.com/sheet/DQVZZn09",
+        text: "欢迎使用腾讯文档。请按 Cmd+Opt+SHIFT 切换到表格内容区。重新听取帮助,收听文档内容。".repeat(4),
+      }),
+    },
+  });
+  const article = await clipper.extract("https://docs.qq.com/sheet/DQVZZn09");
+  assert.equal(article.extractionStatus, "partial");
+  assert.equal(article.markdown, "");
+  assert.equal(article.contentChars, 0);
+  assert.match(article.excerpt, /表格内容需在腾讯文档中查看/);
+});
+
 test("feishu rendered payload forwards author and publishedTime into the article", async () => {
   const rendered = {
     html: `<!doctype html><html><body><div class="doc-content"><p>${"飞书会话渲染出的文档正文,长度需要超过完整性阈值才能通过校验。".repeat(6)}</p></div></body></html>`,

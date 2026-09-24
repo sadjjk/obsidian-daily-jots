@@ -165,11 +165,18 @@ function formatCaptureReceipt(result, locale = "zh-CN", preview = null) {
       : "";
     if (locale === "en") {
       if (clip.article?.extractionStatus === "partial") {
-        const failed = [];
-        if (failedImages) failed.push(`${failedImages} additional image${failedImages === 1 ? "" : "s"}`);
-        if (failedFiles) failed.push(`${failedFiles} original file${failedFiles === 1 ? "" : "s"}`);
-        const failedDetail = failed.length ? `; ${failed.join(" and ")} failed to save` : "";
-        pushWithPreview(`⚠️ “${title}” was only partially extracted. ${partialEn[0].toUpperCase()}${partialEn.slice(1)} were saved to “${clippingFolder}”${sourceDetail}${failedDetail}${skippedDetail}.`, clip);
+        // C8/C6:正文客观不可得(canvas 文档质量门/sph 空壳)时诚实提示,而非「部分提取」
+        const bodyEmpty = !(clip.article?.contentChars > 0);
+        if (bodyEmpty) {
+          const reason = String(clip.article?.renderWarning || clip.article?.excerpt || "").trim().slice(0, 60);
+          pushWithPreview(`⚠️ “${title}” body could not be extracted${reason ? ` (${reason})` : ""}. Link and document info were saved${sourceDetail}.`, clip);
+        } else {
+          const failed = [];
+          if (failedImages) failed.push(`${failedImages} additional image${failedImages === 1 ? "" : "s"}`);
+          if (failedFiles) failed.push(`${failedFiles} original file${failedFiles === 1 ? "" : "s"}`);
+          const failedDetail = failed.length ? `; ${failed.join(" and ")} failed to save` : "";
+          pushWithPreview(`⚠️ “${title}” was only partially extracted. ${partialEn[0].toUpperCase()}${partialEn.slice(1)} were saved to “${clippingFolder}”${sourceDetail}${failedDetail}${skippedDetail}.`, clip);
+        }
       } else if (failedImages || failedFiles) {
         const failed = [];
         if (failedImages) failed.push(`${failedImages} additional image${failedImages === 1 ? "" : "s"}`);
@@ -180,8 +187,14 @@ function formatCaptureReceipt(result, locale = "zh-CN", preview = null) {
       }
     } else {
       if (clip.article?.extractionStatus === "partial") {
-        const failedDetail = `${failedImages ? `，另有 ${failedImages} 张图片保存失败` : ""}${failedFiles ? `，${failedFiles} 个原文件保存失败` : ""}`;
-        pushWithPreview(`⚠️ 《${title}》正文提取不完整，已保存${partialZh}到「${clippingFolder}」${sourceDetail}${failedDetail}${skippedDetail}`, clip);
+        const bodyEmpty = !(clip.article?.contentChars > 0);
+        if (bodyEmpty) {
+          const reason = String(clip.article?.renderWarning || clip.article?.excerpt || "").trim().slice(0, 60);
+          pushWithPreview(`⚠️ 《${title}》未能提取正文${reason ? `（${reason}）` : ""}，已保存链接与文档信息${sourceDetail}`, clip);
+        } else {
+          const failedDetail = `${failedImages ? `，另有 ${failedImages} 张图片保存失败` : ""}${failedFiles ? `，${failedFiles} 个原文件保存失败` : ""}`;
+          pushWithPreview(`⚠️ 《${title}》正文提取不完整，已保存${partialZh}到「${clippingFolder}」${sourceDetail}${failedDetail}${skippedDetail}`, clip);
+        }
       } else if (failedImages || failedFiles) {
         const failedDetail = `${failedImages ? `，另有 ${failedImages} 张图片保存失败` : ""}${failedFiles ? `，${failedFiles} 个原文件保存失败` : ""}`;
         pushWithPreview(`⚠️ 《${title}》已提取${extractedZh}并保存到「${clippingFolder}」${sourceDetail}${failedDetail}${skippedDetail}`, clip);

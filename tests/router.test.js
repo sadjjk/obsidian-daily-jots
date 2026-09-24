@@ -132,7 +132,7 @@ test("a replayed duplicate sends its pending receipt without saving twice", asyn
 test("partial extraction produces a warning instead of a false success", () => {
   const text = formatCaptureReceipt({
     diaryPath: "日记/today.md",
-    clips: [{ article: { title: "测试网页", extractionStatus: "partial" }, savedImages: 2, imageFailures: ["image"] }],
+    clips: [{ article: { title: "测试网页", extractionStatus: "partial", contentChars: 120 }, savedImages: 2, imageFailures: ["image"] }],
     clipFailures: [],
     attachmentFailures: [],
   });
@@ -140,6 +140,19 @@ test("partial extraction produces a warning instead of a false success", () => {
   assert.match(text, /2 张图片/);
   assert.match(text, /另有 1 张图片保存失败/);
   assert.doesNotMatch(text, /随手记/);
+});
+
+test("partial with empty body reports an honest failure instead of partial success", () => {
+  const text = formatCaptureReceipt({
+    diaryPath: "日记/today.md",
+    clips: [{ article: { title: "无权限表格", extractionStatus: "partial", contentChars: 0, excerpt: "文档内容不可导出; 表格内容需在腾讯文档中查看" }, savedImages: 0, imageFailures: [] }],
+    clipFailures: [],
+    attachmentFailures: [],
+  });
+  assert.match(text, /⚠️ 《无权限表格》未能提取正文（文档内容不可导出/);
+  assert.match(text, /已保存链接与文档信息/);
+  assert.doesNotMatch(text, /正文提取不完整/);
+  assert.doesNotMatch(text, /已提取/);
 });
 
 test("failure receipts append per-link reasons after the summary line", () => {

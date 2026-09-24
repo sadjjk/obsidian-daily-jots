@@ -737,11 +737,12 @@ class WebClipper {
         binaryFiles: [{ buffer: downloaded.buffer, fileName, mimeType: downloaded.mimeType }],
       };
     }
+    // 导出链错误提升到方法级:渲染兜底质量门(C8)需要透传真实失败原因(无权限/不支持导出)
+    let tencentExportError;
     if (tencentHostForUrl(url)) {
       // sheet/slide 等二进制类型:opendoc mutations 只解析 docx 文档,表格/幻灯走导出链
       // (opendoc 换 globalPadId → export_office → 轮询 → COS 直链下载)。成功时抛
       // TENCENT_DOCS_BINARY 带 buffer;其余失败静默继续下方 docx opendoc 流程/渲染兜底。
-      let tencentExportError;
       try {
         const fileExtractor = tencentHostForUrl(url) === "doc.weixin.qq.com" ? extractWecomFileExport : extractTencentFileExportForTencent;
         await fileExtractor(url, {
@@ -997,6 +998,19 @@ class WebClipper {
           return { ...article, commentCount: Number(rendered.commentCount) || 0 };
         }
         if (article.extractionStatus === "complete") {
+          // C8 质量门:canvas 类文档(腾讯表格/幻灯)无导出权限时,渲染页只剩无障碍帮助文本。
+          // 判定正文客观不可得 → 丢弃噪声正文与垃圾图,诚实降级 partial(不再报「已提取正文」)
+          if (tencentHostForUrl(url) && /欢迎使用腾讯文档|重新听取帮助|切换到表格内容区/.test(article.markdown || "")) {
+            article.markdown = "";
+            article.images = [];
+            article.contentChars = 0;
+            article.extractionStatus = "partial";
+            article.excerpt = [
+              tencentExportError?.message || "文档内容不可导出",
+              "表格内容需在腾讯文档中查看",
+            ].filter(Boolean).join("; ");
+            return { ...article, commentCount: Number(rendered.commentCount) || 0 };
+          }
           // 旧版文档被管理员升级为新智能文档:渲染页只有升级横幅,提示去剪新链接而不是产噪音笔记
           if (tencentHostForUrl(url) && /文档已不再使用|升级为新的智能文档/.test(rendered.text || "")) {
             throw new Error("该云文档已升级为新的智能文档:请打开原链接,前往新文档后剪藏新链接");
