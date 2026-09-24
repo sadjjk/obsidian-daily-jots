@@ -136,3 +136,23 @@ test("session cookie persistence writes, reads and survives corrupt files", asyn
   assert.equal(fs.existsSync(path.join(root, "dingtalk")), false);
   await assert.doesNotReject(() => manager.clearSession("dingtalk"));
 });
+
+test("rendered payload sanitizes comments before markdown conversion", () => {
+  const expression = renderedPayloadExpression("github");
+  // 评论原位清洗规则:操作链接删除(含 javascript: 空链)、用户主页内头像图移除、标题降级加粗、相邻重复块去重
+  assert.match(expression, /const sanitizeComment = \(node\) =>/);
+  assert.match(expression, /a\[href\^="javascript:"\]/);
+  assert.match(expression, /删除\|回复\|赞\|举报\|分享\|顶\|踩\|收藏\|引用\|转发/);
+  assert.match(expression, /PROFILE_HINTS = \[.*people.*u.*user.*members.*\]/);
+  assert.match(expression, /h1,h2,h3,h4,h5,h6/);
+  assert.match(expression, /prev && prev === cur\) blocks\[i\]\.remove\(\)/);
+  // 清洗在 snapshot 收集/克隆前对全量评论节点生效(主容器内与独立 section 两条路径都覆盖)
+  assert.match(expression, /cleanAllComments\(\);\s*let root = document\.body;/);
+  // 社区平台渲染脚本均携带清洗逻辑
+  for (const service of ["weibo", "zhihu", "community-generic"]) {
+    assert.match(renderedPayloadExpression(service), /sanitizeComment/);
+  }
+  // 防误伤:操作词链接含图片时不删;仅主页链接内的 img 被移除
+  assert.match(expression, /OP_WORDS\.test\(text\) && !a\.querySelector\("img"\)/);
+  assert.match(expression, /isProfileHref\(a\.getAttribute\("href"\)/);
+});

@@ -206,7 +206,40 @@ function renderedPayloadExpression(service, options = {}) {
   });
   return `(async () => {
     const config = ${config};
+    // 评论原位清洗:操作链接/头像图/巨级行/相邻重复块在 DOM 语义层清理(对社区平台通用),转换 markdown 前生效
+    // 注意:本脚本以模板字符串注入,禁止在正则里使用 \/ 等转义(会被求值吞掉),主页匹配用字符串前缀列表
+    const OP_WORDS = /^(删除|回复|赞|举报|分享|顶|踩|收藏|引用|转发)$/;
+    const PROFILE_HINTS = ['/people/', '/u/', '/user/', '/members/'];
+    const isProfileHref = (href) => PROFILE_HINTS.some((hint) => href.includes(hint));
+    const sanitizeComment = (node) => {
+      for (const a of [...node.querySelectorAll('a[href^="javascript:"]')]) a.remove();
+      for (const a of [...node.querySelectorAll("a")]) {
+        const text = (a.innerText || a.textContent || '').trim();
+        if (OP_WORDS.test(text) && !a.querySelector("img")) { a.remove(); continue; }
+        if (isProfileHref(a.getAttribute("href") || '')) {
+          for (const img of [...a.querySelectorAll("img")]) img.remove();
+        }
+      }
+      for (const h of [...node.querySelectorAll("h1,h2,h3,h4,h5,h6")]) {
+        const b = document.createElement('b');
+        b.textContent = h.textContent || '';
+        h.replaceWith(b);
+      }
+      const blocks = [...node.children].filter((el) => /^(P|BLOCKQUOTE|DIV|SECTION)$/.test(el.tagName));
+      for (let i = 1; i < blocks.length; i++) {
+        const prev = (blocks[i - 1].innerText || '').trim();
+        const cur = (blocks[i].innerText || '').trim();
+        if (prev && prev === cur) blocks[i].remove();
+      }
+    };
+    const cleanAllComments = () => {
+      for (const selector of config.commentSelectors) {
+        try { for (const node of document.querySelectorAll(selector)) sanitizeComment(node); } catch (_) {}
+      }
+    };
     const snapshot = () => {
+      // 评论在主容器内与独立 section 两条路径都生效:收集/克隆前先对全量评论节点原位清洗
+      cleanAllComments();
       let root = document.body;
       for (const selector of config.selectors) {
         const candidate = document.querySelector(selector);
