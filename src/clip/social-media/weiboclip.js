@@ -154,14 +154,30 @@ function collectMblogs(data) {
 // show API 的 page_info.urls 即现成 mp4 直链(weibo.cn 域 referer 防盗链,下载链路 referrer 天然满足)。
 // 优先级:mp4_hd_mp4(480p,体积友好)→ mp4_720p_mp4 → media_info.stream_url;
 // page_url 是视频页链接而非直链(下载必得 HTML),只保留在正文,不进下载队列。
+// 新结构:多数视频帖(如官媒)的 page_info 整个缺失,视频卡在 url_objects[].object.object
+// (object_type === "video"),直链在 urls.{mp4_720p_mp4,mp4_hd_mp4} / stream.url,同一套优先级收集。
 function weiboVideoUrls(mblog) {
-  if (!mblog || mblog?.page_info?.type !== "video") return [];
-  const urls = mblog.page_info?.urls || {};
-  const candidates = [urls.mp4_hd_mp4, urls.mp4_720p_mp4, mblog.page_info?.media_info?.stream_url];
-  const normalized = candidates
-    .filter(Boolean)
-    .map((value) => (String(value).startsWith("//") ? `https:${value}` : String(value)))
-    .filter((value) => /^https?:\/\//.test(value));
+  if (!mblog) return [];
+  const normalized = [];
+  const push = (value) => {
+    if (!value) return;
+    const fixed = String(value).startsWith("//") ? `https:${value}` : String(value);
+    if (/^https?:\/\//.test(fixed)) normalized.push(fixed);
+  };
+  const fromUrls = (urls = {}, mediaInfo = {}) => {
+    push(urls.mp4_hd_mp4);
+    push(urls.mp4_720p_mp4);
+    push(mediaInfo.stream_url);
+  };
+  if (mblog.page_info?.type === "video") {
+    fromUrls(mblog.page_info?.urls || {}, mblog.page_info?.media_info || {});
+  }
+  for (const entry of Array.isArray(mblog.url_objects) ? mblog.url_objects : []) {
+    const obj = entry?.object?.object;
+    if (!obj || obj.object_type !== "video") continue;
+    fromUrls(obj.urls || {}, obj.extension?.extension?.media_info || {});
+    if (!normalized.length) push(obj.stream?.url || obj.stream?.hd_url);
+  }
   return [...new Set(normalized)];
 }
 
@@ -274,6 +290,7 @@ async function extractWeiboStatus(url, fetchImpl = globalThis.fetch, cookieGette
     images: (Array.isArray(mblog?.pics) ? mblog.pics : [])
       .map((pic) => pic?.large?.url || pic?.url).filter(Boolean),
     extractionMethod: "weibo-json",
+    publishedAt: formatWeiboTime(mblog?.created_at),
     url: String(url),
     canonicalUrl: statusUrl,
     identityUrl: `weibo-status:${mblog.idstr || mblog.id}`,

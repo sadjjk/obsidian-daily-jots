@@ -280,3 +280,40 @@ test("m.weibo.cn share links with /detail/<id> resolve to the same status id", (
   assert.equal(weiboStatusId("https://m.weibo.cn/status/5346544981377322"), "5346544981377322");
   assert.equal(isWeiboStatusUrl("https://visitor.passport.weibo.cn/visitor/visitor?a=enter"), false);
 });
+
+test("weibo status extraction collects direct links from url_objects video cards (page_info absent)", async () => {
+  const fixture = {
+    ok: 1,
+    id: "5346544981377322",
+    idstr: "5346544981377322",
+    user: { screen_name: "央视新闻" },
+    created_at: "Thu Sep 24 05:32:00 +0800 2026",
+    text: "正文没有 page_info,视频卡在 url_objects",
+    url_objects: [
+      {
+        url_ori: "http://t.cn/AXOk70mA",
+        object: {
+          object_type: "video",
+          object: {
+            object_type: "video",
+            video_cover: "002TLsr9ly1ihebbg6cypj61hc0u041802",
+            urls: {
+              mp4_720p_mp4: "http://f.video.weibocdn.com/o0/720p.mp4?Expires=1&ssig=B",
+              mp4_hd_mp4: "http://f.video.weibocdn.com/o0/hd.mp4?Expires=1&ssig=A",
+            },
+            stream: { url: "http://f.video.weibocdn.com/o0/hd.mp4?Expires=1&ssig=A", hd_url: "http://f.video.weibocdn.com/o0/hd.mp4?Expires=1&ssig=A" },
+          },
+        },
+      },
+      { url_ori: "http://t.cn/other", object: { object_type: "webpage", object: { object_type: "webpage" } } },
+    ],
+  };
+  const data = await extractWeiboStatus("https://m.weibo.cn/detail/5346544981377322", async () => weiboResponse(fixture), COOKIE_GETTER);
+  // 480p 优先(体积友好),720p 次之;stream.url 与 hd 相同被去重;非视频卡跳过
+  assert.deepEqual(data.videoUrls, [
+    "http://f.video.weibocdn.com/o0/hd.mp4?Expires=1&ssig=A",
+    "http://f.video.weibocdn.com/o0/720p.mp4?Expires=1&ssig=B",
+  ]);
+  // published_at 元数据补齐(API return 此前漏传 created_at)
+  assert.match(String(data.publishedAt), /^2026-09-24/);
+});
