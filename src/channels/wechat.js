@@ -326,7 +326,6 @@ class WeChatChannel extends BaseChannel {
       if (message.message_type !== 1) continue;
       const items = message.item_list || [];
       const attachments = items.map(itemAttachment).filter(Boolean);
-      const outboundClientId = replyClientId();
       const delivery = await this.deliver({
         id: String(message.message_id || message.seq || `${message.from_user_id}-${message.create_time_ms}`),
         timestamp: new Date(Number(message.create_time_ms) || Date.now()),
@@ -335,9 +334,12 @@ class WeChatChannel extends BaseChannel {
         chatName: message.session_id || this.t("微信私聊", "WeChat direct message"),
         text: items.map(itemText).filter(Boolean).join("\n"),
         attachments,
+        // 每条回复独立 client_id:微信 ilink 按消息 client_id 去重,
+        // 一条入站消息触发的多条回复(查询 ack + 结果、导出 ack + 文件 + 回执)
+        // 若共用 client_id,第二条起会被服务端静默丢弃。
         reply: async (text) => ilinkJson(this.config.baseUrl || DEFAULT_BASE_URL, "ilink/bot/sendmessage", {
           token: this.config.token,
-          body: buildTextReply(message, text, outboundClientId),
+          body: buildTextReply(message, text),
         }),
         replyFile: async (file) => sendIlinkFile(this.config.baseUrl || DEFAULT_BASE_URL, this.config.token, message, file),
       });
