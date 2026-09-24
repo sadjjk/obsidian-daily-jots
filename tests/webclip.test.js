@@ -8,6 +8,7 @@ const {
   isLikelyContentImage, nodeToMarkdown, prepareDocument, selectArticle, sourceArticle, wechatArticleIdentityUrl,
 } = require("../src/clip/webclip");
 const { decodeHtmlBuffer } = require("../src/core/network");
+const { isWeixinSphUrl } = require("../src/clip/social-media/weixinclip");
 const { localIso, safeFileName } = require("../src/core/util");
 
 test("HTML buffers decode with the declared GBK charset instead of forcing UTF-8", () => {
@@ -855,4 +856,47 @@ test("articleFromHtml keeps override videoUrls over the fallback scan", () => {
   const html = `<!doctype html><html><head><meta property="og:video" content="https://cdn.example.com/og.mp4"></head><body><main><h1>Dedicated</h1><p>${"Content. ".repeat(30)}</p></main></body></html>`;
   const article = articleFromHtml(html, "https://blog.example.com/dedicated", { videoUrls: ["https://dedicated.example.com/final.mp4"] });
   assert.deepEqual(article.videoUrls, ["https://dedicated.example.com/final.mp4"]);
+});
+
+test("isWeixinSphUrl recognizes channels links only", () => {
+  assert.equal(isWeixinSphUrl("https://weixin.qq.com/sph/A34MtNap4v"), true);
+  assert.equal(isWeixinSphUrl("https://channels.weixin.qq.com/finder-preview/abc"), true);
+  assert.equal(isWeixinSphUrl("https://mp.weixin.qq.com/s/abc"), false);
+  assert.equal(isWeixinSphUrl("https://weixin.qq.com/sphX/abc"), false);
+  assert.equal(isWeixinSphUrl("not a url"), false);
+});
+
+test("weixin sph links keep metadata via the generic render fallback", async () => {
+  const clipper = new WebClipper({}, zhihuTestSettings(), {
+    fetch: async () => ({
+      response: fakeHtmlResponse("<html><head><title>视频号</title></head><body>shell</body></html>"),
+      finalUrl: "https://weixin.qq.com/sph/A34MtNap4v",
+    }),
+    sessionManager: {
+      extract: async () => ({
+        html: `<html><body><main><h1>真实标题</h1><p>${"作者与简介内容,点赞转发数据。".repeat(12)}</p></main></body></html>`,
+        url: "https://weixin.qq.com/sph/A34MtNap4v",
+        title: "真实标题",
+        author: "作者",
+        text: "作者与简介内容,点赞转发数据。".repeat(12),
+      }),
+    },
+  });
+  const article = await clipper.extract("https://weixin.qq.com/sph/A34MtNap4v");
+  assert.equal(article.title, "真实标题");
+  assert.equal(article.extractionStatus, "complete");
+});
+
+test("weixin sph render failures degrade to partial with a reason", async () => {
+  const clipper = new WebClipper({}, zhihuTestSettings(), {
+    fetch: async () => ({
+      response: fakeHtmlResponse("<html><head><title>视频号</title></head><body>shell</body></html>"),
+      finalUrl: "https://weixin.qq.com/sph/A34MtNap4v",
+    }),
+    sessionManager: { extract: async () => { throw new Error("browser session unavailable"); } },
+  });
+  const article = await clipper.extract("https://weixin.qq.com/sph/A34MtNap4v");
+  assert.equal(article.extractionStatus, "partial");
+  // warning 携带真实原因(渲染错误信息或 sph 降级说明),不再报「已提取正文」
+  assert.match(article.renderWarning, /browser session unavailable|视频号渲染提取失败/);
 });

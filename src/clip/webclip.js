@@ -17,7 +17,7 @@ const { extractBilibili, isBilibiliUrl, isBilibiliVideoUrl } = require("./social
 const { extractXiaohongshu, isXiaohongshuUrl, isXhsNoteUrl } = require("./social-media/xhsclip");
 const { extractZhihu, isZhihuNoteUrl, isZhihuUrl, probeZhihuVideos } = require("./social-media/zhihuclip");
 const { extractWeibo, isWeiboArticleUrl, isWeiboSearchUrl, isWeiboStatusUrl } = require("./social-media/weiboclip");
-const { extractWeixinArticle, isWeixinArticleUrl } = require("./social-media/weixinclip");
+const { extractWeixinArticle, isWeixinArticleUrl, isWeixinSphUrl } = require("./social-media/weixinclip");
 const { extractDouyin, isDouyinUrl } = require("./social-media/douyinclip");
 const { sourceNameForUrl } = require("./lib/source-names");
 const { classifyClipFamily, isClipFamilyEnabled, resolveClipFolder } = require("./lib/clip-rules");
@@ -1061,7 +1061,7 @@ class WebClipper {
       throw error;
     }
     const html = decodeHtmlBuffer(await readLimitedBody(response, 5 * 1024 * 1024), contentType);
-    if (!renderService && this.settings.capture.renderDynamicPages !== false && this.sessionManager && detectCommunityPage(html, finalUrl)) {
+    if (!renderService && this.settings.capture.renderDynamicPages !== false && this.sessionManager && (detectCommunityPage(html, finalUrl) || isWeixinSphUrl(finalUrl))) {
       try {
         const rendered = await this.sessionManager.extract(finalUrl, "community-generic", {
         });
@@ -1075,6 +1075,12 @@ class WebClipper {
           extractionMethod: "generic-rendered-community-comments",
         });
         if (renderedArticle.extractionStatus === "complete") return { ...renderedArticle, commentCount: Number(rendered.commentCount) || 0 };
+        // sph 渲染产物非 complete:诚实降级 partial(空壳不再报喜),router 空正文文案分支据此提示
+        if (isWeixinSphUrl(finalUrl)) {
+          renderedArticle.extractionStatus = "partial";
+          renderedArticle.renderWarning = "视频号内容渲染提取不完整,仅保留链接与基础信息";
+          return renderedArticle;
+        }
       } catch (error) {
         renderError = renderError || error;
       }
@@ -1082,6 +1088,11 @@ class WebClipper {
     const article = articleFromHtml(html, finalUrl);
     if ((renderError || communityError || xiaohongshuError) && article.extractionStatus === "partial") {
       article.renderWarning = renderError?.message || communityError?.message || xiaohongshuError?.message || String(renderError || communityError || xiaohongshuError);
+    }
+    if (isWeixinSphUrl(finalUrl)) {
+      // sph 渲染失败/未触发:HTTP 壳页空壳降级 partial,不再报「已提取正文」
+      article.extractionStatus = "partial";
+      article.renderWarning = article.renderWarning || `视频号渲染提取失败(${renderError?.message || "unknown"})`;
     }
     return article;
   }

@@ -158,4 +158,16 @@ async function extractWeixinArticle(url, fetchImpl = globalThis.fetch, cookieGet
   };
 }
 
-module.exports = { WEIXIN_UA, extractWeixinArticle, isWeixinArticleUrl, weixinArticleId };
+// 视频号链接识别:视频不做(封闭生态),但渲染兜底要覆盖以保留真标题/作者/统计/封面等元数据。
+function isWeixinSphUrl(value) {
+  try {
+    const { hostname, pathname } = new URL(String(value));
+    if (hostname === "weixin.qq.com" && pathname.startsWith("/sph/")) return true;
+    if (hostname === "channels.weixin.qq.com" && pathname.startsWith("/finder-preview/")) return true;
+    return false;
+  } catch (_) {
+    return false;
+  }
+}
+
+module.exports = { WEIXIN_UA, extractWeixinArticle, isWeixinArticleUrl, isWeixinSphUrl, weixinArticleId };
