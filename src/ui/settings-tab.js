@@ -248,8 +248,8 @@ class DiarySettingTab extends PluginSettingTab {
     copy.createDiv({ cls: "od-eyebrow", text: "LOCAL-FIRST CAPTURE" });
     copy.createEl("h1", { text: "Omnichannel Diary" });
     copy.createEl("p", { text: this.tr(
-      "把聊天里的灵感、网页、云文档、PDF、社区媒体和附件，可靠地沉淀到当前 Obsidian Vault。没有 AI 路由，也不会把笔记上传到中间服务。",
-      "Capture ideas, web pages, cloud documents, PDFs, technical-community discussions, and attachments into this Obsidian Vault. No AI routing and no intermediary note-upload service.",
+      "把聊天里的灵感、附件、网页链接、云文档和技术社区讨论，原样保存进当前 Obsidian Vault。不经 AI 改写，不经中间服务，笔记只留在本地。",
+      "Capture ideas, attachments, web pages, cloud documents, PDFs, and technical-community discussions from your chats straight into this Obsidian Vault. No AI rewriting, no intermediary service — your notes stay local.",
     ) });
     const actions = hero.createDiv({ cls: "od-hero-actions" });
     iconButton(actions, this.tr("手动保存", "Manual capture"), "square-pen", () => new ManualCaptureModal(this.app, this.plugin).open(), "is-primary");
