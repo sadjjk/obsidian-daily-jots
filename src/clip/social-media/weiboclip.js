@@ -150,6 +150,20 @@ function collectMblogs(data) {
 // - "全文"链接 → 剥出正文,由 meta 行的干净"原文"链接替代;
 // - 视频占位卡片(timeline_card)→ 剥掉,meta 行给一个"视频"链接;
 // - 其余链接一律降级为纯文字。
+// show API 的 page_info.urls 即现成 mp4 直链(weibo.cn 域 referer 防盗链,下载链路 referrer 天然满足)。
+// 优先级:mp4_hd_mp4(480p,体积友好)→ mp4_720p_mp4 → media_info.stream_url;
+// page_url 是视频页链接而非直链(下载必得 HTML),只保留在正文,不进下载队列。
+function weiboVideoUrls(mblog) {
+  if (!mblog || mblog?.page_info?.type !== "video") return [];
+  const urls = mblog.page_info?.urls || {};
+  const candidates = [urls.mp4_hd_mp4, urls.mp4_720p_mp4, mblog.page_info?.media_info?.stream_url];
+  const normalized = candidates
+    .filter(Boolean)
+    .map((value) => (String(value).startsWith("//") ? `https:${value}` : String(value)))
+    .filter((value) => /^https?:\/\//.test(value));
+  return [...new Set(normalized)];
+}
+
 function cleanWeiboText(mblog) {
   let videoUrl = mblog?.page_info?.type === "video" ? String(mblog.page_info?.page_url || "") : "";
   let statusUrl = mblog?.id ? `https://m.weibo.cn/status/${mblog.id}` : "";
@@ -262,6 +276,7 @@ async function extractWeiboStatus(url, fetchImpl = globalThis.fetch, cookieGette
     url: String(url),
     canonicalUrl: statusUrl,
     identityUrl: `weibo-status:${mblog.idstr || mblog.id}`,
+    videoUrls: [...new Set([...weiboVideoUrls(mblog), ...weiboVideoUrls(mblog?.retweeted_status)])],
     extractionStatus: "complete",
   };
 }

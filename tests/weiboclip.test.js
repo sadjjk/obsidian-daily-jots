@@ -225,3 +225,51 @@ test("unencoded containerid (&q= split into its own param) is reassembled", asyn
   await extractWeiboSearch(SEARCH_URL, standardFetch, COOKIE_GETTER);
   assert.match(standardApi, /containerid=231522type%3D1%26q%3D%23/);
 });
+
+test("weibo status extraction collects CDN direct links from the main post and retweet", async () => {
+  const fixture = {
+    ok: 1,
+    id: "5346544981377322",
+    user: { screen_name: "测试用户" },
+    created_at: "Wed Sep 16 14:13:02 +0800 2026",
+    text: "主贴视频",
+    page_info: {
+      type: "video",
+      page_url: "https://video.weibo.com/show?fid=1034:1",
+      urls: {
+        mp4_720p_mp4: "//f.video.weibocdn.com/720p.mp4?Expires=1",
+        mp4_hd_mp4: "//f.video.weibocdn.com/hd.mp4?Expires=1",
+      },
+      media_info: { stream_url: "https://f.video.weibocdn.com/stream.mp4" },
+    },
+    retweeted_status: {
+      user: { screen_name: "原主" },
+      text: "转发体视频",
+      page_info: {
+        type: "video",
+        page_url: "https://video.weibo.com/show?fid=1034:2",
+        urls: { mp4_hd_mp4: "//f.video.weibocdn.com/rt-hd.mp4" },
+      },
+    },
+  };
+  const data = await extractWeiboStatus(STATUS_URL, async () => weiboResponse(fixture), COOKIE_GETTER);
+  // 优先级 hd(480p) → 720p → stream_url;page_url 不进队列;转发体并入去重
+  assert.deepEqual(data.videoUrls, [
+    "https://f.video.weibocdn.com/hd.mp4?Expires=1",
+    "https://f.video.weibocdn.com/720p.mp4?Expires=1",
+    "https://f.video.weibocdn.com/stream.mp4",
+    "https://f.video.weibocdn.com/rt-hd.mp4",
+  ]);
+});
+
+test("weibo status without video page_info yields empty videoUrls", async () => {
+  const fixture = {
+    ok: 1,
+    id: "5346544981377323",
+    user: { screen_name: "测试用户" },
+    created_at: "Wed Sep 16 14:13:02 +0800 2026",
+    text: "纯文字微博",
+  };
+  const data = await extractWeiboStatus(STATUS_URL, async () => weiboResponse(fixture), COOKIE_GETTER);
+  assert.deepEqual(data.videoUrls, []);
+});
