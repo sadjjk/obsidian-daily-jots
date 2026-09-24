@@ -2,7 +2,7 @@
 
 const assert = require("node:assert/strict");
 const test = require("node:test");
-const { extractWeibo, extractWeiboArticle, extractWeiboSearch, extractWeiboStatus, isWeiboArticleUrl, isWeiboSearchUrl, isWeiboStatusUrl, cleanWeiboText } = require("../src/clip/social-media/weiboclip");
+const { extractWeibo, extractWeiboArticle, extractWeiboSearch, extractWeiboStatus, isWeiboArticleUrl, isWeiboSearchUrl, isWeiboStatusUrl, cleanWeiboText, weiboStatusId } = require("../src/clip/social-media/weiboclip");
 
 const SEARCH_URL = "https://m.weibo.cn/search?containerid=231522type%3D1%26q%3D%23%E5%8D%97%E6%96%B9%E5%8C%BB%E7%A7%91%E5%A4%A7%E5%AD%A6%E5%AD%A6%E7%94%9F%E5%8F%91%E5%A3%B0%23&v_p=42";
 
@@ -272,4 +272,11 @@ test("weibo status without video page_info yields empty videoUrls", async () => 
   };
   const data = await extractWeiboStatus(STATUS_URL, async () => weiboResponse(fixture), COOKIE_GETTER);
   assert.deepEqual(data.videoUrls, []);
+});
+
+test("m.weibo.cn share links with /detail/<id> resolve to the same status id", () => {
+  assert.equal(weiboStatusId("https://m.weibo.cn/detail/5346544981377322"), "5346544981377322");
+  assert.equal(isWeiboStatusUrl("https://m.weibo.cn/detail/5346544981377322"), true);
+  assert.equal(weiboStatusId("https://m.weibo.cn/status/5346544981377322"), "5346544981377322");
+  assert.equal(isWeiboStatusUrl("https://visitor.passport.weibo.cn/visitor/visitor?a=enter"), false);
 });

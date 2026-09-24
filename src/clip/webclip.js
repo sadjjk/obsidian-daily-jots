@@ -356,6 +356,19 @@ function genericCommentNodes(document) {
   return [];
 }
 
+// 微博访客跳转页:无会话访问 m.weibo.cn 会被 302 到 visitor.passport.weibo.cn/visitor/visitor,
+// 其 url= 参数携带真实页面链接(同 WPS singlesign cb 参数先例);解出后按原链接剪藏,避免存下 "Sina Visitor System" 壳页。
+function sinaVisitorTargetUrl(value) {
+  try {
+    const url = new URL(String(value || ""));
+    if (url.hostname !== "visitor.passport.weibo.cn" || url.pathname !== "/visitor/visitor") return "";
+    const target = url.searchParams.get("url") || "";
+    return /^https?:\/\/.+/i.test(target) ? target : "";
+  } catch (_) {
+    return "";
+  }
+}
+
 function detectCommunityPage(html, finalUrl) {
   const { document } = parseHTML(html);
   const generator = metaContent(document, 'meta[name="generator"]').toLowerCase();
@@ -553,6 +566,9 @@ class WebClipper {
   }
 
   async extract(url) {
+    // 微博访客跳转页解包:visitor.passport.weibo.cn?url=<encoded> → 真实链接,后续按原平台分支提取
+    const visitorTarget = sinaVisitorTargetUrl(url);
+    if (visitorTarget) url = visitorTarget;
     const xStatus = await extractXStatus(url);
     if (xStatus) return xStatus;
     let xiaohongshuError;
@@ -638,8 +654,7 @@ class WebClipper {
         }
       } catch (error) {
         // 微博搜索页没有可用的 HTML 回退(页面壳是游客墙),失败即抛真实原因。
-        weiboError = error;
-        throw weiboError;
+        throw error;
       }
     }
     if (isDouyinUrl(url)) {
@@ -1223,17 +1238,25 @@ class WebClipper {
           failures.push(`视频-${label} 未保存(${error?.message || error}),已保留远程链接`);
         }
       }
+      const orphanLinks = [];
       for (const [sourceUrl, paths] of savedBySource) {
-        markdown = markdown.split(sourceUrl).join(encodeURI(paths[0]));
-        if (paths.length > 1) {
-          // 同源多段(如 B 站 durl 分段):首段替换正文原链接,其余段附注,避免 split/join 互相覆盖
-          const extras = paths
-            .slice(1)
-            .map((p, i) => `- [视频分段-${String(i + 2).padStart(2, "0")}](${encodeURI(p)})`)
-            .join("\n");
-          markdown += `\n\n${extras}\n`;
+        const label = String(article.videoUrls.indexOf(sourceUrl) + 1).padStart(2, "0");
+        if (markdown.includes(sourceUrl)) {
+          markdown = markdown.split(sourceUrl).join(encodeURI(paths[0]));
+          if (paths.length > 1) {
+            // 同源多段(如 B 站 durl 分段):首段替换正文原链接,其余段附注,避免 split/join 互相覆盖
+            const extras = paths
+              .slice(1)
+              .map((p, i) => `- [视频分段-${String(i + 2).padStart(2, "0")}](${encodeURI(p)})`)
+              .join("\n");
+            markdown += `\n\n${extras}\n`;
+          }
+        } else {
+          // 兜底/探测产出的视频(知乎/豆瓣等正文无链接文本):下载成功但无原位可替换,追加引用段防文件成孤儿
+          for (const p of paths) orphanLinks.push(`- [视频-${label}](${encodeURI(p)})`);
         }
       }
+      if (orphanLinks.length) markdown += `\n\n${orphanLinks.join("\n")}\n`;
       videoNotice = failures.join("；");
     }
     const frontmatter = [

@@ -378,6 +378,72 @@ test("same source URL segments replace once and annotate the rest", async () => 
   assert.match(content, /video-02\.mp4/);
 });
 
+test("appends download links for videos absent from the markdown body", async () => {
+  const baseSettings = (over = {}) => ({
+    storage: { rootFolder: "Omnichannel Diary", clippingFolder: "Clippings", chatAttachmentFolder: "Attachments/Chat", webAttachmentFolder: "Attachments/Web" },
+    capture: { downloadWebImages: false, maxFileMb: 20, maxWebImages: 3, webClipBudgetSeconds: 75, ...over },
+  });
+  const writes = [];
+  const writer = {
+    findTextBySuffix: () => "",
+    saveBinary: async (folder, name) => `Attachments/Web/2026-09-23/${name}.mp4`,
+    upsertText: async (path, content) => { writes.push({ path, content }); },
+  };
+  const remote = "https://v.vzuu.com/probe.mp4";
+  const clipper = new WebClipper(writer, baseSettings({ downloadWebVideos: true, maxVideoMb: 100 }), {
+    download: async (url, opts) => ({ buffer: Buffer.alloc(16), mimeType: "video/mp4", fileName: opts.fileName }),
+  });
+  await clipper.saveArticle({
+    url: "https://www.zhihu.com/question/1/answer/2",
+    identityUrl: "https://www.zhihu.com/question/1/answer/2",
+    title: "ZhihuVideoAnswer",
+    siteName: "知乎",
+    byline: "答主",
+    markdown: "<p>正文没有任何视频链接文本</p>",
+    images: [],
+    videoUrls: [remote], // C4 渲染探测产出:markdown 原文不含该 URL
+    extractionMethod: "zhihu-initial-state",
+    extractionStatus: "complete",
+  }, { timestamp: new Date("2026-09-23T00:00:00Z") });
+  const content = writes.at(-1).content;
+  assert.match(content, /ZhihuVideoAnswer-video-01\.mp4/);
+  // 正文无原位链接可替换:下载成功后追加引用段,文件不再成为孤儿
+  assert.match(content, /- \[视频-01\]\(Attachments\/Web\/2026-09-23\/ZhihuVideoAnswer-video-01\.mp4\)/);
+});
+
+test("sina visitor redirect is unwrapped to the real weibo status", async () => {
+  const visitorUrl = "https://visitor.passport.weibo.cn/visitor/visitor?entry=sinawap&a=enter&url=https%3A%2F%2Fm.weibo.cn%2Fdetail%2F5346544981377322&domain=.weibo.cn&_rand=1790231896.2583";
+  const statusPayload = {
+    ok: 1,
+    id: "5346544981377322",
+    idstr: "5346544981377322",
+    created_at: "Wed Sep 23 16:00:27 +0800 2026",
+    text: "<p>微博正文内容</p>",
+    user: { screen_name: "测试用户" },
+  };
+  const seenUrls = [];
+  const clipper = new WebClipper({}, zhihuTestSettings(), {
+    fetch: async (url) => {
+      seenUrls.push(String(url));
+      return {
+        response: {
+          ok: true, status: 200,
+          headers: { get: () => "application/json" },
+          body: (async function* () { yield Buffer.from(JSON.stringify(statusPayload)); })(),
+        },
+        finalUrl: "",
+      };
+    },
+    sessionManager: { collectCookies: async () => "SUB=_2AkTestCookieValue" },
+  });
+  const article = await clipper.extract(visitorUrl);
+  // 访客壳页被解包:直接按真实链接走微博 statuses/show API,而不是存下 "Sina Visitor System"
+  assert.match(seenUrls[0], /api\/statuses\/show\?id=5346544981377322/);
+  assert.equal(article.extractionMethod, "weibo-json");
+  assert.equal(article.byline, "测试用户");
+  assert.equal(article.identityUrl, "weibo-status:5346544981377322");
+});
+
 test("unknown forum engines and generic comment markup receive a conversation fallback", () => {
   const html = `<!doctype html><html><head><meta name="generator" content="Flarum"></head><body><main><article><h1>Extensible forum</h1><p>${"Main technical discussion. ".repeat(12)}</p></article><div class="comment"><strong>Alice</strong><p>First useful reply with enough detail.</p></div><div class="comment"><strong>Bob</strong><p>Second useful reply with another perspective.</p></div></main></body></html>`;
   assert.equal(detectCommunityPage(html, "https://forum.example.org/d/123"), true);

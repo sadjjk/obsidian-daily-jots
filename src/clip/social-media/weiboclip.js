@@ -36,7 +36,8 @@ function weiboStatusId(value) {
   try {
     const url = new URL(String(value || ""));
     if (!hostMatches(url, ["weibo.com", "weibo.cn"])) return "";
-    return /\/status\/(\d+)/i.exec(url.pathname)?.[1] || "";
+    // m.weibo.cn 分享链接是 /detail/<id>,status 与 detail 同指一条微博,都走 statuses/show API
+    return /\/(?:status|detail)\/(\d+)/i.exec(url.pathname)?.[1] || "";
   } catch (_) { return ""; }
 }
 
