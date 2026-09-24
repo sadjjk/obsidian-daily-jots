@@ -1161,6 +1161,8 @@ class WebClipper {
     const fileFailures = [];
     let savedImages = 0;
     let savedFiles = 0;
+    let savedVideos = 0;
+    let videoFailuresList = [];
     const savedFilePaths = [];
     const assetFolder = `${joinRoot(this.settings.storage.rootFolder, this.settings.storage.webAttachmentFolder)}/${date.day}/${date.day}-${labelForPath}-${stem}-${shortHash(identityUrl)}`;
     for (const [index, file] of (article.binaryFiles || []).entries()) {
@@ -1234,6 +1236,7 @@ class WebClipper {
           const localPath = await this.writer.saveBinary(assetFolder, downloaded.fileName, downloaded.buffer, downloaded.mimeType);
           if (!savedBySource.has(videoUrl)) savedBySource.set(videoUrl, []);
           savedBySource.get(videoUrl).push(localPath);
+          savedVideos += 1;
         } catch (error) {
           failures.push(`视频-${label} 未保存(${error?.message || error}),已保留远程链接`);
         }
@@ -1258,6 +1261,7 @@ class WebClipper {
       }
       if (orphanLinks.length) markdown += `\n\n${orphanLinks.join("\n")}\n`;
       videoNotice = failures.join("；");
+      videoFailuresList = failures;
     }
     const frontmatter = [
       "---",
@@ -1298,7 +1302,7 @@ class WebClipper {
         await this.writer.trashFile(existingPath).catch(() => {});
       } catch (_) { /* 清理失败静默:旧文件保留,下次重剪再试 */ }
     }
-    return { notePath, article: { ...article, title, identityUrl }, sourceLabel, reused, savedImages, savedFiles, savedFilePaths, imageFailures: failures, imageSkipped: skippedImages, fileFailures };
+    return { notePath, article: { ...article, title, identityUrl }, sourceLabel, reused, savedImages, savedFiles, savedFilePaths, imageFailures: failures, imageSkipped: skippedImages, fileFailures, savedVideos, videoFailures: videoFailuresList };
   }
 }
 

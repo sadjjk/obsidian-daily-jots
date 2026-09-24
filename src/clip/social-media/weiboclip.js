@@ -152,31 +152,31 @@ function collectMblogs(data) {
 // - 视频占位卡片(timeline_card)→ 剥掉,meta 行给一个"视频"链接;
 // - 其余链接一律降级为纯文字。
 // show API 的 page_info.urls 即现成 mp4 直链(weibo.cn 域 referer 防盗链,下载链路 referrer 天然满足)。
-// 优先级:mp4_hd_mp4(480p,体积友好)→ mp4_720p_mp4 → media_info.stream_url;
+// 每个视频卡只产出 1 个直链:同一视频多清晰度副本不重复保存,
+// 选优顺序 480p(mp4_hd,体积友好)→ 720p(mp4_720p)→ stream_url/stream.url;
 // page_url 是视频页链接而非直链(下载必得 HTML),只保留在正文,不进下载队列。
 // 新结构:多数视频帖(如官媒)的 page_info 整个缺失,视频卡在 url_objects[].object.object
-// (object_type === "video"),直链在 urls.{mp4_720p_mp4,mp4_hd_mp4} / stream.url,同一套优先级收集。
+// (object_type === "video"),主贴+转发体各自最多 1 个。
 function weiboVideoUrls(mblog) {
   if (!mblog) return [];
   const normalized = [];
   const push = (value) => {
-    if (!value) return;
+    if (!value) return false;
     const fixed = String(value).startsWith("//") ? `https:${value}` : String(value);
-    if (/^https?:\/\//.test(fixed)) normalized.push(fixed);
+    if (!/^https?:\/\//.test(fixed)) return false;
+    normalized.push(fixed);
+    return true;
   };
-  const fromUrls = (urls = {}, mediaInfo = {}) => {
-    push(urls.mp4_hd_mp4);
-    push(urls.mp4_720p_mp4);
-    push(mediaInfo.stream_url);
-  };
+  const pickFrom = (urls = {}, mediaInfo = {}) => push(urls.mp4_hd_mp4 || urls.mp4_720p_mp4 || mediaInfo.stream_url);
   if (mblog.page_info?.type === "video") {
-    fromUrls(mblog.page_info?.urls || {}, mblog.page_info?.media_info || {});
+    pickFrom(mblog.page_info?.urls || {}, mblog.page_info?.media_info || {});
   }
   for (const entry of Array.isArray(mblog.url_objects) ? mblog.url_objects : []) {
     const obj = entry?.object?.object;
     if (!obj || obj.object_type !== "video") continue;
-    fromUrls(obj.urls || {}, obj.extension?.extension?.media_info || {});
-    if (!normalized.length) push(obj.stream?.url || obj.stream?.hd_url);
+    if (pickFrom(obj.urls || {}, obj.extension?.extension?.media_info || {})) continue;
+    const stream = obj.stream || {};
+    push(stream.url || stream.hd_url);
   }
   return [...new Set(normalized)];
 }

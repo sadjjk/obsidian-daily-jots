@@ -253,11 +253,9 @@ test("weibo status extraction collects CDN direct links from the main post and r
     },
   };
   const data = await extractWeiboStatus(STATUS_URL, async () => weiboResponse(fixture), COOKIE_GETTER);
-  // 优先级 hd(480p) → 720p → stream_url;page_url 不进队列;转发体并入去重
+  // 每视频卡选优 1 个(hd 480p 优先):同视频多清晰度不重复保存;主贴+转发体各 1 个
   assert.deepEqual(data.videoUrls, [
     "https://f.video.weibocdn.com/hd.mp4?Expires=1",
-    "https://f.video.weibocdn.com/720p.mp4?Expires=1",
-    "https://f.video.weibocdn.com/stream.mp4",
     "https://f.video.weibocdn.com/rt-hd.mp4",
   ]);
 });
@@ -309,11 +307,8 @@ test("weibo status extraction collects direct links from url_objects video cards
     ],
   };
   const data = await extractWeiboStatus("https://m.weibo.cn/detail/5346544981377322", async () => weiboResponse(fixture), COOKIE_GETTER);
-  // 480p 优先(体积友好),720p 次之;stream.url 与 hd 相同被去重;非视频卡跳过
-  assert.deepEqual(data.videoUrls, [
-    "http://f.video.weibocdn.com/o0/hd.mp4?Expires=1&ssig=A",
-    "http://f.video.weibocdn.com/o0/720p.mp4?Expires=1&ssig=B",
-  ]);
+  // 选优 1 个:480p 优先(hd);stream.url 与 hd 相同不追加;非视频卡跳过
+  assert.deepEqual(data.videoUrls, ["http://f.video.weibocdn.com/o0/hd.mp4?Expires=1&ssig=A"]);
   // published_at 元数据补齐(API return 此前漏传 created_at)
   assert.match(String(data.publishedAt), /^2026-09-24/);
 });

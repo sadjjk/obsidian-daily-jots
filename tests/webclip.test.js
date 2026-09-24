@@ -393,7 +393,7 @@ test("appends download links for videos absent from the markdown body", async ()
   const clipper = new WebClipper(writer, baseSettings({ downloadWebVideos: true, maxVideoMb: 100 }), {
     download: async (url, opts) => ({ buffer: Buffer.alloc(16), mimeType: "video/mp4", fileName: opts.fileName }),
   });
-  await clipper.saveArticle({
+  const receiptForZhihuOrphan = await clipper.saveArticle({
     url: "https://www.zhihu.com/question/1/answer/2",
     identityUrl: "https://www.zhihu.com/question/1/answer/2",
     title: "ZhihuVideoAnswer",
@@ -409,6 +409,9 @@ test("appends download links for videos absent from the markdown body", async ()
   assert.match(content, /ZhihuVideoAnswer-video-01\.mp4/);
   // 正文无原位链接可替换:下载成功后追加引用段,文件不再成为孤儿
   assert.match(content, /- \[视频-01\]\(Attachments\/Web\/2026-09-23\/ZhihuVideoAnswer-video-01\.mp4\)/);
+  // 回执计数:与图片同模式,savedVideos=文件数,videoFailures 为空数组
+  assert.equal(receiptForZhihuOrphan.savedVideos, 1);
+  assert.deepEqual(receiptForZhihuOrphan.videoFailures, []);
 });
 
 test("sina visitor redirect is unwrapped to the real weibo status", async () => {

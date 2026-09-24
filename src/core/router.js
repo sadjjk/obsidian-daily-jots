@@ -121,8 +121,10 @@ function formatCaptureReceipt(result, locale = "zh-CN", preview = null) {
     const skippedImages = clip.imageSkipped?.length || 0;
     const savedFiles = Math.max(0, Number(clip.savedFiles) || 0);
     const failedFiles = clip.fileFailures?.length || 0;
+    const savedVideos = Math.max(0, Number(clip.savedVideos) || 0);
+    const failedVideos = clip.videoFailures?.length || 0;
     const commentCount = Math.max(0, Number(clip.article?.commentCount) || 0);
-    if (clip.reused && !failedImages && !failedFiles) {
+    if (clip.reused && !failedImages && !failedFiles && !failedVideos) {
       lines.push(locale === "en"
         ? `🔖 “${title}” was already saved. Reused the clipping in “${clippingFolder}”.`
         : `🔖 《${title}》之前已经保存，已复用「${clippingFolder}」中的剪藏`);
@@ -136,6 +138,7 @@ function formatCaptureReceipt(result, locale = "zh-CN", preview = null) {
       if (hasBody) items.push(textContent);
       if (commentCount) items.push(`${commentCount} comment${commentCount === 1 ? "" : "s"}`);
       if (savedImages) items.push(`${savedImages} image${savedImages === 1 ? "" : "s"}`);
+      if (savedVideos) items.push(`${savedVideos} video${savedVideos === 1 ? "" : "s"}`);
       if (items.length === 0) return savedFiles ? "the original file" : "the content";
       if (items.length === 1) return items[0];
       if (items.length === 2) return `${items[0]} and ${items[1]}`;
@@ -146,6 +149,7 @@ function formatCaptureReceipt(result, locale = "zh-CN", preview = null) {
       if (hasBody) items.push(textContent);
       if (commentCount) items.push(`${commentCount} 条评论`);
       if (savedImages) items.push(`${savedImages} 张图片`);
+      if (savedVideos) items.push(`${savedVideos} 个视频`);
       const last = items.pop();
       if (!last) return savedFiles ? "原文件" : "内容";
       // hasBody 时 last 紧跟"已提取/已保存"(无需前导空格);纯图片时带前导空格
@@ -173,13 +177,15 @@ function formatCaptureReceipt(result, locale = "zh-CN", preview = null) {
         } else {
           const failed = [];
           if (failedImages) failed.push(`${failedImages} additional image${failedImages === 1 ? "" : "s"}`);
+          if (failedVideos) failed.push(`${failedVideos} video${failedVideos === 1 ? "" : "s"}`);
           if (failedFiles) failed.push(`${failedFiles} original file${failedFiles === 1 ? "" : "s"}`);
           const failedDetail = failed.length ? `; ${failed.join(" and ")} failed to save` : "";
           pushWithPreview(`⚠️ “${title}” was only partially extracted. ${partialEn[0].toUpperCase()}${partialEn.slice(1)} were saved to “${clippingFolder}”${sourceDetail}${failedDetail}${skippedDetail}.`, clip);
         }
-      } else if (failedImages || failedFiles) {
+      } else if (failedImages || failedFiles || failedVideos) {
         const failed = [];
         if (failedImages) failed.push(`${failedImages} additional image${failedImages === 1 ? "" : "s"}`);
+        if (failedVideos) failed.push(`${failedVideos} video${failedVideos === 1 ? "" : "s"}`);
         if (failedFiles) failed.push(`${failedFiles} original file${failedFiles === 1 ? "" : "s"}`);
         pushWithPreview(`⚠️ “${title}” was saved to “${clippingFolder}”${sourceDetail} with ${extractedEn}; ${failed.join(" and ")} failed to save${skippedDetail}.`, clip);
       } else {
@@ -192,11 +198,11 @@ function formatCaptureReceipt(result, locale = "zh-CN", preview = null) {
           const reason = String(clip.article?.renderWarning || clip.article?.excerpt || "").trim().slice(0, 60);
           pushWithPreview(`⚠️ 《${title}》未能提取正文${reason ? `（${reason}）` : ""}，已保存链接与文档信息${sourceDetail}`, clip);
         } else {
-          const failedDetail = `${failedImages ? `，另有 ${failedImages} 张图片保存失败` : ""}${failedFiles ? `，${failedFiles} 个原文件保存失败` : ""}`;
+          const failedDetail = `${failedImages ? `，另有 ${failedImages} 张图片保存失败` : ""}${failedVideos ? `，${failedVideos} 个视频保存失败` : ""}${failedFiles ? `，${failedFiles} 个原文件保存失败` : ""}`;
           pushWithPreview(`⚠️ 《${title}》正文提取不完整，已保存${partialZh}到「${clippingFolder}」${sourceDetail}${failedDetail}${skippedDetail}`, clip);
         }
-      } else if (failedImages || failedFiles) {
-        const failedDetail = `${failedImages ? `，另有 ${failedImages} 张图片保存失败` : ""}${failedFiles ? `，${failedFiles} 个原文件保存失败` : ""}`;
+      } else if (failedImages || failedFiles || failedVideos) {
+        const failedDetail = `${failedImages ? `，另有 ${failedImages} 张图片保存失败` : ""}${failedVideos ? `，${failedVideos} 个视频保存失败` : ""}${failedFiles ? `，${failedFiles} 个原文件保存失败` : ""}`;
         pushWithPreview(`⚠️ 《${title}》已提取${extractedZh}并保存到「${clippingFolder}」${sourceDetail}${failedDetail}${skippedDetail}`, clip);
       } else {
         pushWithPreview(`🔖 《${title}》已提取${extractedZh}并保存到「${clippingFolder}」${sourceDetail}${savedFileDetail}${skippedDetail}`, clip);

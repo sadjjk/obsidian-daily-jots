@@ -155,6 +155,27 @@ test("partial with empty body reports an honest failure instead of partial succe
   assert.doesNotMatch(text, /已提取/);
 });
 
+test("receipts count saved videos alongside images and list video failures", () => {
+  const ok = formatCaptureReceipt({
+    diaryPath: "日记/today.md",
+    clips: [{ article: { title: "视频帖", extractionStatus: "complete" }, savedImages: 2, savedVideos: 1, imageFailures: [], videoFailures: [] }],
+    clipFailures: [],
+    attachmentFailures: [],
+  });
+  assert.match(ok, /已提取正文、2 张图片和 1 个视频并保存/);
+  assert.doesNotMatch(ok, /视频保存失败/);
+
+  const degraded = formatCaptureReceipt({
+    diaryPath: "日记/today.md",
+    clips: [{ article: { title: "视频帖", extractionStatus: "complete" }, savedImages: 1, savedVideos: 0, imageFailures: [], videoFailures: ["视频-01 未保存(HTTP 403)"] }],
+    clipFailures: [],
+    attachmentFailures: [],
+  });
+  assert.match(degraded, /已提取正文和 1 张图片并保存/);
+  assert.match(degraded, /1 个视频保存失败/);
+  assert.doesNotMatch(degraded, /1 个视频并保存/);
+});
+
 test("failure receipts append per-link reasons after the summary line", () => {
   const text = formatCaptureReceipt({
     diaryPath: "日记/today.md",
