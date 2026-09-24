@@ -183,7 +183,7 @@ async function extractDouyin(url, fetchImpl = globalThis.fetch) {
     canonicalUrl: resolvedId ? `https://www.douyin.com/video/${resolvedId}` : String(url),
     identityUrl: `douyin-video:${resolvedId}`,
     extractionStatus: "complete",
-    videoUrl: play,
+    videoUrls: play ? [play] : [],
   };
 }
 

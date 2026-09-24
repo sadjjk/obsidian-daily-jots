@@ -461,6 +461,24 @@ function articleFromHtml(html, finalUrl, overrides = {}) {
   };
 }
 
+// 社媒分支统一透传:新字段只改这里,消灭逐分支手写漏传(0.5.2 小红书 videoUrl 漏传事故的根治)。
+// data.videoUrl 回退为防御性兼容;article.videoUrls 回退保留 C3 通用兜底产物不被 data 层空值覆盖。
+function sourceArticle(article, data) {
+  const raw = Array.isArray(data.videoUrls)
+    ? data.videoUrls
+    : (data.videoUrl ? [data.videoUrl] : (article.videoUrls || []));
+  const videoUrls = [...new Set(raw.map((v) => String(v || "").trim()).filter(Boolean))];
+  return {
+    ...article,
+    canonicalUrl: data.canonicalUrl,
+    identityUrl: data.identityUrl,
+    images: data.images,
+    publishedAt: data.publishedAt,
+    videoUrls,
+    extractionStatus: data.extractionStatus,
+  };
+}
+
 function deadlinePromise(promise, deadline, message) {
   const remaining = Number(deadline) - Date.now();
   if (!Number.isFinite(remaining) || remaining > 2_147_000_000) return promise;
@@ -528,15 +546,7 @@ class WebClipper {
             plainText: data.plainText,
             extractionMethod: data.extractionMethod,
           });
-          return {
-            ...article,
-            canonicalUrl: data.canonicalUrl,
-            identityUrl: data.identityUrl,
-            images: data.images,
-            publishedAt: data.publishedAt,
-            videoUrl: data.videoUrl || "",
-            extractionStatus: data.extractionStatus,
-          };
+          return sourceArticle(article, data);
         }
       } catch (error) { xiaohongshuError = error; }
       // 小红书笔记页不需要登录:HTTP 提取失败时抛真实原因,
@@ -557,14 +567,7 @@ class WebClipper {
             plainText: data.plainText,
             extractionMethod: data.extractionMethod,
           });
-          return {
-            ...article,
-            canonicalUrl: data.canonicalUrl,
-            identityUrl: data.identityUrl,
-            images: data.images,
-            publishedAt: data.publishedAt,
-            extractionStatus: data.extractionStatus,
-          };
+          return sourceArticle(article, data);
         }
       } catch (error) { zhihuError = error; }
       // 知乎失败时保留浏览器会话回退(登录用户的隔离会话仍有价值)。
@@ -582,15 +585,7 @@ class WebClipper {
             content: data.contentHtml,
             extractionMethod: data.extractionMethod,
           });
-          return {
-            ...article,
-            canonicalUrl: data.canonicalUrl,
-            identityUrl: data.identityUrl,
-            images: data.images,
-            publishedAt: data.publishedAt,
-            videoUrl: data.videoUrl || "",
-            extractionStatus: data.extractionStatus,
-          };
+          return sourceArticle(article, data);
         }
       } catch (error) {
         // 微信失败没有 HTML 回退价值(冷却页/结构变化),直接抛真实原因。
@@ -610,13 +605,7 @@ class WebClipper {
             content: data.contentHtml,
             extractionMethod: data.extractionMethod,
           });
-          return {
-            ...article,
-            canonicalUrl: data.canonicalUrl,
-            identityUrl: data.identityUrl,
-            images: data.images,
-            extractionStatus: data.extractionStatus,
-          };
+          return sourceArticle(article, data);
         }
       } catch (error) {
         // 微博搜索页没有可用的 HTML 回退(页面壳是游客墙),失败即抛真实原因。
@@ -636,15 +625,7 @@ class WebClipper {
             content: data.contentHtml,
             extractionMethod: data.extractionMethod,
           });
-          return {
-            ...article,
-            canonicalUrl: data.canonicalUrl,
-            identityUrl: data.identityUrl,
-            images: data.images,
-            publishedAt: data.publishedAt,
-            videoUrl: data.videoUrl || "",
-            extractionStatus: data.extractionStatus,
-          };
+          return sourceArticle(article, data);
         }
       } catch (error) {
         // 抖音无票请求是降级壳,没有 HTML 回退价值,失败即抛真实原因。
@@ -1158,25 +1139,48 @@ class WebClipper {
       }
     }
     let videoNotice = "";
-    if (this.settings.capture.downloadWebVideos && article.videoUrl) {
-      try {
-        const videoDeadline = Number(options.deadline) || Date.now() + (Math.max(10, Number(this.settings.capture.webClipBudgetSeconds) || 75) * 1000);
+    if (this.settings.capture.downloadWebVideos && Array.isArray(article.videoUrls) && article.videoUrls.length) {
+      const videoDeadline = Number(options.deadline) || Date.now() + (Math.max(10, Number(this.settings.capture.webClipBudgetSeconds) || 75) * 1000);
+      const savedBySource = new Map();
+      const failures = [];
+      for (let i = 0; i < article.videoUrls.length; i++) {
+        const videoUrl = article.videoUrls[i];
+        // 序号按数组索引编(非成功计数),失败占号不重排,分段视频顺序稳定
+        const label = String(i + 1).padStart(2, "0");
         const remainingVideo = videoDeadline - Date.now();
-        if (remainingVideo <= 0) throw new Error("skipped because the article time budget was exhausted");
-        const downloaded = await this.download(article.videoUrl, {
-          referrer: article.url,
-          maxBytes: (Number(this.settings.capture.maxVideoMb) || 100) * 1024 * 1024,
-          timeoutMs: Math.min(60_000, remainingVideo),
-          requestAttempts: 2,
-          shouldRetry: (error) => error?.code === "ECONNRESET",
-          fileName: `${stem}-video`,
-        });
-        if (!downloaded.mimeType.startsWith("video/")) throw new Error(`not a video (${downloaded.mimeType})`);
-        const localPath = await this.writer.saveBinary(assetFolder, downloaded.fileName, downloaded.buffer, downloaded.mimeType);
-        markdown = markdown.split(article.videoUrl).join(encodeURI(localPath));
-      } catch (error) {
-        videoNotice = `视频未保存到本地(${error?.message || error}),已保留远程链接`;
+        if (remainingVideo <= 0) {
+          failures.push(`视频-${label} skipped because the article time budget was exhausted`);
+          continue;
+        }
+        try {
+          const downloaded = await this.download(videoUrl, {
+            referrer: article.url,
+            maxBytes: (Number(this.settings.capture.maxVideoMb) || 100) * 1024 * 1024,
+            timeoutMs: Math.min(60_000, remainingVideo),
+            requestAttempts: 2,
+            shouldRetry: (error) => error?.code === "ECONNRESET",
+            fileName: `${stem}-video-${label}`,
+          });
+          if (!downloaded.mimeType.startsWith("video/")) throw new Error(`not a video (${downloaded.mimeType})`);
+          const localPath = await this.writer.saveBinary(assetFolder, downloaded.fileName, downloaded.buffer, downloaded.mimeType);
+          if (!savedBySource.has(videoUrl)) savedBySource.set(videoUrl, []);
+          savedBySource.get(videoUrl).push(localPath);
+        } catch (error) {
+          failures.push(`视频-${label} 未保存(${error?.message || error}),已保留远程链接`);
+        }
       }
+      for (const [sourceUrl, paths] of savedBySource) {
+        markdown = markdown.split(sourceUrl).join(encodeURI(paths[0]));
+        if (paths.length > 1) {
+          // 同源多段(如 B 站 durl 分段):首段替换正文原链接,其余段附注,避免 split/join 互相覆盖
+          const extras = paths
+            .slice(1)
+            .map((p, i) => `- [视频分段-${String(i + 2).padStart(2, "0")}](${encodeURI(p)})`)
+            .join("\n");
+          markdown += `\n\n${extras}\n`;
+        }
+      }
+      videoNotice = failures.join("；");
     }
     const frontmatter = [
       "---",
@@ -1225,5 +1229,5 @@ module.exports = {
   WebClipper, absoluteUrl, articleFromHtml, bestSrcset, canonicalUrlFromDocument, cleanMarkdown, compactTitle,
   declaredWechatValue, detectCommunityPage, escapeWebText, genericCommentNodes, isLikelyContentImage,
   mapWithConcurrency, nodeToMarkdown, normalizedIdentityUrl, normalizedText, prepareDocument, publishedWechatTime,
-  selectArticle, wechatArticleIdentityUrl,
+  selectArticle, sourceArticle, wechatArticleIdentityUrl,
 };

@@ -177,7 +177,7 @@ function xiaohongshuDataFromHtml(html, finalUrl) {
     contentHtml: `<article class="xiaohongshu-note"><h1>${escapeHtml(title)}</h1><p>${body}</p>${figures}${videoLink}</article>`,
     plainText: `${title}\n${description}`,
     images,
-    videoUrl: videoUrl || "",
+    videoUrls: videoUrl ? [videoUrl] : [],
     publishedAt: publishedAt(note.time),
     extractionMethod: "xiaohongshu-initial-state",
     // 作者未写任何文字(纯图笔记),收据文案据此省略"正文"字样

@@ -5,7 +5,7 @@ const assert = require("node:assert/strict");
 const { parseHTML } = require("linkedom");
 const {
   WebClipper, articleFromHtml, bestSrcset, cleanMarkdown, detectCommunityPage, escapeWebText,
-  isLikelyContentImage, nodeToMarkdown, prepareDocument, selectArticle, wechatArticleIdentityUrl,
+  isLikelyContentImage, nodeToMarkdown, prepareDocument, selectArticle, sourceArticle, wechatArticleIdentityUrl,
 } = require("../src/clip/webclip");
 const { decodeHtmlBuffer } = require("../src/core/network");
 const { localIso, safeFileName } = require("../src/core/util");
@@ -255,7 +255,7 @@ test("web video download is opt-in, replaces the link, and degrades softly", asy
     byline: "Alice",
     markdown: `[视频](${videoUrl})`,
     images: [],
-    videoUrl,
+    videoUrls: [videoUrl],
     extractionMethod: "xiaohongshu-initial-state",
     extractionStatus: "complete",
   });
@@ -272,23 +272,109 @@ test("web video download is opt-in, replaces the link, and degrades softly", asy
 
   // ② 开启+下载成功:正文链接替换为本地 mp4
   const on = new WebClipper(writer, baseSettings({ downloadWebVideos: true, maxVideoMb: 100 }), {
-    download: async () => { videoDownloads += 1; return { buffer: Buffer.alloc(1024), mimeType: "video/mp4", fileName: "Video note-video" }; },
+    download: async (url, opts) => { videoDownloads += 1; return { buffer: Buffer.alloc(1024), mimeType: "video/mp4", fileName: opts.fileName }; },
   });
   const onResult = await on.saveArticle(videoArticle("https://sns-video-qc.xhscdn.com/v2.mp4?sign=2"), { timestamp: new Date("2026-09-23T00:00:00Z") });
   assert.equal(videoDownloads, 1);
-  assert.match(writes.at(-1).content, /Attachments\/Web\/2026-09-23\/.*-video\.mp4/);
+  assert.match(writes.at(-1).content, /Attachments\/Web\/2026-09-23\/.*-video-01\.mp4/);
   assert.doesNotMatch(writes.at(-1).content, /sign=2/);
-  assert.doesNotMatch(writes.at(-1).content, /视频未保存到本地/);
+  assert.doesNotMatch(writes.at(-1).content, /未保存/);
 
-  // ③ 超过单个视频上限:软降级,保留远程链接并 warning
+  // ③ 超过单个视频上限:软降级,保留远程链接并 warning(文案带数组序号)
   const over = new WebClipper(writer, baseSettings({ downloadWebVideos: true, maxVideoMb: 1 }), {
     download: async () => { videoDownloads += 1; const e = new Error("Remote file exceeds 1048576 bytes"); throw e; },
   });
   const overResult = await over.saveArticle(videoArticle("https://sns-video-qc.xhscdn.com/v3.mp4?sign=3"), { timestamp: new Date("2026-09-23T00:00:00Z") });
   assert.equal(videoDownloads, 2);
-  assert.match(writes.at(-1).content, /视频未保存到本地/);
+  assert.match(writes.at(-1).content, /视频-01 未保存/);
   assert.match(writes.at(-1).content, /https:\/\/sns-video-qc\.xhscdn\.com\/v3\.mp4\?sign=3/);
 
+});
+
+test("downloads each video with indexed names and isolates failures", async () => {
+  const baseSettings = (over = {}) => ({
+    storage: { rootFolder: "Omnichannel Diary", clippingFolder: "Clippings", chatAttachmentFolder: "Attachments/Chat", webAttachmentFolder: "Attachments/Web" },
+    capture: { downloadWebImages: false, maxFileMb: 20, maxWebImages: 3, webClipBudgetSeconds: 75, ...over },
+  });
+  const writes = [];
+  const writer = {
+    findTextBySuffix: () => "",
+    saveBinary: async (folder, name) => `Attachments/Web/2026-09-23/${name}.mp4`,
+    upsertText: async (path, content) => { writes.push({ path, content }); },
+  };
+  const first = "https://cdn.example.com/broken.mp4";
+  const second = "https://cdn.example.com/ok.mp4";
+  const clipper = new WebClipper(writer, baseSettings({ downloadWebVideos: true, maxVideoMb: 100 }), {
+    download: async (url, opts) => {
+      if (url === first) throw new Error("HTTP 403");
+      return { buffer: Buffer.alloc(16), mimeType: "video/mp4", fileName: opts.fileName };
+    },
+  });
+  await clipper.saveArticle({
+    url: "https://www.xiaohongshu.com/explore/noteV2",
+    identityUrl: "https://www.xiaohongshu.com/explore/noteV2",
+    title: "Video note",
+    siteName: "小红书 / REDnote",
+    byline: "Alice",
+    markdown: `[a](${first}) [b](${second})`,
+    images: [],
+    videoUrls: [first, second],
+    extractionMethod: "xiaohongshu-initial-state",
+    extractionStatus: "complete",
+  }, { timestamp: new Date("2026-09-23T00:00:00Z") });
+  const content = writes.at(-1).content;
+  // 序号按数组索引:第 1 个失败占号 -01,第 2 个成功仍是 -02
+  assert.match(content, /Videonote-video-02\.mp4/);
+  assert.doesNotMatch(content, /video-01\.mp4/);
+  assert.match(content, /视频-01 未保存\(HTTP 403\)/);
+  assert.doesNotMatch(content, /视频-02 未保存/);
+  // 失败者保留远程链接,成功者替换为本地路径
+  assert.match(content, /https:\/\/cdn\.example\.com\/broken\.mp4/);
+  assert.doesNotMatch(content, /https:\/\/cdn\.example\.com\/ok\.mp4/);
+});
+
+test("sourceArticle normalizes single value and dedupes videoUrls", () => {
+  const base = { title: "T", images: [], extractionStatus: "complete" };
+  assert.deepEqual(sourceArticle({ ...base }, { videoUrl: "https://cdn.example.com/a.mp4" }).videoUrls, ["https://cdn.example.com/a.mp4"]);
+  assert.deepEqual(sourceArticle({ ...base }, { videoUrls: ["a", "a", "b", ""] }).videoUrls, ["a", "b"]);
+  // data 层无视频时保留 article 层兜底产物(C3 衔接),两边都无则为空数组
+  assert.deepEqual(sourceArticle({ ...base, videoUrls: ["legacy"] }, {}).videoUrls, ["legacy"]);
+  assert.deepEqual(sourceArticle({ ...base }, {}).videoUrls, []);
+});
+
+test("same source URL segments replace once and annotate the rest", async () => {
+  const baseSettings = (over = {}) => ({
+    storage: { rootFolder: "Omnichannel Diary", clippingFolder: "Clippings", chatAttachmentFolder: "Attachments/Chat", webAttachmentFolder: "Attachments/Web" },
+    capture: { downloadWebImages: false, maxFileMb: 20, maxWebImages: 3, webClipBudgetSeconds: 75, ...over },
+  });
+  const writes = [];
+  const writer = {
+    findTextBySuffix: () => "",
+    saveBinary: async (folder, name) => `Attachments/Web/2026-09-23/${name}.mp4`,
+    upsertText: async (path, content) => { writes.push({ path, content }); },
+  };
+  const seg = "https://cdn.example.com/long-video-seg";
+  const clipper = new WebClipper(writer, baseSettings({ downloadWebVideos: true, maxVideoMb: 100 }), {
+    download: async (url, opts) => ({ buffer: Buffer.alloc(8), mimeType: "video/mp4", fileName: opts.fileName }),
+  });
+  await clipper.saveArticle({
+    url: "https://www.bilibili.com/video/BV1Dve565ENK",
+    identityUrl: "https://www.bilibili.com/video/BV1Dve565ENK",
+    title: "Long video",
+    siteName: "哔哩哔哩",
+    byline: "UP",
+    markdown: `[正片](${seg})`,
+    images: [],
+    videoUrls: [seg, seg],
+    extractionMethod: "bilibili-initial-state",
+    extractionStatus: "complete",
+  }, { timestamp: new Date("2026-09-23T00:00:00Z") });
+  const content = writes.at(-1).content;
+  // 首段替换正文原链接,第二段以附注列出,不做二次 split 互相覆盖
+  assert.match(content, /Attachments\/Web\/2026-09-23\/Longvideo-video-01\.mp4/);
+  assert.doesNotMatch(content, /video-01\.mp4\) \[正片\]/);
+  assert.match(content, /视频分段-02/);
+  assert.match(content, /video-02\.mp4/);
 });
 
 test("unknown forum engines and generic comment markup receive a conversation fallback", () => {
