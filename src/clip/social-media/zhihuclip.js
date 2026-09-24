@@ -310,11 +310,27 @@ async function extractZhihu(value, fetchImpl = safeFetch, cookieProvider = null)
   return data;
 }
 
+// 渲染探测 vzuu mp4 直链(限时 auth_key 签名,抓取即本地化);失败返回空数组不阻断剪藏。
+// 仅在「保存网页视频」开关开启时由 webclip 知乎分支调用;知乎分支成功即 return、不落通用渲染链路,本探测是唯一一次渲染。
+async function probeZhihuVideos(url, sessionManager, options = {}) {
+  if (!sessionManager || typeof sessionManager.extract !== "function") return [];
+  let html = "";
+  try {
+    const rendered = await sessionManager.extract(url, "zhihu", options);
+    html = String(rendered?.html || "");
+  } catch (_) {
+    return []; // 渲染探测失败(超时/会话不可用)保留链接,不阻断剪藏
+  }
+  const matches = html.match(/https?:\/\/[^\s"'<>\\]+\.vzuu\.com\/[^\s"'<>\\]+\.mp4[^\s"'<>\\]*/g) || [];
+  return [...new Set(matches)].slice(0, 5);
+}
+
 module.exports = {
   ZHIHU_HTML_LIMIT,
   extractZhihu,
   isZhihuNoteUrl,
   isZhihuUrl,
   parseInitialData,
+  probeZhihuVideos,
   zhihuDataFromHtml,
 };

@@ -7,6 +7,7 @@ const {
   isZhihuNoteUrl,
   isZhihuUrl,
   parseInitialData,
+  probeZhihuVideos,
   zhihuDataFromHtml,
 } = require("../src/clip/social-media/zhihuclip");
 const { localIso } = require("../src/core/util");
@@ -201,4 +202,26 @@ test("parseInitialData tolerates missing or malformed payloads", () => {
   assert.equal(parseInitialData('<script id="js-initialData" type="text/json">{broken</script>'), null);
   const state = parseInitialData('<script id="js-initialData" type="text/json">{"initialState":{"entities":{}}}</script>');
   assert.deepEqual(state, { initialState: { entities: {} } });
+});
+
+test("probeZhihuVideos extracts and dedupes vzuu mp4 links from rendered html", async () => {
+  const html = 'player mounted: https://vdn3.vzuu.com/a.mp4?auth_key=x <video src="https://vdn3.vzuu.com/a.mp4?auth_key=x"> https://vd5.vzuu.com/b.mp4?auth_key=y';
+  const calls = [];
+  const sessionManager = {
+    extract: async (url, service, options) => { calls.push([url, service, options]); return { html }; },
+  };
+  const urls = await probeZhihuVideos(ANSWER_URL, sessionManager, { collectSessionCookies: () => "" });
+  assert.deepEqual(urls, ["https://vdn3.vzuu.com/a.mp4?auth_key=x", "https://vd5.vzuu.com/b.mp4?auth_key=y"]);
+  // options 原样透传(函数不做引用比较)
+  assert.equal(calls[0][0], ANSWER_URL);
+  assert.equal(calls[0][1], "zhihu");
+  assert.deepEqual(Object.keys(calls[0][2]), ["collectSessionCookies"]);
+});
+
+test("probeZhihuVideos caps at five and degrades on errors", async () => {
+  const six = Array.from({ length: 6 }, (_, i) => `https://vd${i}.vzuu.com/v.mp4?auth_key=${i}`).join(" ");
+  assert.equal((await probeZhihuVideos(ANSWER_URL, { extract: async () => ({ html: six }) })).length, 5);
+  assert.deepEqual(await probeZhihuVideos(ANSWER_URL, { extract: async () => { throw new Error("timeout"); } }), []);
+  assert.deepEqual(await probeZhihuVideos(ANSWER_URL, null), []);
+  assert.deepEqual(await probeZhihuVideos(ANSWER_URL, { extract: async () => ({ html: "<video>no links</video>" }) }), []);
 });

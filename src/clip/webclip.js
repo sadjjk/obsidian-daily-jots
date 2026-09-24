@@ -15,7 +15,7 @@ const { extractWpsDoc, fetchFileInfo, wpsDocToken } = require("./cloud-docs/wps-
 const { extractXStatus } = require("./social-media/xclip");
 const { extractBilibili, isBilibiliUrl, isBilibiliVideoUrl } = require("./social-media/biliclip");
 const { extractXiaohongshu, isXiaohongshuUrl, isXhsNoteUrl } = require("./social-media/xhsclip");
-const { extractZhihu, isZhihuNoteUrl, isZhihuUrl } = require("./social-media/zhihuclip");
+const { extractZhihu, isZhihuNoteUrl, isZhihuUrl, probeZhihuVideos } = require("./social-media/zhihuclip");
 const { extractWeibo, isWeiboArticleUrl, isWeiboSearchUrl, isWeiboStatusUrl } = require("./social-media/weiboclip");
 const { extractWeixinArticle, isWeixinArticleUrl } = require("./social-media/weixinclip");
 const { extractDouyin, isDouyinUrl } = require("./social-media/douyinclip");
@@ -581,6 +581,12 @@ class WebClipper {
       try {
         const data = await extractZhihu(url, this.fetch, (target) => this.collectSessionCookies("zhihu", target));
         if (data) {
+          if (this.settings.capture.downloadWebVideos) {
+            try {
+              const probed = await probeZhihuVideos(url, this.sessionManager);
+              if (probed.length) data.videoUrls = probed; // 空数组不写,保留 C3 兜底回退
+            } catch (_) { /* 渲染探测失败不影响剪藏 */ }
+          }
           const article = articleFromHtml(data.contentHtml, data.url || url, {
             title: data.title,
             byline: data.byline,
