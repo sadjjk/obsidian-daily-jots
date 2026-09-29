@@ -6,7 +6,11 @@
 ![Obsidian](https://img.shields.io/badge/Obsidian-1.11.4%2B-7C3AED)
 ![Fork](https://img.shields.io/badge/fork%20of-omnichannel--diary-00B8A9)
 
+<p align="center"><a href="https://www.sadjjk.cn/obsidian-daily-jots/">🌐 产品主页 —— 在线了解 9 渠道接入与剪藏深度</a></p>
+
 **今日随手记**是一个 Obsidian 插件：把微信、Telegram、飞书等 9 个聊天渠道里随手发出的消息、链接和附件，自动整理成 Vault 里的本地 Markdown。没有 AI 中转，没有云端暂存，笔记只留在你的硬盘上。
+
+<p align="center"><img src="https://webp.sadjjk.cn/obsidian-daily-jots/overview.jpg" width="720" alt="今日随手记设置面板 · 概览"></p>
 
 ## 为什么需要它
 
@@ -22,6 +26,8 @@
 1. **连接渠道** —— 扫码或填入 Token，把聊天账号接入插件
 2. **随手投喂** —— 在聊天窗口发消息、丢链接、传文件：纯文本追加进当天日记，链接被读出正文，附件原样落盘
 3. **长在 Vault 里** —— 每条记录都是带 frontmatter 的 Markdown，媒体本地化进附件目录
+
+<p align="center"><img src="https://webp.sadjjk.cn/obsidian-daily-jots/quick-start.jpg" width="700" alt="三步开始：选择渠道、发送内容、回到 Obsidian"></p>
 
 ## 站在前人的肩膀上
 
@@ -44,6 +50,8 @@
 | Bilibili | 标题、UP 主、日期、统计、标签等结构化信息，支持 `b23.tv` 短链 |
 | 更多站点 | 持续打磨中 |
 
+<p align="center"><img src="https://webp.sadjjk.cn/obsidian-daily-jots/community-sources.jpg" width="640" alt="社区媒体来源规则，内置百余站点"></p>
+
 ### 云文档一键导出
 
 | 平台 | 导出 |
@@ -52,6 +60,12 @@
 | 钉钉 | 在线表格 → xlsx 附件 |
 | 企业微信文档 | 表格 → xlsx、幻灯片 → pptx |
 | WPS | 文档表格 → xlsx |
+
+<p align="center"><img src="https://webp.sadjjk.cn/obsidian-daily-jots/cloud-docs.jpg" width="640" alt="云文档来源与本地会话登录"></p>
+
+### 远程查询导出
+
+出门在外，通过微信等已绑定的渠道发一条查询（如「查询 小红书 SQL」），bot 返回 Vault 内的命中列表；回复「确认 1,2」，电脑端即按你设定的格式导出 zip——手机不装 Obsidian，也能取走已存的笔记。
 
 ### 设置补充
 
@@ -88,9 +102,11 @@
 
 要求 Obsidian 1.11.4+，桌面端使用。
 
-## 隐私与本地优先
+## 设计立场与隐私
 
-- **无 AI 中转** —— 消息与网页内容不经任何第三方服务加工，插件直连各平台官方接口
+- **官方渠道直连** —— 不做逆向、不经第三方中转，9 个渠道接的全是各平台官方开放能力
+- **能免登录就免登录** —— 社区剪藏优先游客身份，公开内容不索取你的 Cookie
+- **无 AI 中转** —— 消息与网页内容不经任何 AI 加工，插件直连各平台官方接口
 - **凭据只存本地** —— 渠道 Token 等仅保存在你的 Vault 配置中
 - **笔记只落本地** —— 所有正文、图片、视频与文档写入你自己的 Vault，无云端暂存
 
