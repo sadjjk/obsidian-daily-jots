@@ -6,7 +6,7 @@
 ![Obsidian](https://img.shields.io/badge/Obsidian-1.11.4%2B-7C3AED)
 ![Fork](https://img.shields.io/badge/fork%20of-omnichannel--diary-00B8A9)
 
-<p align="center"><a href="https://www.sadjjk.cn/obsidian-daily-jots/">🌐 产品主页 —— 在线了解 9 渠道接入与剪藏深度</a></p>
+<p align="center"><a href="https://www.sadjjk.cn/obsidian-daily-jots/">🌐 产品主页 —— 聊天框，就是 Obsidian 收藏入口</a></p>
 
 **今日随手记**是一个 Obsidian 插件：把微信、Telegram、飞书等 9 个聊天渠道里随手发出的消息、链接和附件，自动整理成 Vault 里的本地 Markdown。没有 AI 中转，没有云端暂存，笔记只留在你的硬盘上。
 
@@ -31,7 +31,7 @@
 
 ## 站在前人的肩膀上
 
-本项目 fork 自 [AI-Scarlett/obsidian-omnichannel-diary](https://github.com/AI-Scarlett/obsidian-omnichannel-diary)。
+本项目借鉴自 [AI-Scarlett/obsidian-omnichannel-diary](https://github.com/AI-Scarlett/obsidian-omnichannel-diary)。
 
 - 9 渠道接入体系、「消息即日记」的落盘架构、本地优先原则——这些是本项目的**灵魂**，全部出自原作者的设计
 - 本项目只做锦上添花：在同一个骨架上，把内容源的**深度**（更多平台、更完整的提取）与**可靠性**（真实报错、失败可见）往前推了几步
