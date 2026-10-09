@@ -1,7 +1,7 @@
 {
   "id": "daily-jots",
   "name": "今日随手记",
-  "version": "1.0.1",
+  "version": "1.1.0",
   "minAppVersion": "1.11.4",
   "description": "把聊天消息、网页、文档、PDF 与技术社区讨论剪藏进当前 Obsidian Vault,无 AI 中转、笔记只留本地.",
   "author": "JinYu",
