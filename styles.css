@@ -155,3 +155,97 @@
   .od-metric-wide { grid-column: auto; }
   .od-status-badge { display: none; }
 }
+
+/* 剪藏卡片墙(Bases 视图 daily-jots-wall)。深色背景是刻意的视觉效果,不跟随明暗主题 */
+.daily-jots-wall {
+  --dj-bg: #0b0b14; --dj-glass: rgba(255, 255, 255, .06); --dj-line: rgba(255, 255, 255, .12);
+  --dj-text: #ecebff; --dj-muted: #9a98b8;
+  min-height: 100%; color: var(--dj-text); font-size: 14px; line-height: 1.5;
+  background:
+    radial-gradient(900px 500px at 10% -10%, rgba(255, 46, 85, .25), transparent 60%),
+    radial-gradient(800px 600px at 100% 0%, rgba(124, 92, 255, .28), transparent 60%),
+    radial-gradient(700px 500px at 50% 110%, rgba(37, 244, 238, .15), transparent 60%),
+    var(--dj-bg);
+}
+.daily-jots-wall-header { padding: 24px 28px 6px; display: flex; align-items: flex-end; gap: 24px; flex-wrap: wrap; }
+.daily-jots-wall-header h1 {
+  margin: 0; font-size: 28px; letter-spacing: .5px;
+  background: linear-gradient(90deg, #ff6b8a, #a78bfa 50%, #25f4ee);
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+}
+.daily-jots-wall-sub { color: var(--dj-muted); margin-top: 4px; }
+.daily-jots-wall-stats { display: flex; gap: 12px; margin-left: auto; flex-wrap: wrap; }
+.daily-jots-wall-stat {
+  padding: 10px 16px; border-radius: 14px; background: var(--dj-glass);
+  border: 1px solid var(--dj-line); backdrop-filter: blur(12px); min-width: 92px;
+}
+.daily-jots-wall-stat b { display: block; font-size: 22px; }
+.daily-jots-wall-stat span { color: var(--dj-muted); font-size: 12px; }
+.daily-jots-wall-pills { display: flex; gap: 8px; padding: 12px 28px 4px; flex-wrap: wrap; }
+.daily-jots-wall .daily-jots-wall-pill {
+  padding: 6px 14px; height: auto; border-radius: 999px; border: 1px solid var(--dj-line);
+  background: var(--dj-glass); color: var(--dj-text); cursor: pointer; font-size: 13px; box-shadow: none;
+}
+.daily-jots-wall .daily-jots-wall-pill.is-active {
+  background: linear-gradient(90deg, rgba(255, 46, 85, .5), rgba(124, 92, 255, .5)); border-color: transparent;
+}
+/* 时间筛选行:复用 pill 外观;padding-bottom 为 0,与下方平台胶囊行贴近成一组 */
+.daily-jots-wall-times { display: flex; gap: 8px; padding: 12px 28px 0; flex-wrap: wrap; align-items: center; }
+.daily-jots-wall-range { display: flex; gap: 6px; align-items: center; color: var(--dj-muted); font-size: 13px; }
+/* 加 .daily-jots-wall 前缀压过 Obsidian 全局 input 样式;color-scheme 让原生日历弹层随深色背景 */
+.daily-jots-wall .daily-jots-wall-range input {
+  padding: 4px 10px; height: auto; border-radius: 999px; border: 1px solid var(--dj-line);
+  background: var(--dj-glass); color: var(--dj-text); font-size: 13px; color-scheme: dark;
+}
+/* 瀑布流用 CSS columns:封面原比例各不相同,固定网格会大量裁切 */
+.daily-jots-wall-grid { column-width: 230px; column-gap: 18px; padding: 16px 28px 40px; }
+.daily-jots-wall-empty { color: var(--dj-muted); padding: 40px 0; text-align: center; }
+.daily-jots-wall-card {
+  break-inside: avoid; margin-bottom: 18px; position: relative; border-radius: 18px; cursor: pointer;
+  background: var(--dj-glass); border: 1px solid var(--dj-line); overflow: hidden;
+  backdrop-filter: blur(14px); transform-style: preserve-3d;
+  transition: transform .25s ease, box-shadow .25s ease;
+  animation: daily-jots-wall-rise .6s both;
+}
+/* 渐变描边用伪元素 + mask,hover 时才亮,静止时保持克制 */
+.daily-jots-wall-card::before {
+  content: ""; position: absolute; inset: 0; border-radius: 18px; padding: 1.5px; z-index: 2;
+  background: conic-gradient(var(--dj-c), transparent 30%, var(--dj-c) 60%, transparent 90%, var(--dj-c));
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor; mask-composite: exclude;
+  opacity: 0; transition: opacity .25s; pointer-events: none;
+}
+.daily-jots-wall-card:hover::before { opacity: 1; }
+.daily-jots-wall-card:hover { box-shadow: 0 18px 50px -12px var(--dj-c); }
+@keyframes daily-jots-wall-rise { from { opacity: 0; transform: translateY(18px) scale(.97); } }
+.daily-jots-wall-cover { position: relative; }
+.daily-jots-wall-cover img { width: 100%; display: block; }
+/* 无图卡片用平台色渐变 + 标题首字兜底,避免空白块 */
+.daily-jots-wall-noimg {
+  height: 150px; display: grid; place-items: center; font-size: 56px; font-weight: 800;
+  background: linear-gradient(135deg, var(--dj-c), #2a1f5c); color: rgba(255, 255, 255, .85);
+}
+.daily-jots-wall-shade { position: absolute; inset: auto 0 0 0; height: 60%; background: linear-gradient(transparent, rgba(11, 11, 20, .85)); pointer-events: none; }
+.daily-jots-wall-badge {
+  position: absolute; top: 10px; left: 10px; padding: 3px 10px; border-radius: 999px;
+  font-size: 12px; font-weight: 600; background: var(--dj-c); color: #0b0b14; box-shadow: 0 0 16px var(--dj-c);
+}
+.daily-jots-wall-imgs { position: absolute; top: 10px; right: 10px; font-size: 12px; padding: 2px 8px; border-radius: 8px; background: rgba(0, 0, 0, .45); }
+.daily-jots-wall-body { padding: 12px 14px 14px; }
+.daily-jots-wall-title {
+  font-weight: 650; font-size: 15px; line-height: 1.4;
+  display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
+}
+.daily-jots-wall-meta { color: var(--dj-muted); font-size: 12px; margin-top: 6px; display: flex; gap: 8px; flex-wrap: wrap; }
+.daily-jots-wall-chips { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
+.daily-jots-wall-chip { font-size: 11px; padding: 2px 8px; border-radius: 6px; background: rgba(255, 255, 255, .08); color: #cfcdf0; }
+.daily-jots-wall-gh {
+  margin-top: 10px; font: 12px var(--font-monospace); padding: 6px 9px; border-radius: 9px;
+  background: rgba(167, 139, 250, .14); border: 1px solid rgba(167, 139, 250, .35); color: #d8ccff;
+  overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
+}
+/* 系统「减少动态效果」:关闭入场动画与倾斜过渡 */
+.daily-jots-wall.is-reduced-motion .daily-jots-wall-card { animation: none; transition: none; }
+@media (prefers-reduced-motion: reduce) {
+  .daily-jots-wall-card { animation: none; transition: none; }
+}
