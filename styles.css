@@ -236,7 +236,8 @@
   background: var(--dj-glass); border: 1px solid var(--dj-line); overflow: hidden;
   backdrop-filter: blur(14px); transform-style: preserve-3d;
   transition: transform .25s ease, box-shadow .25s ease;
-  animation: daily-jots-wall-rise .6s both;
+  /* 只在入场延迟期保留起点;结束后释放 transform,让悬停倾斜接管。 */
+  animation: daily-jots-wall-rise .6s backwards;
 }
 /* 渐变描边用伪元素 + mask,hover 时才亮,静止时保持克制 */
 .daily-jots-wall-card::before {
@@ -304,4 +305,22 @@
 @media (prefers-reduced-motion: reduce) {
   .daily-jots-wall-card { animation: none; transition: none; }
   .daily-jots-wall-card::after { display: none; }
+}
+/* 聊天墙沿用共享卡片外壳;媒体失败仍保留可读格式与文件打开入口。 */
+.daily-jots-wall-filemark {
+  min-height: 180px; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 7px; padding: 42px 16px 30px; background: linear-gradient(135deg, var(--dj-c), #2a1f5c);
+}
+.daily-jots-wall-fileext { font-size: 42px; font-weight: 850; letter-spacing: .04em; color: #fff; }
+.daily-jots-wall-filetype { font-size: 13px; color: rgba(255, 255, 255, .85); }
+.daily-jots-wall-message-cover {
+  position: relative; min-height: 180px; padding: 48px 18px 40px;
+  background: linear-gradient(135deg, var(--dj-c), #2a1f5c); overflow: hidden;
+}
+.daily-jots-wall-message-title { position: relative; z-index: 1; font-size: 21px; font-weight: 750; line-height: 1.5; overflow-wrap: anywhere; }
+.daily-jots-wall-message-mark { position: absolute; right: 12px; bottom: -22px; font-size: 120px; opacity: .12; }
+/* 视频统一走文件卡,不再创建 <video> 解码层(见 ChatWallView.renderCover) */
+@media (hover: none), (pointer: coarse) {
+  .daily-jots-wall-card::before, .daily-jots-wall-card::after { display: none; }
+  .daily-jots-wall-card:hover { box-shadow: none; }
 }
