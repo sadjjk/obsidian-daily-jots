@@ -228,11 +228,13 @@
   padding: 4px 10px; height: auto; border-radius: 999px; border: 1px solid var(--dj-line);
   background: var(--dj-glass); color: var(--dj-text); font-size: 13px; color-scheme: dark;
 }
-/* 瀑布流用 CSS columns:封面原比例各不相同,固定网格会大量裁切 */
-.daily-jots-wall-grid { column-width: 230px; column-gap: 18px; padding: 16px 28px 40px; }
+/* 瀑布流:封面原比例各不相同,固定网格会大量裁切。
+   列由 BaseWallView.layoutColumns 横向优先分配,列数按 --dj-col-width 与 gap 计算 */
+.daily-jots-wall-grid { --dj-col-width: 230px; display: flex; align-items: flex-start; gap: 18px; padding: 16px 28px 40px; }
+.daily-jots-wall-col { flex: 1 1 0; min-width: 0; }
 .daily-jots-wall-empty { color: var(--dj-muted); padding: 40px 0; text-align: center; }
 .daily-jots-wall-card {
-  break-inside: avoid; margin-bottom: 18px; position: relative; border-radius: 18px; cursor: pointer;
+  margin-bottom: 18px; position: relative; border-radius: 18px; cursor: pointer;
   background: var(--dj-glass); border: 1px solid var(--dj-line); overflow: hidden;
   backdrop-filter: blur(14px); transform-style: preserve-3d;
   transition: transform .25s ease, box-shadow .25s ease;
